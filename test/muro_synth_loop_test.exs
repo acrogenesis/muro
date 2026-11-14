@@ -9,6 +9,7 @@ defmodule Muro.SynthLoopTest do
   @nest "examples/cshrl/envs/nested_bit.muro"
   @cover "examples/cshrl/envs/list_cover.muro"
   @tree "examples/cshrl/envs/tree_cover.muro"
+  @tip "examples/cshrl/envs/tip_suc.muro"
   @neg "test/fixtures/synth_neg.muro"
   @gap "test/fixtures/synth_gap.muro"
   @stay "test/fixtures/synth_false.muro"
@@ -304,6 +305,38 @@ defmodule Muro.SynthLoopTest do
     assert text =~ "certificate CoindHomo"
   end
 
+  test "tip (suc 0) takes the suc arm of step" do
+    assert {:ok, host} = Muro.Synth.Host.open(@tip)
+    suc = Enum.find(host.all_states, &(&1.spell == "(tip (suc 0))"))
+    zero = Enum.find(host.all_states, &(&1.spell == "(tip 0)"))
+    assert zero.value == {:tip, 0}
+    assert suc.value == {:tip, 1}
+
+    assert {%{value: {:tip, 0}}, 0} = host.step.(zero, "go")
+    assert {%{value: {:tip, 1}, spell: "(tip (suc 0))"}, {:suc, 0}} = host.step.(suc, "go")
+    assert {%{value: {:tip, 1}}, 0} = host.step.(suc, "stay")
+  end
+
+  test "a decoded Nat greater than 0 takes the suc arm" do
+    dir = tmp()
+    path = write_book(dir, "tip-suc-host.muro", tip_suc_host_src())
+
+    assert {:ok, host} = Muro.Synth.Host.open(path)
+    assert host.structured
+
+    zero = Enum.find(host.all_states, &(&1.spell == "(tip 0)"))
+    suc = Enum.find(host.all_states, &(&1.spell == "(tip (suc 0))"))
+    assert zero.value == {:tip, 0}
+    assert suc.value == {:tip, 1}
+
+    assert {%{value: {:tip, 0}}, 0} = host.step.(zero, "go")
+    assert {%{value: {:tip, 1}, spell: "(tip (suc 0))"}, {:suc, 0}} = host.step.(suc, "go")
+    assert {%{value: {:tip, 1}}, 0} = host.step.(suc, "stay")
+
+    refute host.hint_eval.("big", zero)
+    assert host.hint_eval.("big", suc)
+  end
+
   test "a recursive all-states cover decodes as states" do
     assert {:ok, host} = Muro.Synth.Host.open(@tree)
     assert host.structured
@@ -311,6 +344,35 @@ defmodule Muro.SynthLoopTest do
     assert Enum.map(host.all_states, & &1.spell) == ["(tip 0)", "(bin (tip 0) (tip 0))"]
     assert Muro.Synth.Term.equatable?(host.schema)
     refute match?({:open, _}, host.schema)
+  end
+
+  @tag timeout: 180_000
+  test "a tip of suc 0 certifies the reward of go" do
+    src = File.read!(@tip)
+    refute src =~ "data Feature"
+    refute src =~ "eval-feature"
+
+    assert {:ok, result} = Muro.Synth.cegis_loop(@tip, depth: 0, max_depth: 0)
+    assert result.status == :certified
+    assert result.certificate == "CoindHomo"
+    assert result.program == {:feat, "has-pos-reward-go"}
+    assert result.book =~ "def survivor : run PredProg := (feat has-pos-reward-go)"
+    assert result.book =~ "evidence CoindHomo rank"
+    assert result.book =~ "cert-cover-miss"
+
+    assert result.book =~
+             "def cert-solve-tip-n0 : evidence Π (n : Nat) → {solve (tip 0) n ≡ suc 0 : Nat}"
+
+    assert result.book =~
+             "def cert-solve-tip-n1 : evidence Π (n : Nat) → {solve (tip (suc 0)) n ≡ suc 0 : Nat}"
+
+    refute result.book =~ "CoinductiveHomomorphism"
+    text = joined(result)
+    assert text =~ "muro synth: homomorphism checked"
+    assert text =~ "program: (feat has-pos-reward-go)"
+    assert text =~ "at (tip 0) the program prefers stay"
+    assert text =~ "at (tip (suc 0)) the program prefers go"
+    assert text =~ "certificate CoindHomo"
   end
 
   @tag timeout: 180_000
@@ -2129,6 +2191,55 @@ defmodule Muro.SynthLoopTest do
 
     #{body}
     """)
+  end
+
+  defp tip_suc_host_src do
+    """
+    import "std:bool.muro"
+    import "std:list.muro"
+
+    data State : Type where
+      tip : Π (n : Nat) → State
+
+    data Action : Type where
+      go : Action
+      stay : Action
+
+    def Carrier : spec Type := State
+
+    data Feature : Type where
+      big : Feature
+
+    def eval-feature : run Π (+ f : Feature) → Π (+ c : Carrier) → Bool :=
+      λ (+ f : Feature) → λ (+ c : Carrier) →
+        match f motive (λ _ → Bool)
+          | big =>
+              (match c motive (λ _ → Bool)
+                | tip n =>
+                    (match n motive (λ _ → Bool)
+                      | 0 => false
+                      | suc _ => true))
+
+    def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+      λ (s : State) → λ (a : Action) →
+        match s motive (λ _ → State × Nat)
+          | tip n =>
+              (match n motive (λ _ → State × Nat)
+                | 0 =>
+                    (match a motive (λ _ → State × Nat)
+                      | go => (tip 0, 0)
+                      | stay => (tip 0, suc 0))
+                | suc k =>
+                    (match a motive (λ _ → State × Nat)
+                      | go => (tip (suc k), suc 0)
+                      | stay => (tip (suc k), 0)))
+
+    def all-actions : run List Action := cons go (cons stay nil)
+    def default-action : run Action := stay
+    def horizon : run Nat := 0
+    def all-states : run List State := cons (tip 0) (cons (tip (suc 0)) nil)
+    #{leb_src()}
+    """
   end
 
   defp prefer_src do

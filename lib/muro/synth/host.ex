@@ -240,8 +240,16 @@ defmodule Muro.Synth.Host do
     end
   end
 
+  # A decoded Nat is a host integer. Emitted `step` and `eval-feature`
+  # match Peano `0` and `{:suc, n}`. The state sent into the book is
+  # that Peano term, at every Nat the schema names. `leb` is unchanged:
+  # it compares the reward `step` returned, which is already that shape.
   defp state_arg(host, %Muro.Synth.Term{value: value}) do
-    if host.structured, do: value, else: atom!(host, value)
+    if host.structured do
+      Muro.Synth.Term.to_book(value, host.schema)
+    else
+      atom!(host, value)
+    end
   end
 
   defp state_arg(host, state), do: atom!(host, state)

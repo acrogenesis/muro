@@ -222,10 +222,39 @@ defmodule Muro.SynthFeatureTest do
     assert term.value == {:bin, {:tip, 0}, {:tip, 1}}
     assert term.spell == "(bin (tip 0) (tip (suc 0)))"
 
+    assert Muro.Synth.Term.to_book(term.value, schema) ==
+             {:bin, {:tip, 0}, {:tip, {:suc, 0}}}
+
     {specs, _} = Muro.Synth.Term.templates(schema, [{:tip, 0}, raw], MapSet.new(), 1)
     assert Enum.any?(specs, &(&1.kind == :ctor_is and &1.tag == "bin" and &1.path == []))
     assert Enum.any?(specs, &(&1.kind == :nat_is and &1.path == [0]))
     refute Enum.any?(specs, &(&1.path == [0, 0]))
+  end
+
+  test "a Nat under a list or a product is Peano in the book" do
+    listed =
+      parsed_schema("""
+      data State : Type where
+        cell : Π (xs : List Nat) → State
+      """)
+
+    raw = {:cell, {:cons, {:suc, {:suc, 0}}, {:cons, 0, nil}}}
+    assert {:ok, term} = Muro.Synth.Term.decode(raw, listed)
+    assert term.value == {:cell, {:cons, 2, {:cons, 0, nil}}}
+
+    assert Muro.Synth.Term.to_book(term.value, listed) ==
+             {:cell, {:cons, {:suc, {:suc, 0}}, {:cons, 0, nil}}}
+
+    paired =
+      parsed_schema("""
+      data State : Type where
+        hold : Π (p : Nat × Nat) → State
+      """)
+
+    pair = {:hold, {{:suc, 0}, 0}}
+    assert {:ok, held} = Muro.Synth.Term.decode(pair, paired)
+    assert held.value == {:hold, {1, 0}}
+    assert Muro.Synth.Term.to_book(held.value, paired) == {:hold, {{:suc, 0}, 0}}
   end
 
   test "a back-edge under a list or a product is not equatable" do
