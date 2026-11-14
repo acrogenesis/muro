@@ -827,8 +827,8 @@ defmodule Muro.Synth.Term do
     end)
   end
 
-  defp base_name(%{kind: :ctor_is, path: path, tag: tag}) do
-    join_name(["ctor-is", path_tag(path), guard_tag(path), tag])
+  defp base_name(%{kind: :ctor_is, path: path, tag: tag} = spec) do
+    join_name(["ctor-is", path_tag(path), guard_tag(spec), tag])
   end
 
   defp base_name(%{kind: kind, path: path, i: i, j: j} = spec)
@@ -854,7 +854,16 @@ defmodule Muro.Synth.Term do
     Enum.join(["p#{head}" | Enum.map(tail, &Integer.to_string/1)], "-")
   end
 
-  defp guard_tag(%{guards: [{_path, ctor} | _]}), do: ctor
+  # Guards are stored inner-first. The name reads every constructor
+  # from the root. A path with no guard contributes nothing, so an
+  # unguarded test keeps the path and the tag.
+  defp guard_tag(%{guards: guards}) when is_list(guards) and guards != [] do
+    guards
+    |> Enum.reverse()
+    |> Enum.map(fn {_prefix, ctor} -> ctor end)
+    |> Enum.join("-")
+  end
+
   defp guard_tag(_), do: nil
 
   defp join_name(parts) do

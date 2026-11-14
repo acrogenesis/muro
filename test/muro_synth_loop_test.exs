@@ -357,16 +357,16 @@ defmodule Muro.SynthLoopTest do
     assert {:ok, result} = Muro.Synth.cegis_loop(@deep, depth: 0, max_depth: 0)
     assert result.status == :certified
     assert result.certificate == "CoindHomo"
-    assert result.program == {:feat, "ctor-is-p0-0-bin"}
-    assert result.book =~ "def survivor : run PredProg := (feat ctor-is-p0-0-bin)"
-    assert result.book =~ "ctor-is-p0-0-bin : Feature"
+    assert result.program == {:feat, "ctor-is-p0-0-bin-bin-bin"}
+    assert result.book =~ "def survivor : run PredProg := (feat ctor-is-p0-0-bin-bin-bin)"
+    assert result.book =~ "ctor-is-p0-0-bin-bin-bin : Feature"
     assert result.book =~ "evidence CoindHomo rank"
     refute result.book =~ "has-pos-reward"
     refute result.book =~ "CoinductiveHomomorphism"
 
     text = joined(result)
     assert text =~ "muro synth: homomorphism checked"
-    assert text =~ "program: (feat ctor-is-p0-0-bin)"
+    assert text =~ "program: (feat ctor-is-p0-0-bin-bin-bin)"
     assert text =~ "at (bin (bin (tip 0) (tip 0)) (tip 0)) the program prefers stay"
     assert text =~ "at (bin (bin (bin (tip 0) (tip 0)) (tip 0)) (tip 0)) the program prefers move"
     assert text =~ "certificate CoindHomo"

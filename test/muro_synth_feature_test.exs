@@ -400,6 +400,68 @@ defmodule Muro.SynthFeatureTest do
     """)
   end
 
+  test "two ctor-is tests at one path keep every constructor guard in the name" do
+    schema =
+      parsed_schema("""
+      data Bit : Type where
+        off : Bit
+        on : Bit
+
+      data Mid : Type where
+        go : Π (b : Bit) → Mid
+        stop : Mid
+
+      data State : Type where
+        left : Π (m : Mid) → State
+        right : Π (m : Mid) → State
+      """)
+
+    states = [
+      {:left, {:go, :on}},
+      {:right, {:go, :on}},
+      {:left, :stop},
+      {:right, :stop}
+    ]
+
+    {specs, _} = Muro.Synth.Term.templates(schema, states, MapSet.new(), 2)
+
+    ons =
+      Enum.filter(specs, &(&1.kind == :ctor_is and &1.path == [0, 0] and &1.tag == "on"))
+
+    names = Enum.map(ons, & &1.name) |> Enum.sort()
+    assert names == ["ctor-is-p0-0-left-go-on", "ctor-is-p0-0-right-go-on"]
+    refute Enum.any?(names, &String.ends_with?(&1, "-2"))
+
+    left = Enum.find(ons, &(&1.name == "ctor-is-p0-0-left-go-on"))
+    assert left.guards == [{[0], "go"}, {[], "left"}]
+    assert Muro.Synth.Term.eval_spec(schema, left, {:left, {:go, :on}})
+    refute Muro.Synth.Term.eval_spec(schema, left, {:right, {:go, :on}})
+  end
+
+  test "an unguarded ctor-is keeps the path and the tag, and a guarded bin carries both constructors" do
+    bit = {:enum, "Bit", ["off", "on"]}
+    inner = {:data, "Inner", [%{name: "inn", fields: [bit]}]}
+    schema = {:data, "State", [%{name: "wrap", fields: [inner]}]}
+    off = {:wrap, {:inn, :off}}
+    on = {:wrap, {:inn, :on}}
+
+    {specs, _} = Muro.Synth.Term.templates(schema, [off, on], MapSet.new(), 2)
+    on_spec = Enum.find(specs, &(&1.kind == :ctor_is and &1.path == [0, 0] and &1.tag == "on"))
+    assert on_spec.name == "ctor-is-p0-0-on"
+    refute Map.has_key?(on_spec, :guards)
+
+    tree = tree_schema()
+    low = {:bin, {:bin, {:tip, 0}, {:tip, 0}}, {:tip, 0}}
+    high = {:bin, {:bin, {:bin, {:tip, 0}, {:tip, 0}}, {:tip, 0}}, {:tip, 0}}
+    {nested, _} = Muro.Synth.Term.templates(tree, [low, high], MapSet.new(), 2)
+
+    bin =
+      Enum.find(nested, &(&1.kind == :ctor_is and &1.path == [0, 0] and &1.tag == "bin"))
+
+    assert bin.name == "ctor-is-p0-0-bin-bin-bin"
+    assert bin.guards == [{[0], "bin"}, {[], "bin"}]
+  end
+
   defp known_structural?(spec) do
     spec.kind in [:ctor_is, :vals_eq, :spread_eq, :pair_any, :len_is, :nat_is]
   end
