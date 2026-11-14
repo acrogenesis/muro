@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.21.9
+
+A Nat in a decoded state is a host integer. The search sends that Nat to `step` and to `eval-feature` as Peano, so a match on `suc` runs.
+
+`examples/cshrl/envs/tip_suc.muro` declares no feature. The cover is `tip 0` and `tip (suc 0)`. `step` matches the Nat. The survivor is `(feat has-pos-reward-go)`. It prefers `stay` at `tip 0` and `go` at `tip (suc 0)`, and the book checks `CoindHomo`.
+
+### Manual
+
+- Synthesis. Examples.
+
+### Package
+
+- Version 0.21.9.
+
 ## 0.21.6
 
 A declared cover is ranked when the terms themselves can be split. A function field is refused when the environment is opened: `State has a function field`. An erased constructor argument is refused then too: `State has an erased constructor argument`. A linear field still opens, and the certificate is refused: `State has a linear field`. Recursion under `List` or a product still opens, and the certificate is refused: `State recursion under List/product cannot be certified`. Those limits also mean two values have no equality run, so `is-self-loop` and `leads-terminal` are omitted. A product that does not recurse is compared with `let`. A field of type `List State` is not strictly positive. Wrapper recursion through another datatype stays `State is mutually inductive`.
