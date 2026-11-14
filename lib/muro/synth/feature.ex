@@ -141,12 +141,14 @@ defmodule Muro.Synth.Feature do
   end
 
   @doc """
-  Re-enumerate structural tests one field deeper, up to the path bound.
+  Re-enumerate structural tests deeper, up to the path bound.
 
-  `{:ok, specs, depth}` separates `earlier` from `later`. `{:stop, specs,
-  depth}` has reached the bound, or this host has no structural walk.
-  `specs` is `nil` when nothing was re-enumerated. The caller filters
-  nothing further: the specs here are already reduced.
+  One call climbs until the pair separates or the bound is reached,
+  and each step opens one field. `{:ok, specs, depth}` separates
+  `earlier` from `later`. `{:stop, specs, depth}` has reached the
+  bound, or this host has no structural walk. `specs` is `nil` when
+  nothing was re-enumerated. The caller filters nothing further: the
+  specs here are already reduced.
   """
   def deepen(host, earlier, later) do
     depth = Map.get(host, :path_depth, Muro.Synth.Term.first_path_depth())

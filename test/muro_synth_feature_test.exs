@@ -462,6 +462,27 @@ defmodule Muro.SynthFeatureTest do
     assert bin.guards == [{[0], "bin"}, {[], "bin"}]
   end
 
+  test "templates do not emit a binder test, including at the path bound" do
+    schema = tree_schema()
+    assert {:data, "State", rows} = schema
+
+    assert Enum.any?(rows, fn row ->
+             Enum.any?(row.fields, fn field -> field.qty != nil and is_binary(field.name) end)
+           end)
+
+    states = [{:tip, 0}, {:bin, {:bin, {:tip, 0}, {:tip, 1}}, {:tip, 0}}]
+
+    {specs, _} =
+      Muro.Synth.Term.templates(schema, states, MapSet.new(), Muro.Synth.Term.path_bound())
+
+    assert specs != []
+    assert Enum.all?(specs, &known_structural?/1)
+
+    refute Enum.any?(specs, fn spec ->
+             spec.kind in [:binder, :qty, :use_count, :binder_test]
+           end)
+  end
+
   defp known_structural?(spec) do
     spec.kind in [:ctor_is, :vals_eq, :spread_eq, :pair_any, :len_is, :nat_is]
   end

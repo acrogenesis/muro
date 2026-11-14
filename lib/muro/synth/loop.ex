@@ -141,13 +141,14 @@ defmodule Muro.Synth.Loop do
   end
 
   # A collapse is a missing structural test when the two terms differ.
-  # The next pass opens one more field, up to the path bound, and
-  # enumerates every path again. Invention then reads the subterm
-  # where the two values differ, including a list element and a
-  # field past the bound. Each invention round separates at least
-  # the pair it was given, so the number of those rounds is at most
-  # the size of the cover. When the new tests do not separate the
-  # pair, the report stays `features insufficient`.
+  # One deepen walks further fields, up to the path bound, and
+  # enumerates every path again before search resumes. That walk
+  # does not spend an invention round. Invention then reads the
+  # subterm where the two values differ, including a list element
+  # and a field past the bound. Each invention round separates at
+  # least the pair it was given, so the number of those rounds is
+  # at most the size of the cover. When the new tests do not
+  # separate the pair, the report stays `features insufficient`.
   defp invent(
          host,
          spec,

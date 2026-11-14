@@ -2,7 +2,7 @@
 
 ## 0.21.7
 
-`mix muro.synth` reads a constructor, a list, and a closed Nat at a path into an inductive `State`. The first pass opens one field. When two cover states agree on every test and the values differ, a later pass opens one more field, up to three. A name the path has already opened is not another field. A test that is true at every cover state, or false at every one, is dropped, and so is a duplicate of an earlier test. A `ctor-is` name carries each constructor guard from the root, then the tag.
+`mix muro.synth` reads a constructor, a list, and a closed Nat at a path into an inductive `State`. The first pass opens one field. When two cover states agree on every test and the values differ, a later pass opens further fields, up to three. One deepen can open several of them before the search resumes. A name the path has already opened is not another field. A test that is true at every cover state, or false at every one, is dropped, and so is a duplicate of an earlier test. A `ctor-is` name carries each constructor guard from the root, then the tag.
 
 `examples/cshrl/envs/nested_bin.muro` declares no feature. The cover is two trees that agree one field deep. The survivor is `(feat ctor-is-p0-0-bin-bin-bin)`. It prefers `stay` at `bin (bin (tip 0) (tip 0)) (tip 0)` and `move` at `bin (bin (bin (tip 0) (tip 0)) (tip 0)) (tip 0)`, and the book checks `CoindHomo`.
 

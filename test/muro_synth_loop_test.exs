@@ -372,6 +372,95 @@ defmodule Muro.SynthLoopTest do
     assert text =~ "certificate CoindHomo"
   end
 
+  # `left` is private to the search. A deepen that separates the pair
+  # calls search again with the same invent budget. Only a successful
+  # invention spends a round.
+  test "a deepen does not spend an invent round" do
+    dir = tmp()
+    low = "nest (tip off)"
+    high = "nest (tip on)"
+    path = write_book(dir, "budget.muro", swap_src(low, high))
+
+    assert {:ok, host} = Muro.Synth.Host.open(path)
+    assert length(host.all_states) == 2
+    [earlier, later] = host.all_states
+    assert {:ok, _specs, 2} = Muro.Synth.Feature.deepen(host, earlier, later)
+
+    {result, calls} =
+      with_budget_trace(fn ->
+        Muro.Synth.cegis_loop(path, depth: 0, max_depth: 0, checker: fn _book, _fuel -> :ok end)
+      end)
+
+    assert {:ok, result} = result
+    assert result.program == {:feat, "ctor-is-p0-0-nest-tip-on"}
+    refute result.status == :insufficient
+
+    search = for {:search, left} <- calls, do: left
+    invent = for {:invent, left} <- calls, do: left
+    assert search == [2, 2]
+    assert invent == []
+  end
+
+  test "a field past the path bound is invented after the walk stops" do
+    dir = tmp()
+    low = "nest (nest (nest (tip off)))"
+    high = "nest (nest (nest (tip on)))"
+    path = write_book(dir, "past.muro", swap_src(low, high))
+    assert_invented_after_bound(path, [0, 0, 0, 0], "ctor-is-p0-0-0-0-on")
+  end
+
+  test "a list element is invented after the walk stops" do
+    dir = tmp()
+
+    path =
+      write_book(dir, "elem.muro", """
+      import "std:bool.muro"
+      import "std:list.muro"
+
+      data Bit : Type where
+        off : Bit
+        on : Bit
+
+      data State : Type where
+        cell : Π (xs : List Bit) → State
+
+      data Action : Type where
+        go : Action
+        stay : Action
+
+      def marked : run Π (s : State) → Bool :=
+        λ (s : State) →
+          match s motive (λ _ → Bool)
+            | cell xs =>
+                (match xs motive (λ _ → Bool)
+                  | nil => false
+                  | cons h _ =>
+                      (match h motive (λ _ → Bool)
+                        | off => false
+                        | on => true))
+
+      def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+        λ (s : State) → λ (a : Action) →
+          match a motive (λ _ → State × Nat)
+            | go =>
+                (match marked s motive (λ _ → State × Nat)
+                  | true => (cell (cons off nil), suc (suc 0))
+                  | false => (cell (cons on nil), suc 0))
+            | stay =>
+                (match marked s motive (λ _ → State × Nat)
+                  | true => (cell (cons off nil), suc 0)
+                  | false => (cell (cons on nil), suc (suc 0)))
+
+      def all-actions : run List Action := cons go (cons stay nil)
+      def horizon : run Nat := 0
+      def all-states : run List State :=
+        cons (cell (cons off nil)) (cons (cell (cons on nil)) nil)
+      #{leb_src()}
+      """)
+
+    assert_invented_after_bound(path, [0, 0], "ctor-is-p0-0-on")
+  end
+
   test "product recursion opens and the certificate is refused" do
     dir = tmp()
     path = write_book(dir, "prod-rec.muro", product_rec_src())
@@ -2167,6 +2256,137 @@ defmodule Muro.SynthLoopTest do
     def all-states : run List State := cons (cell 0 idN) nil
     #{leb_src()}
     """
+  end
+
+  defp assert_invented_after_bound(path, path_at, name) do
+    assert {:ok, host} = Muro.Synth.Host.open(path)
+    [earlier, later] = host.all_states
+    assert {:stop, specs, 3} = Muro.Synth.Feature.deepen(host, earlier, later)
+    assert specs != nil
+    assert Enum.all?(specs, &(length(Map.get(&1, :path, [])) <= Muro.Synth.Term.path_bound()))
+
+    refute Enum.any?(specs, fn spec ->
+             Muro.Synth.Term.eval_spec(host.schema, spec, earlier) !=
+               Muro.Synth.Term.eval_spec(host.schema, spec, later)
+           end)
+
+    {added, _} =
+      Muro.Synth.Term.invent(host.schema, earlier, later, host.feature_specs, MapSet.new())
+
+    assert Enum.any?(added, &(&1.path == path_at and &1.name == name))
+
+    assert {:ok, result} =
+             Muro.Synth.cegis_loop(path,
+               depth: 0,
+               max_depth: 0,
+               checker: fn _book, _fuel -> :ok end
+             )
+
+    assert result.program == {:feat, name}
+    refute result.status == :insufficient
+    refute joined(result) =~ "features insufficient"
+  end
+
+  defp swap_src(low, high) do
+    """
+    import "std:bool.muro"
+    import "std:list.muro"
+
+    data Bit : Type where
+      off : Bit
+      on : Bit
+
+    data State : Type where
+      tip : Π (b : Bit) → State
+      nest : Π (c : State) → State
+
+    data Action : Type where
+      go : Action
+      stay : Action
+
+    def buried : run Π (s : State) → Bool :=
+      λ (s : State) →
+        match s motive (λ _ → Bool)
+          | tip b =>
+              (match b motive (λ _ → Bool)
+                | off => false
+                | on => true)
+          | nest c => buried c
+
+    def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+      λ (s : State) → λ (a : Action) →
+        match a motive (λ _ → State × Nat)
+          | go =>
+              (match buried s motive (λ _ → State × Nat)
+                | true => (#{low}, suc (suc 0))
+                | false => (#{high}, suc 0))
+          | stay =>
+              (match buried s motive (λ _ → State × Nat)
+                | true => (#{low}, suc 0)
+                | false => (#{high}, suc (suc 0)))
+
+    def all-actions : run List Action := cons go (cons stay nil)
+    def horizon : run Nat := 0
+    def all-states : run List State :=
+      cons (#{low}) (cons (#{high}) nil)
+    #{leb_src()}
+    """
+  end
+
+  # The invent budget is an argument of the private search. The trace
+  # records it. A deepen that returns a separator does not change it.
+  defp with_budget_trace(fun) do
+    parent = self()
+
+    tracer =
+      spawn(fn ->
+        send(parent, :budget_ready)
+        budget_trace([])
+      end)
+
+    receive do
+      :budget_ready -> :ok
+    end
+
+    :erlang.trace(self(), true, [:call, {:tracer, tracer}])
+    :erlang.trace_pattern({Muro.Synth.Loop, :search, 10}, true, [:local])
+    :erlang.trace_pattern({Muro.Synth.Loop, :invent_at, 16}, true, [:local])
+
+    try do
+      result = fun.()
+      {result, stop_budget_trace(tracer)}
+    after
+      :erlang.trace_pattern({Muro.Synth.Loop, :search, 10}, false, [:local])
+      :erlang.trace_pattern({Muro.Synth.Loop, :invent_at, 16}, false, [:local])
+      :erlang.trace(self(), false, [:call])
+
+      if Process.alive?(tracer) do
+        send(tracer, {:done, self()})
+      end
+    end
+  end
+
+  defp stop_budget_trace(tracer) do
+    send(tracer, {:done, self()})
+
+    receive do
+      {:budget, calls} -> calls
+    after
+      5_000 -> flunk("the budget trace did not return")
+    end
+  end
+
+  defp budget_trace(acc) do
+    receive do
+      {:trace, _pid, :call, {Muro.Synth.Loop, :search, args}} ->
+        budget_trace([{:search, List.last(args)} | acc])
+
+      {:trace, _pid, :call, {Muro.Synth.Loop, :invent_at, args}} ->
+        budget_trace([{:invent, Enum.at(args, 9)} | acc])
+
+      {:done, from} ->
+        send(from, {:budget, Enum.reverse(acc)})
+    end
   end
 
   defp write_book(dir, name, src) do
