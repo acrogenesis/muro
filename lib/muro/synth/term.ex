@@ -66,6 +66,59 @@ defmodule Muro.Synth.Term do
   end
 
   @doc """
+  The Elixir value `decode/2` stores, written the way emit matches it.
+
+  A `Nat` in a term is an integer. Emitted code matches `0` and
+  `{:suc, _}`. The host expands on the way in and decodes on the way out.
+  """
+  def to_emit(schema, value), do: to_emit(schema, value, %{})
+
+  defp to_emit(schema, value, bound) do
+    {schema, bound} = enter(schema, bound)
+    emit_value(schema, value, bound)
+  end
+
+  defp emit_value(:nat, n, _bound) when is_integer(n) and n >= 0, do: suc_chain(n)
+  defp emit_value(:nat, other, _bound), do: other
+
+  defp emit_value({:list, _elem}, nil, _bound), do: nil
+
+  defp emit_value({:list, elem}, {:cons, head, tail}, bound) do
+    {:cons, to_emit(elem, head, bound), emit_value({:list, elem}, tail, bound)}
+  end
+
+  defp emit_value({:enum, _, _}, value, _bound), do: value
+
+  defp emit_value({:data, _name, ctors}, value, bound) do
+    tag = tag_atom(value)
+
+    case Enum.find(ctors, &(atom_of(&1.name) == tag)) do
+      nil ->
+        value
+
+      ctor ->
+        expanded =
+          ctor.fields
+          |> Enum.zip(raw_fields(value))
+          |> Enum.map(fn {field, raw} -> to_emit(field_schema(field), raw, bound) end)
+
+        case expanded do
+          [] -> tag
+          _ -> List.to_tuple([tag | expanded])
+        end
+    end
+  end
+
+  defp emit_value({:prod, left, right}, {a, b}, bound) do
+    {to_emit(left, a, bound), to_emit(right, b, bound)}
+  end
+
+  defp emit_value(_schema, value, _bound), do: value
+
+  defp suc_chain(0), do: 0
+  defp suc_chain(n) when is_integer(n) and n > 0, do: {:suc, suc_chain(n - 1)}
+
+  @doc """
   Structural templates at `path` depth `max_depth`.
 
   Depth 0 is the value itself. A greater depth opens one field.

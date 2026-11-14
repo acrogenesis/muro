@@ -225,6 +225,14 @@ defmodule Muro.Synth.Feature do
 
   defp all_false?(values), do: Enum.all?(values, &(&1 == false))
 
+  @doc """
+  Drop a `vals-eq` or `spread-eq` that a `pair-any` on the same site covers.
+
+  This is `FeatureTemplate.eliminate-redundant`. It does not look at a
+  cover, and it does not know what the site means.
+  """
+  def eliminate_redundant(specs) when is_list(specs), do: drop_subsumed(specs)
+
   # FeatureTemplate.eliminate-redundant: `pair-any i j` subsumes
   # `vals-eq i j` and `spread-eq i j` on the same path. Dynamics
   # templates have no such pair. Two atoms with one truth vector still

@@ -74,16 +74,26 @@ defmodule Muro.Synth.Loop do
         err
 
       {:ok, host} ->
-        case Oracle.observe(host, oracle, blind) do
-          {:error, _kind, _msg} = err ->
-            err
+        case Muro.Synth.Placement.attempt(host, oracle, anchor, checker, fuel, structural) do
+          :skip ->
+            observe(host, oracle, blind, depth, max_depth, rounds, score, anchor, checker, fuel)
 
-          {:silent, cex} ->
-            {:ok, silent(cex)}
-
-          {:ok, spec} ->
-            search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel)
+          {:done, result} ->
+            {:ok, result}
         end
+    end
+  end
+
+  defp observe(host, oracle, blind, depth, max_depth, rounds, score, anchor, checker, fuel) do
+    case Oracle.observe(host, oracle, blind) do
+      {:error, _kind, _msg} = err ->
+        err
+
+      {:silent, cex} ->
+        {:ok, silent(cex)}
+
+      {:ok, spec} ->
+        search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel)
     end
   end
 

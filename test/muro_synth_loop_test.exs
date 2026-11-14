@@ -6,6 +6,7 @@ defmodule Muro.SynthLoopTest do
   @maze "examples/cshrl/envs/maze_auto.muro"
   @maze3 "examples/cshrl/envs/maze_auto_e2e.muro"
   @place "examples/cshrl/envs/placement.muro"
+  @queens4 "examples/cshrl/envs/queens4.muro"
   @nest "examples/cshrl/envs/nested_bit.muro"
   @cover "examples/cshrl/envs/list_cover.muro"
   @tree "examples/cshrl/envs/tree_cover.muro"
@@ -272,6 +273,55 @@ defmodule Muro.SynthLoopTest do
     assert text =~ "at (board r1 r1) the program prefers move"
     assert text =~ "at (board r2 r0) the program prefers stay"
     assert text =~ "at (board r2 r2) the program prefers move"
+    assert text =~ "certificate CoindHomo"
+  end
+
+  @tag timeout: 180_000
+  test "4-queens discovers the constraint and certifies the finder" do
+    src = File.read!(@queens4)
+    refute src =~ "data Feature"
+    refute src =~ "eval-feature"
+
+    assert {:ok, result} = Muro.Synth.cegis_loop(@queens4)
+    assert result.status == :certified
+    assert result.certificate == "CoindHomo"
+    assert result.versions == [23, 18, 6, 1]
+
+    assert result.program ==
+             {:or, {:feat, "pair-any-0-1"},
+              {:or, {:feat, "pair-any-0-2"},
+               {:or, {:feat, "pair-any-1-2"},
+                {:or, {:feat, "pair-any-0-3"},
+                 {:or, {:feat, "pair-any-1-3"}, {:feat, "pair-any-2-3"}}}}}}
+
+    assert result.book =~ "def survivor : run PredProg :="
+    assert result.book =~ "def goal : run PredProg := (feat len-is-4)"
+    assert result.book =~ "placed-find-policy"
+    assert result.book =~ "evidence CoindHomo rank"
+    refute result.book =~ "CoinductiveHomomorphism"
+
+    assert Muro.Synth.Placement.play(result.model, [], 4) == ["c1", "c3", "c0", "c2"]
+    assert Muro.Synth.Placement.play(result.model, [1], 3) == ["c3", "c0", "c2"]
+    assert Muro.Synth.Placement.play(result.model, [2], 3) == ["c0", "c3", "c1"]
+    assert Muro.Synth.Placement.play(result.model, [0], 1) == ["c0"]
+    assert Muro.Synth.Placement.play(result.model, [3], 1) == ["c0"]
+    assert Muro.Synth.Placement.play(result.model, [0, 0], 1) == ["c0"]
+    assert Muro.Synth.Placement.dead?(result.model, [0, 0])
+    assert Muro.Synth.Placement.solved?(result.model, [1, 3, 0, 2])
+    assert Muro.Synth.Placement.solved?(result.model, [2, 0, 3, 1])
+    refute Muro.Synth.Placement.dead?(result.model, [])
+
+    text = joined(result)
+    assert text =~ "muro synth: homomorphism checked"
+    assert text =~ "program: (orp (feat pair-any-0-1)"
+    assert text =~ "goal: (feat len-is-4)"
+    assert text =~ "enumerated 23"
+    assert text =~ "alive 18"
+    assert text =~ "reduced 6"
+    assert text =~ "solved 1"
+    assert text =~ "cover 18"
+    assert text =~ "at (ongoing nil) the program prefers c1"
+    assert text =~ "from the empty board the policy plays c1 c3 c0 c2"
     assert text =~ "certificate CoindHomo"
   end
 

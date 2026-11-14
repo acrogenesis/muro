@@ -632,10 +632,46 @@ defmodule Muro.Synth.Cert do
     }
   end
 
+  # `host.winners` is the action the deployed policy takes at each cover
+  # state. The ranking is that action, not `eval` of a predicate arm.
+  # A book that does not set the map keeps the predicate ranking.
   defp chosen(host, arms, state) do
+    case Map.get(host, :winners) do
+      winners when is_map(winners) ->
+        case Map.get(winners, state) do
+          nil -> chosen_arm(host, arms, state)
+          action -> action
+        end
+
+      _ ->
+        chosen_arm(host, arms, state)
+    end
+  end
+
+  defp chosen_arm(host, arms, state) do
     case Enum.find(arms, &bit_at(host, &1, state)) do
       nil -> List.last(arms).else
       arm -> arm.action
+    end
+  end
+
+  defp rank_at(host, bound, arms, actions, states, spell) do
+    case winner_at(host, states, spell) do
+      nil -> rank_match(bound, arms, actions)
+      action -> prefer(actions, action)
+    end
+  end
+
+  defp winner_at(host, states, spell) do
+    case Map.get(host, :winners) do
+      winners when is_map(winners) ->
+        case Enum.find(states, &(Term.spell(&1) == spell)) do
+          nil -> nil
+          state -> Map.get(winners, state)
+        end
+
+      _ ->
+        nil
     end
   end
 
@@ -663,6 +699,9 @@ defmodule Muro.Synth.Cert do
 
   defp spell_nat(0), do: "0"
   defp spell_nat({:suc, n}), do: spell_nat(nat_int({:suc, n}))
+  # A closed numeral, not a tower of successors. Small numerals stay
+  # written as successors so an existing certificate is unchanged.
+  defp spell_nat(n) when is_integer(n) and n >= 10, do: Integer.to_string(n)
 
   defp spell_nat(n) when is_integer(n) and n > 0 do
     rest = spell_nat(n - 1)
@@ -751,7 +790,7 @@ defmodule Muro.Synth.Cert do
            "s",
            states,
            fn _src -> "Type" end,
-           fn _spell -> rank_match(bound, arms, actions) end,
+           fn spell -> rank_at(host, bound, arms, actions, states, spell) end,
            fn _src -> "Empty" end
          ) do
       :open ->

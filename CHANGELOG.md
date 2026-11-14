@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.21.8
+
+A horizon-bounded placement is solved by the constraint and the goal the structural templates find. The constraint is the disjunction of the `pair-any` tests that stay false on every open or finished board. The goal is the length test that holds on every finished board and fails on every shorter open board. `placed-find-policy` is the run. When the cover is small enough to split, the checker sees `CoindHomo` for the trace order of that run, on the environment's own `step`. A larger cover is reported and is not given that case split.
+
+`examples/cshrl/envs/queens4.muro` is four rows and declares no feature. The cover has 18 states. The search reads 23 templates, keeps 18, and reduces them to six `pair-any` tests. The goal is `len-is-4`. From the empty board the policy plays `c1`, `c3`, `c0`, `c2`, and the book checks `CoindHomo`. `examples/cshrl/envs/queens8.muro` is the same dynamics at eight rows. The search reads 93 templates, keeps 84, and reduces them to 28 `pair-any` tests. The goal is `len-is-8`. From the empty board the policy plays `c0`, `c4`, `c7`, `c5`, `c2`, `c6`, `c1`, `c3`. The cover has 2058 states, so the case split is refused.
+
+0.21.7 is held by open pull request #242 and is not on this branch. A later merge of main will insert that entry.
+
+### Manual
+
+- Synthesis. Examples.
+
+### Package
+
+- Version 0.21.8.
+
 ## 0.21.6
 
 A declared cover is ranked when the terms themselves can be split. A function field is refused when the environment is opened: `State has a function field`. An erased constructor argument is refused then too: `State has an erased constructor argument`. A linear field still opens, and the certificate is refused: `State has a linear field`. Recursion under `List` or a product still opens, and the certificate is refused: `State recursion under List/product cannot be certified`. Those limits also mean two values have no equality run, so `is-self-loop` and `leads-terminal` are omitted. A product that does not recurse is compared with `let`. A field of type `List State` is not strictly positive. Wrapper recursion through another datatype stays `State is mutually inductive`.
