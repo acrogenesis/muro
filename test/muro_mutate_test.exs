@@ -223,7 +223,11 @@ defmodule Muro.MutateTest do
     {out, err, code} = run_task(["--json", path])
 
     assert code == {:shutdown, 2}
-    assert out == "Muro v#{version}\n"
+
+    # Mix.Shell.IO.info prints "==> muro" the first time the shell is used
+    # after another project has taken it. Which test runs first decides
+    # whether this capture sees the line, so it is dropped here.
+    assert String.replace(out, ~r/^==> \S+\n/m, "") == "Muro v#{version}\n"
     assert err =~ "refusing to mutate a book that does not check\n"
     refute out =~ "{"
     refute err =~ "{"
@@ -298,7 +302,10 @@ defmodule Muro.MutateTest do
 
     assert_received {:stderr, stderr}
     assert_received {:result, code}
-    {stdout, stderr, code}
+    # Mix.Shell.IO.info prints "==> muro" the first time the shell is used
+    # after another project has taken it. Which test runs first decides
+    # whether this capture sees the line, so it is dropped here.
+    {String.replace(stdout, ~r/^==> \S+\n/m, ""), stderr, code}
   end
 
   defp task_result(args) do
