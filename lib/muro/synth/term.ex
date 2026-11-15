@@ -65,6 +65,17 @@ defmodule Muro.Synth.Term do
     end
   end
 
+  @doc """
+  The state `step` and `eval-feature` receive.
+
+  A decoded Nat is a host integer. The book matches Peano `0` and
+  `{:suc, n}`. Every Nat in `schema` is that Peano term. A list, a
+  product, and a field of a datatype, including a field whose type is
+  the datatype itself, are walked the same way. Other fields stay as
+  decoded.
+  """
+  def to_book(value, schema), do: to_book(value, schema, %{})
+
   # Fields opened along a path. The first pass opens one. A later
   # pass opens one more, and stops at this bound. The number is not
   # a fixture's depth.
@@ -1677,6 +1688,60 @@ defmodule Muro.Synth.Term do
   end
 
   defp canon_nat(_), do: :error
+
+  defp peano(n) when is_integer(n) and n >= 0, do: peano(n, 0)
+  defp peano(0, acc), do: acc
+  defp peano(n, acc) when n > 0, do: peano(n - 1, {:suc, acc})
+
+  defp to_book(value, schema, bound) do
+    {schema, bound} = enter(schema, bound)
+    to_book_schema(schema, value, bound)
+  end
+
+  defp to_book_schema(:nat, value, _bound) do
+    case canon_nat(value) do
+      {:ok, n} -> peano(n)
+      :error -> value
+    end
+  end
+
+  defp to_book_schema({:enum, _, _}, value, _bound), do: value
+
+  defp to_book_schema({:data, _, ctors}, value, bound)
+       when is_atom(value) or (is_tuple(value) and tuple_size(value) >= 1) do
+    tag = tag_atom(value)
+
+    case Enum.find(ctors, &(atom_of(&1.name) == tag)) do
+      nil ->
+        value
+
+      %{fields: []} ->
+        tag
+
+      ctor ->
+        fields =
+          ctor.fields
+          |> Enum.with_index()
+          |> Enum.map(fn {field, index} ->
+            to_book(data_field(value, index), field_schema(field), bound)
+          end)
+
+        List.to_tuple([tag | fields])
+    end
+  end
+
+  defp to_book_schema({:list, elem}, value, bound) do
+    case canon_list(value) do
+      {:ok, items} -> items |> Enum.map(&to_book(&1, elem, bound)) |> encode_list()
+      :error -> value
+    end
+  end
+
+  defp to_book_schema({:prod, left, right}, {a, b}, bound) do
+    {to_book(a, left, bound), to_book(b, right, bound)}
+  end
+
+  defp to_book_schema(_schema, value, _bound), do: value
 
   def spell_nat(0), do: "0"
   def spell_nat(1), do: "suc 0"

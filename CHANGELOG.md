@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.21.8
+
+A Nat in a decoded state is a host integer. The search sends that Nat to `step` and to `eval-feature` as Peano, so a match on `suc` runs.
+
+`examples/cshrl/envs/tip_suc.muro` declares no feature. The cover is `tip 0` and `tip (suc 0)`. `step` matches the Nat. The survivor is `(feat has-pos-reward-go)`. It prefers `stay` at `tip 0` and `go` at `tip (suc 0)`, and the book checks `CoindHomo`.
+
+### Manual
+
+- Synthesis. Examples.
+
+### Package
+
+- Version 0.21.8.
+
 ## 0.21.7
 
 `mix muro.synth` reads a constructor, a list, and a closed Nat at a path into an inductive `State`. The first pass opens one field. When two cover states agree on every test and the values differ, a later pass opens further fields, up to three. One deepen can open several of them before the search resumes. A name the path has already opened is not another field. A test that is true at every cover state, or false at every one, is dropped, and so is a duplicate of an earlier test. A `ctor-is` name carries each constructor guard from the root, then the tag.
