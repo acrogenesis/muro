@@ -117,7 +117,19 @@ defmodule Muro.Synth.Loop do
       :ok ->
         case fit(host, spec.tasks, depth, max_depth, score, feat, [], %{}) do
           {:empty, versions, at} ->
-            {:ok, empty(host, versions, at)}
+            widen_reach(
+              host,
+              spec,
+              versions,
+              at,
+              depth,
+              max_depth,
+              rounds,
+              score,
+              anchor,
+              checker,
+              fuel
+            )
 
           {:ok, arms, versions, at} ->
             certify(
@@ -242,7 +254,7 @@ defmodule Muro.Synth.Loop do
   end
 
   defp fit(host, tasks, depth, max_depth, score, feat, versions, rejected) do
-    vs = Synth.enumerate(host.features, depth)
+    vs = Synth.enumerate(host.features, depth) ++ Muro.Synth.Feature.weak_optima(host)
 
     case fit_tasks(tasks, vs, score, feat, rejected) do
       {:empty, sizes} when depth < max_depth ->
@@ -253,6 +265,58 @@ defmodule Muro.Synth.Loop do
 
       {:ok, arms, sizes} ->
         {:ok, arms, versions ++ sizes, depth}
+    end
+  end
+
+  # Depth 0 and depth 1 name no predicate. `reaches-pos` is has-pos-reward
+  # read out to the horizon. The grammar cannot write a disjunction of
+  # every action at depth 1, so each action is offered the one predicate
+  # "this action reaches a positive reward, or none does". The
+  # observations keep it or drop it. The deployed term is still `eval`
+  # of the predicate that remains.
+  defp widen_reach(
+         host,
+         spec,
+         versions,
+         at,
+         depth,
+         max_depth,
+         rounds,
+         score,
+         anchor,
+         checker,
+         fuel
+       ) do
+    case Muro.Synth.Feature.extend_reach(host) do
+      :same ->
+        {:ok, empty(host, versions, at)}
+
+      {:ok, specs} ->
+        host = Muro.Synth.Host.install_features(host, specs)
+        feat = fn feature, state -> host.eval_feature.(feature, state) end
+
+        case fit(host, spec.tasks, depth, max_depth, score, feat, versions, %{}) do
+          {:empty, versions, at} ->
+            {:ok, empty(host, versions, at)}
+
+          {:ok, arms, versions, at} ->
+            certify(
+              host,
+              arms,
+              versions,
+              at,
+              max_depth,
+              rounds,
+              score,
+              feat,
+              anchor,
+              checker,
+              fuel,
+              %{},
+              %{},
+              spec.oracle
+            )
+        end
     end
   end
 
@@ -602,6 +666,7 @@ defmodule Muro.Synth.Loop do
   defp kind_word(%{kind: :has_pos_reward}), do: "has-pos-reward"
   defp kind_word(%{kind: :is_self_loop}), do: "is-self-loop"
   defp kind_word(%{kind: :leads_terminal}), do: "leads-terminal"
+  defp kind_word(%{kind: :reaches_pos}), do: "reaches-pos"
   defp kind_word(%{kind: :hint}), do: "hint"
   defp kind_word(%{kind: kind}), do: Atom.to_string(kind)
 

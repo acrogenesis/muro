@@ -4,7 +4,7 @@
 
 `mix muro.synth` deploys the predicate the checker accepted. A closed numeral in a run is emitted by the C, Rust, Zig, JavaScript, and assembly backends.
 
-`examples/cshrl/envs/queens4.muro` is four rows and declares no feature. The cover has 18 states. The features separate the boards, and no predicate at depth 0 or depth 1 matches the observations, so the command exits 1 and writes no policy. `examples/cshrl/envs/queens8.muro` is eight rows. The cover has 2058 states. `mix muro.check` accepts it. The same synthesis was stopped after 15 minutes and wrote no policy. The paper's certificate for this MDP is a class-level homomorphism. This search does not build that homomorphism, so queens is not certified.
+`examples/cshrl/envs/queens4.muro` is four rows and declares no feature. The cover has 18 states. No predicate at depth 0 or depth 1 matches the observations. The search then reads `reaches-pos`: an action pays a positive reward now, or some continuation within the horizon does. The predicate for each action is that this action does so, or that none does. The book checks `CoindHomo`, and `policy` is `eval` of that predicate. `examples/cshrl/envs/queens8.muro` is eight rows. The cover has 2058 states. `mix muro.check` accepts it. The same predicate matches the observations. The synthesis was stopped after 20 minutes and wrote no policy. The paper's certificate for this MDP is a class-level homomorphism over the step. This search certifies a ranking predicate by a cover split. It does not build that homomorphism.
 
 0.21.8 is the entry below. It arrived with the merge of main, which carries pull request #245.
 

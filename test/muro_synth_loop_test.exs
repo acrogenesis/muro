@@ -333,63 +333,59 @@ defmodule Muro.SynthLoopTest do
     assert Enum.map(goals, & &1.name) == ["len-is-4"]
   end
 
-  @tag timeout: 60_000
-  test "4-queens stops when no predicate matches the observations" do
+  # The certificate reduces `reaches-pos` at every cover state. Locally
+  # that check took about five minutes.
+  @tag timeout: 720_000
+  test "4-queens certifies positive-reward reachability" do
     src = File.read!(@queens4)
     refute src =~ "data Feature"
     refute src =~ "eval-feature"
 
+    any =
+      "(orp (orp (orp (feat reaches-pos-c0) (feat reaches-pos-c1)) (feat reaches-pos-c2)) (feat reaches-pos-c3))"
+
+    pred = fn action ->
+      "(orp (feat reaches-pos-#{action}) (notp #{any}))"
+    end
+
     assert {:ok, result} = Muro.Synth.cegis_loop(@queens4)
-    assert result.status == :empty
-    assert result.program == nil
-    assert result.book == nil
-    assert result.certificate == nil
-    assert result.versions == [16, 0, 1056, 0]
-    assert result.path_depth == 1
-    assert result.path_bound == 3
-    assert "len-is" in result.kinds
-    assert "leads-terminal" in result.kinds
-    assert "pair-any" not in result.kinds
-    assert "leads-terminal-c0" in result.features
-    assert "leads-terminal-c3" in result.features
+    assert result.status == :certified
+    assert result.certificate == "CoindHomo"
+    assert result.versions == [16, 0, 1056, 0, 24, 1, 24, 1, 24, 1, 24, 1]
+    assert Enum.map(result.program, &Muro.Synth.render/1) == Enum.map(~w(c0 c1 c2 c3), pred)
+
+    assert result.book =~ "def survivor-c0 : run PredProg := #{pred.("c0")}"
+    assert result.book =~ "def survivor-c3 : run PredProg := #{pred.("c3")}"
+    assert result.book =~ "def policy : run Π (+ s : State) → Action :="
+    assert result.book =~ "match eval survivor-c0 s"
+    assert result.book =~ "match eval survivor-c1 s"
+    assert result.book =~ "match eval survivor-c2 s"
+    assert result.book =~ "match eval survivor-c3 s"
+    assert result.book =~ "| reaches-pos-c0 => dyn-one c c0 horizon"
+    assert result.book =~ "| reaches-pos-c3 => dyn-one c c3 horizon"
+    assert result.book =~ "def dyn-best-pos "
+    assert result.book =~ "def dyn-one "
+    assert result.book =~ "def dyn-any "
+    assert result.book =~ "| suc j => dyn-any s j"
+    assert result.book =~ "evidence CoindHomo rank"
+    refute result.book =~ "find-policy"
+    refute result.book =~ "placed-find-policy"
 
     text = joined(result)
-    assert text =~ "muro synth: empty version space"
-    assert text =~ "no predicate matches the observations"
-    assert text =~ "predicate depth 1 exhausted"
-    assert text =~ "depth 1"
-    assert text =~ "templates "
-    assert text =~ "has-pos-reward"
-    assert text =~ "leads-terminal"
-    assert text =~ "len-is"
-    assert text =~ "path depth 1 of 3"
+    assert text =~ "muro synth: homomorphism checked"
+    assert text =~ "certificate CoindHomo"
+    assert text =~ "program: #{pred.("c0")}"
+    assert text =~ "at (ongoing nil) the program prefers c1"
+    assert text =~ "at (ongoing (cons (suc 0) nil)) the program prefers c3"
+    assert text =~ "at (ongoing (cons (suc (suc 0)) nil)) the program prefers c0"
+    assert text =~ "at dead the program prefers c0"
     assert text =~ "version space 16"
-    assert text =~ "version space 0"
     assert text =~ "version space 1056"
+    assert text =~ "version space 24"
+    refute text =~ "empty version space"
     refute text =~ "features insufficient"
-    refute text =~ "homomorphism checked"
     refute text =~ "homomorphism is not derivable"
     refute text =~ "placed-find-policy"
-    refute text =~ "CoindHomo"
-
-    out = Path.join(tmp(), "queens4-out.muro")
-
-    assert {:exit, 1, "", [json]} =
-             Muro.CLI.Synth.run([@queens4, "--json", "--out", out])
-
-    refute File.exists?(out)
-    decoded = JSON.decode!(json)
-    assert decoded["status"] == "empty"
-    assert decoded["note"] == "no predicate matches the observations"
-    assert decoded["program"] == nil
-    assert decoded["certificate"] == nil
-    assert decoded["cex"] == []
-    assert decoded["versions"] == [16, 0, 1056, 0]
-    assert decoded["path_depth"] == 1
-    assert decoded["path_bound"] == 3
-    assert "leads-terminal" in decoded["kinds"]
-    assert "leads-terminal-c0" in decoded["features"]
-    refute json =~ "CoindHomo"
   end
 
   @tag timeout: 180_000
