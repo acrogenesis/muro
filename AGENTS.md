@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Muro is an explicit affine dependent type theory built for agents to write. As the agent, you carry the formal verification: every type, motive and proof step is written out and nothing is inferred, so the checker either accepts your file or names each failing definition. A spec never becomes evidence. Evidence never becomes a run. Only `run` terms are emitted, as Elixir (BEAM), as C, as Rust, as Zig, as JavaScript, or as Cortex-M assembly, from the same source.
+Muro is an explicit affine dependent type theory built for agents to write. As the agent, you carry the formal verification: every type, motive and proof step is written out and nothing is inferred, so the checker either accepts your file or names each failing definition. A spec never becomes evidence. Evidence never becomes a run. Only `run` terms are emitted, as Elixir (BEAM), as C, as Rust, as Zig, as JavaScript, as an .mbi image for muro-beam with `mix muro.emit --backend mbi`, or as Cortex-M assembly, from the same source.
 
 The canonical contract is [`manual/for-agents.md`](manual/for-agents.md). If this file and that page ever disagree, that page wins.
 

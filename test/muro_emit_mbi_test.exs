@@ -179,9 +179,14 @@ defmodule Muro.EmitMbiTest do
     refute File.exists?(Path.join(dir, "repair.mbi"))
 
     path = write_book(dir, "none", "def p : spec Nat := 0\n")
-    File.write!(Path.join(dir, "none.mbi"), "stale\n")
+    none = Path.join(dir, "none.mbi")
+    prior = "prior-image\nnot-rewritten\n"
+    File.write!(none, prior)
     assert {:error, "mbi:entry"} = Muro.emit_mbi(path)
-    refute File.exists?(Path.join(dir, "none.mbi"))
+    assert File.read!(none) == prior
+
+    assert {:raise, "", "mbi:entry"} = Muro.CLI.Emit.run([path, "--backend", "mbi"])
+    assert File.read!(none) == prior
 
     path = write_book(dir, "hid", "def hidden : run internal Nat := 0\n")
     assert {:error, "mbi:entry"} = Muro.emit_mbi(path)
@@ -232,9 +237,14 @@ defmodule Muro.EmitMbiTest do
     assert File.read!(file) == Mbi.show_pure(:gze) <> "\n"
 
     path = write_book(dir, "empty", "")
-    File.write!(Path.join(dir, "empty.mbi"), "stale\n")
+    empty = Path.join(dir, "empty.mbi")
+    prior = "prior-image\nnot-rewritten\n"
+    File.write!(empty, prior)
     assert {:error, "mbi:entry"} = Muro.emit_mbi(path)
-    refute File.exists?(Path.join(dir, "empty.mbi"))
+    assert File.read!(empty) == prior
+
+    assert {:raise, "", "mbi:entry"} = Muro.CLI.Emit.run([path, "--backend", "mbi"])
+    assert File.read!(empty) == prior
 
     path = write_book(dir, "spec", "def p : spec Nat := 0\n")
     assert {:error, "mbi:entry"} = Muro.emit_mbi(path)

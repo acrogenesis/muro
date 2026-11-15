@@ -255,15 +255,14 @@ defmodule Muro do
 
   `run internal` is not exported. Spec, evidence, data, and sessions
   are omitted. The file is written only when exactly one exported run
-  erases. Zero exported runs is `mbi:entry`: nothing is written, and a
-  previous image at that path is removed. More than one exported run
-  is an error, including when one body erases. Nothing is written, and
-  a previous image is left byte for byte. The error names the other
-  runs. When every exported run fails, nothing is written and a
-  previous image is left where it is. A book that does not check
-  writes nothing and leaves a previous image where it is. `opts` is
-  `fuel:` and `root:`, as in `check_file/2`. This is not a manifest
-  target.
+  erases. Any refusal leaves an image already at that path byte for
+  byte: nothing is written, truncated, or deleted. Zero exported runs
+  is `mbi:entry`. More than one exported run is an error, including
+  when one body erases, and the error names the other runs. When every
+  exported run fails, the message is those reasons. A book that does
+  not check writes nothing and leaves a previous image byte for byte.
+  `opts` is `fuel:` and `root:`, as in `check_file/2`. This is not a
+  manifest target.
   """
   def emit_mbi(path, opts \\ []) do
     stem = Path.basename(path, ".muro")
@@ -281,11 +280,8 @@ defmodule Muro do
         {:ok, _image, refused} ->
           {:error, refused}
 
-        # No exported run. A previous image is not this book's entry.
-        {:error, "mbi:entry" = message} ->
-          _ = File.rm(file)
-          {:error, message}
-
+        # No exported run (`mbi:entry`), a body that does not erase, or
+        # any other refusal. A previous file stays byte for byte.
         {:error, message} ->
           {:error, message}
       end

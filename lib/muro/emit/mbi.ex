@@ -34,10 +34,12 @@ defmodule Muro.Emit.Mbi do
   `Muro.emit_mbi/2` writes that image.
   `{:ok, _image, message}` is the first body that erased, and `message`
   names every other exported run. `Muro.emit_mbi/2` does not write that
-  image. It returns `{:error, message}` and leaves a previous file.
+  image. It returns `{:error, message}` and leaves a previous file byte
+  for byte.
   `{:error, "mbi:entry"}` is a book with no exported run.
-  `{:error, message}` is a book whose exported runs all failed. Nothing
-  is written by this function.
+  `{:error, message}` is a book whose exported runs all failed.
+  This function does not write. On either error, `Muro.emit_mbi/2`
+  writes nothing and leaves a previous file byte for byte.
   """
   def render(book) when is_list(book) do
     case Enum.filter(book, &entry?/1) do

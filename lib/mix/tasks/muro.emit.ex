@@ -74,7 +74,7 @@ defmodule Mix.Tasks.Muro.Emit do
   A definition, data, a pair, a word, or a stream is refused.
   Zero exported runs, and more than one, are refused. A refusal
   writes nothing and prints no path. An image already beside the book
-  stays, except that a book with no exported run removes it.
+  stays byte for byte, including when the book has no exported run.
   muro-beam checks the image again. Writing the file is not that
   check. This is not a manifest target. `--backend beam` is refused.
   See the MBI images page.

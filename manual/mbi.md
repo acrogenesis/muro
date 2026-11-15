@@ -7,7 +7,7 @@ summary: muro emit --backend mbi writes exactly one exported run, with its binde
 
 # MBI images
 
-In brief: `--backend mbi` writes `<stem>.mbi` beside the book only when the book has exactly one exported `run` and that body erases. The file is the image muro-beam loads. It is not Erlang BEAM bytecode. The binder grades stay. A definition, data, a pair, a word, or a stream is refused. A refusal writes nothing. Writing the file is not acceptance. muro-beam Boundary v1 checks the image again. This backend is not a manifest target. `--backend beam` is refused.
+In brief: `--backend mbi` writes `<stem>.mbi` beside the book only when the book has exactly one exported `run` and that body erases. The file is the image muro-beam loads. It is not Erlang BEAM bytecode. The binder grades stay. A definition, data, a pair, a word, or a stream is refused. A refusal writes nothing, and an image already at that path stays byte for byte. Writing the file is not acceptance. muro-beam Boundary v1 checks the image again. This backend is not a manifest target. `--backend beam` is refused.
 
 ```
 mix muro.emit path.muro --backend mbi
@@ -18,7 +18,7 @@ muro emit path.muro --backend mbi
 {:ok, files} = Muro.emit_mbi("path.muro")
 ```
 
-`files` is a list of one path, the `.mbi`. That result is exactly one exported run whose body erased. The image is written only in that case. A book that does not check writes nothing. A book with no exported run writes nothing and returns `mbi:entry`. A book with more than one exported run returns an error and writes nothing. An image already at that path stays byte for byte.
+`files` is a list of one path, the `.mbi`. That result is exactly one exported run whose body erased. The image is written only in that case. Any refusal writes nothing and leaves an image already at that path byte for byte. That includes a book that does not check, a book with no exported run (`mbi:entry`), and a book with more than one exported run.
 
 ## The file
 
@@ -63,11 +63,11 @@ That is `λ (n : (1, 0) Nat) → n`. An unmarked identity is `((iv 0 1) 0)`. A r
 
 Success is exactly one exported `run`, and that body erases. `{:ok, files}` is that image. The file is written only in this case. The command prints the path and exits 0 only in this case. `run internal` is not exported. Spec, evidence, data, and sessions are omitted, and omitting them is not a refusal.
 
-Zero exported runs is `mbi:entry`. No file is written. A previous image at that path is removed. A book that does not check writes nothing and leaves a previous image where it is.
+Zero exported runs is `mbi:entry`. No file is written. A previous image at that path stays byte for byte. A book that does not check writes nothing and leaves a previous image byte for byte.
 
 More than one exported run is a refusal, including when one of them erases. No file is written. The command prints no path. A previous image at that path stays byte for byte. A run that also erases is `mbi:entry in <name>`. A run that does not erase is `mbi:<reason> in <name>`. An earlier failure is named the same way. The reasons are joined by newlines, in book order. The first body that erases is not among them.
 
-When every exported run fails, no file is written. A previous image stays where it is. The message is those reasons. It is not `mbi:entry`.
+When every exported run fails, no file is written. A previous image stays byte for byte. The message is those reasons. It is not `mbi:entry`.
 
 ## Grades
 

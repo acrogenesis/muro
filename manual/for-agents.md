@@ -180,7 +180,7 @@ A script run with `mix run --no-start` does not see the archive. Archives are on
 
 `--backend zig` writes `<name>.zig` next to the file. `zig` translates it. The proof stops at the run image.
 
-`--backend mbi` writes `<stem>.mbi` next to the file when the book has exactly one exported run, and the binder grades stay. The file is the image muro-beam loads. It is not Erlang BEAM bytecode. A definition, data, a pair, a word, or a stream is refused. muro-beam checks the image again. Writing the file is not that check. The page is [MBI images](mbi.md).
+`--backend mbi` writes `<stem>.mbi` next to the file only when the book has exactly one exported run and that body erases, and the binder grades stay. Any refusal, including a book with no exported run and a book with more than one, writes nothing and leaves an image already at that path byte for byte. The file is the image muro-beam loads. It is not Erlang BEAM bytecode. A definition, data, a pair, a word, or a stream is refused. muro-beam checks the image again. Writing the file is not that check. The page is [MBI images](mbi.md).
 
 `--backend c` writes C. The Mix task builds a NIF when the working directory is the loaded Mix project. Add `{:elixir_make, "~> 0.10", runtime: false}` to the project deps, or run the task inside a project that depends on muro. Without `elixir_make`, that NIF stops and names the dependency. Outside the loaded project the task writes the `.h` and the `.c` only, and so does the executable. `nx` and `makeup` are optional. Checking and emitting Elixir do not load them.
 
