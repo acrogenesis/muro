@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.21.8
+## 0.21.9
 
 `mix muro.synth` deploys the predicate the checker accepted. A closed numeral in a run is emitted by the C, Rust, Zig, JavaScript, and assembly backends.
 
@@ -14,7 +14,7 @@
 
 ### Package
 
-- Version 0.21.8.
+- Version 0.21.9.
 
 ## 0.21.7
 
