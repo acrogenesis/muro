@@ -79,7 +79,7 @@ A definition is in the book the moment `Parser.parse/1` returns it. The checker 
 | Page | For |
 | --- | --- |
 | [Start](manual/start.md) | Install, first file, emit |
-| [Beam images](manual/beam.md) | `muro emit --backend beam` writes one graded run |
+| [Beam images](manual/beam.md) | `muro emit --backend beam` writes exactly one graded run |
 | [The executable](manual/binary.md) | Self-contained `muro`, `muro.toml`, init, `muro skills add` |
 | [Library](manual/library.md) | Ordinary library as `std:`. Bool, Le, List, Maybe, comparison, binary successor |
 | [The wall](manual/wall.md) | spec / evidence / run |

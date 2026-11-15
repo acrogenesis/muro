@@ -24,7 +24,7 @@ defmodule Muro.CLI.Emit do
           "otp     <stem>_otp.ex, a GenServer per process",
           "fsm     one state-machine module on standard output",
           "exunit  one ExUnit module for the closed equations",
-          "beam    <stem>.mbi beside the book, one graded run"
+          "beam    <stem>.mbi beside the book, exactly one graded run"
         ]
       },
       %{
@@ -49,7 +49,7 @@ defmodule Muro.CLI.Emit do
   def help do
     Muro.CLI.Text.page([
       Muro.CLI.Text.prose("""
-      muro emit reads one .muro file, checks it, and emits run definitions. Spec and evidence are omitted. elixir, the default, prints one module on standard output and writes no file. c, rust, zig, asm, and beam write a file beside the book and print that path. js writes <stem>.mjs and <stem>.d.ts beside the book and prints both paths. The executable does not load a Mix project, so c writes the .h and the .c only and does not build a NIF. otp writes a GenServer for each conforming process. fsm prints a state machine and leaves the transport with the host. exunit prints one ExUnit module for the book's closed equations. beam writes <stem>.mbi: one exported run, and the binder grades stay. A definition, data, a pair, a word, or a stream is refused. The runtime that reads the image checks it again. Nothing here is a proof that the host translation is the book. The proof stops at the run image.
+      muro emit reads one .muro file, checks it, and emits run definitions. Spec and evidence are omitted. elixir, the default, prints one module on standard output and writes no file. c, rust, zig, asm, and beam write a file beside the book and print that path. js writes <stem>.mjs and <stem>.d.ts beside the book and prints both paths. The executable does not load a Mix project, so c writes the .h and the .c only and does not build a NIF. otp writes a GenServer for each conforming process. fsm prints a state machine and leaves the transport with the host. exunit prints one ExUnit module for the book's closed equations. beam writes <stem>.mbi when the book has exactly one exported run, and the binder grades stay. A definition, data, a pair, a word, or a stream is refused. Zero exported runs, and more than one, are refused. The runtime that reads the image checks it again. Writing the file is not that check. Nothing here is a proof that the host translation is the book. The proof stops at the run image.
       """),
       Muro.CLI.Text.section(
         "USAGE",

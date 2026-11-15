@@ -1,7 +1,7 @@
 defmodule Mix.Tasks.Muro.Emit do
   use Mix.Task
 
-  @shortdoc "Emit run definitions as Elixir, C, Rust, Zig, JavaScript, or Cortex-M assembly, a session as OTP or a state machine, a cross as a call, closed equations as ExUnit, or one graded run as a beam image"
+  @shortdoc "Emit run definitions as Elixir, C, Rust, Zig, JavaScript, or Cortex-M assembly, a session as OTP or a state machine, a cross as a call, closed equations as ExUnit, or exactly one graded run as a beam image"
 
   @moduledoc """
   Emit the `run` definitions of a `.muro` file.
@@ -69,10 +69,13 @@ defmodule Mix.Tasks.Muro.Emit do
   Nothing is written next to the book.
 
   `--backend beam` writes `<stem>.mbi` next to the file and prints that
-  path. The file is one exported run, and the binder grades stay. A
-  definition, data, a pair, a word, or a stream is refused. The
-  runtime that reads the image checks it again. This is not a manifest
-  target. See the Beam images page.
+  path. Success is exactly one exported run, and the binder grades
+  stay. A definition, data, a pair, a word, or a stream is refused.
+  Zero exported runs, and more than one, are refused. When one body
+  among several erases, the path is still printed and the command
+  fails. The runtime that reads the image checks it again. Writing
+  the file is not that check. This is not a manifest target. See the
+  Beam images page.
 
   `--node` writes `<stem>_node.ex` next to the file and prints that
   path. `place.muro` with `--node a` is `place_node.ex`. Each `cross`

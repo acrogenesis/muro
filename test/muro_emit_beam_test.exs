@@ -12,7 +12,7 @@ defmodule Muro.EmitBeamTest do
     fail-pair fail-stream fail-machine fail-word
   )
 
-  test "Agda agree strings are the Elixir images and the golden files" do
+  test "Agda agree strings are the Elixir images, the erased terms, and the golden files" do
     agreed = agreements()
 
     for name <- @images do
@@ -23,40 +23,26 @@ defmodule Muro.EmitBeamTest do
       assert Map.has_key?(agreed, name), "missing agree:#{name}"
     end
 
-    assert Beam.show_pure({:glam, 1, 0, {:gvar, 0}}) == agreed["once"]
-    assert Beam.show_pure({:glam, {:iv, 0, 1}, 0, {:gvar, 0}}) == agreed["affine"]
-    assert Beam.show_pure({:glam, :w, 0, {:gvar, 0}}) == agreed["reuse"]
-    assert Beam.show_pure({:glam, 0, 0, :gze}) == agreed["drop"]
-    assert Beam.show_pure({:gapp, {:glam, {:iv, 0, 1}, 0, {:gvar, 0}}, :gze}) == agreed["app"]
-    assert Beam.show_pure({:gsu, {:gsu, :gze}}) == agreed["suc"]
-    assert Beam.show_pure({:gmatch, :gze, :gze, {:gvar, 0}}) == agreed["match"]
-    assert Beam.show_pure({:gpi, {:iv, 0, 1}, 0, {:gvar, 0}}) == agreed["pi"]
-    assert Beam.show_pure({:glam, {:iv, 0, 2}, 0, {:gvar, 0}}) == agreed["iv"]
+    for {term, gtm, name} <- shared_terms() do
+      assert Beam.erase(term) == {:ok, gtm}
+      assert Beam.show_pure(gtm) == agreed[name]
+    end
 
-    for name <- ~w(once affine reuse drop app suc match) do
+    for name <- @images do
       assert File.read!("examples/images/#{name}.mbi") == agreed[name] <> "\n"
     end
   end
 
-  test "erase agrees with the Agda strings on the shared terms" do
+  test "erase agrees with the Agda terms, not only the printed strings" do
     agreed = agreements()
 
-    assert shown({:lam, :linear, :nat, "n", {:var, 0}}) == agreed["once"]
-    assert shown({:lam, {:grade, 1, 0}, :nat, "n", {:var, 0}}) == agreed["once"]
-    assert shown({:lam, :affine, :nat, "n", {:var, 0}}) == agreed["affine"]
-    assert shown({:lam, :reuse, :nat, "n", {:var, 0}}) == agreed["reuse"]
-    assert shown({:lam, :reuse, :nat, "n", {:app, {:var, 0}, {:var, 0}}}) == agreed["twice"]
-    assert shown({:lam, :erased, :nat, "n", :ze}) == agreed["drop"]
-    assert shown({:app, {:lam, :affine, :nat, "n", {:var, 0}}, :ze}) == agreed["app"]
-    assert shown({:su, {:su, :ze}}) == agreed["suc"]
-    assert shown({:nat, 2}) == agreed["suc"]
+    for {term, gtm, name} <- shared_terms() do
+      assert {:ok, ^gtm} = Beam.erase(term)
+      assert Beam.show_pure(gtm) == agreed[name]
+    end
 
-    assert shown({:mnat, :ze, {:lam, :affine, :nat, "_", :nat}, :ze, {:var, 0}}) ==
-             agreed["match"]
-
-    assert shown({:pi, :affine, :nat, "n", {:var, 0}}) == agreed["pi"]
-    assert shown({:lam, {:grade, {:iv, 0, 2}, 0}, :nat, "n", {:var, 0}}) == agreed["iv"]
-    assert shown({:lam, :nope, :nat, "n", {:var, 0}}) == agreed["affine"]
+    assert Beam.erase({:nat, 2}) == {:ok, {:gsu, {:gsu, :gze}}}
+    assert Beam.show_pure({:gsu, {:gsu, :gze}}) == agreed["suc"]
 
     assert Beam.erase(:typ) == {:error, agreed["fail-typ"]}
     assert Beam.erase(:nat) == {:error, agreed["fail-nat"]}
@@ -124,6 +110,8 @@ defmodule Muro.EmitBeamTest do
     assert Beam.erase({:nat, 1.5}) == {:error, "numeral"}
     assert Beam.erase({:lam, {:grade, :nope, 0}, :nat, "n", :ze}) == {:error, "grade"}
     assert Beam.erase({:lam, {:grade, {:iv, :nope, 1}, 0}, :nat, "n", :ze}) == {:error, "grade"}
+    assert Beam.erase({:lam, :nope, :nat, "n", {:var, 0}}) == {:error, "grade"}
+    assert Beam.erase({:pi, :nope, :nat, "n", :ze}) == {:error, "grade"}
     assert Beam.erase(:nope) == {:error, "term"}
     assert Beam.show_grade(:w) == "w"
     assert Beam.show_grade(10) == "10"
@@ -140,7 +128,7 @@ defmodule Muro.EmitBeamTest do
     assert emit_src(drop_src()) == golden("drop")
     assert emit_src(reuse_src()) == golden("reuse")
     assert emit_src(linear_src()) == golden("once")
-    assert emit_src(interval_src()) == agreements()["iv"] <> "\n"
+    assert emit_src(interval_src()) == golden("iv")
 
     dir = tmp_dir()
     path = write_book(dir, "keep", data_and_zero_src())
@@ -218,7 +206,94 @@ defmodule Muro.EmitBeamTest do
     assert {:error, "beam:term in bad"} =
              Beam.render([%{name: "bad", mode: :run, type: :nat, body: {:nope}}])
 
+    assert {:error, "beam:grade in id"} =
+             Beam.render([
+               %{
+                 name: "id",
+                 mode: :run,
+                 type: :nat,
+                 body: {:lam, :nope, :nat, "n", {:var, "n"}}
+               }
+             ])
+
     assert {:error, "beam:entry"} = Beam.render([])
+  end
+
+  test "success is exactly one exported run" do
+    dir = tmp_dir()
+
+    path = write_book(dir, "one", "def z : run Nat := 0\n")
+    assert {:ok, [file]} = Muro.emit_beam(path)
+    assert File.read!(file) == Beam.show_pure(:gze) <> "\n"
+
+    path = write_book(dir, "empty", "")
+    File.write!(Path.join(dir, "empty.mbi"), "stale\n")
+    assert {:error, "beam:entry"} = Muro.emit_beam(path)
+    refute File.exists?(Path.join(dir, "empty.mbi"))
+
+    path = write_book(dir, "spec", "def p : spec Nat := 0\n")
+    assert {:error, "beam:entry"} = Muro.emit_beam(path)
+    refute File.exists?(Path.join(dir, "spec.mbi"))
+
+    path = write_book(dir, "three", three_src())
+    assert {:error, "beam:entry in b\nbeam:entry in c"} = Muro.emit_beam(path)
+    assert File.read!(Path.join(dir, "three.mbi")) == Beam.show_pure(:gze) <> "\n"
+
+    path = write_book(dir, "bothbad", both_bad_src())
+    File.write!(Path.join(dir, "bothbad.mbi"), "stale\n")
+    assert {:error, "beam:pair in a\nbeam:string in b"} = Muro.emit_beam(path)
+    refute File.exists?(Path.join(dir, "bothbad.mbi"))
+
+    path = write_book(dir, "only", "def n : run Nat × Nat := (0, 0)\n")
+    assert {:error, "beam:pair in n"} = Muro.emit_beam(path)
+    refute File.exists?(Path.join(dir, "only.mbi"))
+  end
+
+  test "a constructor or a data type is beam:data, and a definition is beam:def" do
+    dir = tmp_dir()
+
+    path = write_book(dir, "ctor", ctor_src())
+    assert {:error, "beam:data in n"} = Muro.emit_beam(path)
+    refute File.exists?(Path.join(dir, "ctor.mbi"))
+
+    path = write_book(dir, "box", box_src())
+    assert {:error, "beam:data in n"} = Muro.emit_beam(path)
+
+    path = write_book(dir, "call", "def n : run Nat := plus 0 0\n")
+    assert {:error, "beam:def in n"} = Muro.emit_beam(path)
+
+    bool = %{kind: :data, name: "Bool", ctors: [%{name: "true"}, %{name: "false"}]}
+
+    assert {:error, "beam:data in n"} =
+             Beam.render([
+               bool,
+               %{name: "n", mode: :run, type: {:var, "Bool"}, body: {:var, "true"}}
+             ])
+
+    # A checked run cannot return a data type. The tag is still `data`
+    # when that name is the term `erase` refuses.
+    assert {:error, "beam:data in n"} =
+             Beam.render([
+               bool,
+               %{
+                 name: "n",
+                 mode: :run,
+                 type: :nat,
+                 body: {:app, {:lam, :affine, :typ, "_", :ze}, {:var, "Bool"}}
+               }
+             ])
+
+    assert {:error, "beam:def in n"} =
+             Beam.render([
+               %{name: "n", mode: :run, type: :nat, body: {:var, "plus"}}
+             ])
+  end
+
+  test "a domain is dropped, so a data type written there is not a refusal" do
+    image = Beam.show_pure({:glam, {:iv, 0, 1}, 0, :gze}) <> "\n"
+    assert emit_src(dropped_domain_src()) == image
+    assert image =~ "(glam ((iv 0 1) 0) gze)"
+    refute image =~ "Bool"
   end
 
   test "the mix task prints the path, and node and imports are refused before a file" do
@@ -247,9 +322,24 @@ defmodule Muro.EmitBeamTest do
     assert File.read!(stale) == "stale\n"
   end
 
-  defp shown(term) do
-    assert {:ok, gtm} = Beam.erase(term)
-    Beam.show_pure(gtm)
+  defp shared_terms do
+    [
+      {{:lam, :linear, :nat, "n", {:var, 0}}, {:glam, 1, 0, {:gvar, 0}}, "once"},
+      {{:lam, {:grade, 1, 0}, :nat, "n", {:var, 0}}, {:glam, 1, 0, {:gvar, 0}}, "once"},
+      {{:lam, :affine, :nat, "n", {:var, 0}}, {:glam, {:iv, 0, 1}, 0, {:gvar, 0}}, "affine"},
+      {{:lam, :reuse, :nat, "n", {:var, 0}}, {:glam, :w, 0, {:gvar, 0}}, "reuse"},
+      {{:lam, :reuse, :nat, "n", {:app, {:var, 0}, {:var, 0}}},
+       {:glam, :w, 0, {:gapp, {:gvar, 0}, {:gvar, 0}}}, "twice"},
+      {{:lam, :erased, :nat, "n", :ze}, {:glam, 0, 0, :gze}, "drop"},
+      {{:app, {:lam, :affine, :nat, "n", {:var, 0}}, :ze},
+       {:gapp, {:glam, {:iv, 0, 1}, 0, {:gvar, 0}}, :gze}, "app"},
+      {{:su, {:su, :ze}}, {:gsu, {:gsu, :gze}}, "suc"},
+      {{:mnat, :ze, {:lam, :affine, :nat, "_", :nat}, :ze, {:var, 0}},
+       {:gmatch, :gze, :gze, {:gvar, 0}}, "match"},
+      {{:pi, :affine, :nat, "n", {:var, 0}}, {:gpi, {:iv, 0, 1}, 0, {:gvar, 0}}, "pi"},
+      {{:lam, {:grade, {:iv, 0, 2}, 0}, :nat, "n", {:var, 0}},
+       {:glam, {:iv, 0, 2}, 0, {:gvar, 0}}, "iv"}
+    ]
   end
 
   defp agreements do
@@ -401,6 +491,51 @@ defmodule Muro.EmitBeamTest do
     """
     def hidden : run internal Nat := 0
     def z : run Nat := 0
+    """
+  end
+
+  defp three_src do
+    """
+    def a : run Nat := 0
+    def b : run Nat := suc 0
+    def c : run Nat := suc (suc 0)
+    """
+  end
+
+  defp both_bad_src do
+    """
+    def a : run Nat × Nat := (0, 0)
+    def b : run String := "x"
+    """
+  end
+
+  defp ctor_src do
+    """
+    data Bool : Type where
+      true : Bool
+      false : Bool
+
+    def n : run Bool := true
+    """
+  end
+
+  defp box_src do
+    """
+    data Box : Type where
+      box : Nat → Box
+
+    def n : run Box := box 0
+    """
+  end
+
+  defp dropped_domain_src do
+    """
+    data Bool : Type where
+      tt : Bool
+      ff : Bool
+
+    def z : run Π (b : Bool) → Nat :=
+      λ (b : Bool) → 0
     """
   end
 

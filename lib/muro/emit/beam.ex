@@ -3,8 +3,9 @@ defmodule Muro.Emit.Beam do
   Erase one exported run to a beam image.
 
   The rules are `agda/Muro/Beam.agda`. A grade pair and the `%1` mark
-  are not constructors of `Tm`, so this module reads them. The image is
-  text. The runtime that reads it checks the term again. See
+  are not constructors of `Tm`, so this module reads them. Success is
+  exactly one exported run. The image is text. The runtime that reads
+  it checks the term again. Writing the image is not that check. See
   [Beam images](manual/beam.md).
   """
 
@@ -27,10 +28,12 @@ defmodule Muro.Emit.Beam do
 
   @doc """
   The image of `book`, including the trailing newline, and the refusals
-  of the runs that were not chosen.
+  of every other exported run.
 
-  `{:ok, image, ""}` is one entry and no other exported run.
-  `{:ok, image, message}` is one entry, and `message` names the rest.
+  `{:ok, image, ""}` is exactly one exported run, and that body erased.
+  `{:ok, image, message}` is the first body that erased, and `message`
+  names every other exported run. `Muro.emit_beam/2` writes that file
+  and returns `{:error, message}`.
   `{:error, "beam:entry"}` is a book with no exported run.
   `{:error, message}` is a book whose exported runs all failed. Nothing
   is written by this function.
@@ -41,7 +44,7 @@ defmodule Muro.Emit.Beam do
         {:error, "beam:entry"}
 
       entries ->
-        case choose(Enum.map(entries, &classify/1)) do
+        case choose(Enum.map(entries, &classify(book, &1))) do
           {:ok, gtm, []} ->
             {:ok, show_pure(gtm) <> "\n", ""}
 
@@ -60,6 +63,8 @@ defmodule Muro.Emit.Beam do
   """
   def erase({:var, i}) when is_integer(i) and i >= 0, do: {:ok, {:gvar, i}}
 
+  # The domain is dropped. `glam` opens one binder, the body. A later
+  # loader does not recover the domain type.
   def erase({:lam, q, _dom, _name, body}) do
     with {:ok, c, t} <- grades(q),
          {:ok, body} <- erase(body) do
@@ -67,6 +72,7 @@ defmodule Muro.Emit.Beam do
     end
   end
 
+  # The domain is dropped. `gpi` opens one binder, the same way.
   def erase({:pi, q, _dom, _name, body}) do
     with {:ok, c, t} <- grades(q),
          {:ok, body} <- erase(body) do
@@ -188,18 +194,87 @@ defmodule Muro.Emit.Beam do
   defp entry?(%{mode: :run, type: _, body: _}), do: true
   defp entry?(_), do: false
 
-  defp classify(%{name: name, body: body}) do
+  defp classify(book, %{name: name, body: body}) do
     case Ast.to_db(body) do
       {:ok, db} ->
         case erase(db) do
-          {:ok, gtm} -> {:ok, name, gtm}
-          {:error, reason} -> {:error, name, reason}
+          {:ok, gtm} ->
+            {:ok, name, gtm}
+
+          # `{:def, name}` is a definition, a data type, or a constructor.
+          # Agda splits those three. A data type and a constructor are `data`.
+          {:error, "def"} ->
+            {:error, name, def_tag(book, db)}
+
+          {:error, reason} ->
+            {:error, name, reason}
         end
 
       {:error, _} ->
         {:error, name, "term"}
     end
   end
+
+  defp def_tag(book, term) do
+    case first_def(term) do
+      {:ok, name} -> if data_ref?(book, name), do: "data", else: "def"
+      :none -> "def"
+    end
+  end
+
+  # The first `{:def, _}` `erase` would refuse. The walk follows only the
+  # constructors `erase` enters, in the same order.
+  defp first_def({:def, name}), do: {:ok, name}
+
+  defp first_def({:lam, q, _, _, body}) do
+    case grades(q) do
+      {:ok, _, _} -> first_def(body)
+      _ -> :none
+    end
+  end
+
+  defp first_def({:pi, q, _, _, body}) do
+    case grades(q) do
+      {:ok, _, _} -> first_def(body)
+      _ -> :none
+    end
+  end
+
+  defp first_def({:app, f, a}) do
+    case first_def(f) do
+      {:ok, _} = hit -> hit
+      :none -> first_def(a)
+    end
+  end
+
+  defp first_def({:su, t}), do: first_def(t)
+
+  defp first_def({:mnat, e, _, z, s}) do
+    Enum.reduce_while([e, z, s], :none, fn t, :none ->
+      case first_def(t) do
+        {:ok, _} = hit -> {:halt, hit}
+        :none -> {:cont, :none}
+      end
+    end)
+  end
+
+  defp first_def({:ann, e, _}), do: first_def(e)
+  defp first_def(_), do: :none
+
+  defp data_ref?(book, name) when is_binary(name) do
+    Enum.any?(book, fn
+      %{kind: :data, name: ^name} ->
+        true
+
+      %{kind: :data, ctors: ctors} when is_list(ctors) ->
+        Enum.any?(ctors, &match?(%{name: ^name}, &1))
+
+      _ ->
+        false
+    end)
+  end
+
+  defp data_ref?(_book, _name), do: false
 
   defp choose(rows), do: choose(rows, [])
 
@@ -219,7 +294,7 @@ defmodule Muro.Emit.Beam do
   defp named(name, tag), do: "beam:#{tag} in #{name}"
 
   # A quantity atom. The type grade is 0. A written pair is kept.
-  # An unknown quantity is the affine interval.
+  # An unknown quantity is refused.
   defp grades(:affine), do: {:ok, {:iv, 0, 1}, 0}
   defp grades(:reuse), do: {:ok, :w, 0}
   defp grades(:erased), do: {:ok, 0, 0}
@@ -232,7 +307,7 @@ defmodule Muro.Emit.Beam do
     end
   end
 
-  defp grades(_), do: {:ok, {:iv, 0, 1}, 0}
+  defp grades(_), do: {:error, "grade"}
 
   defp grade(n) when is_integer(n) and n >= 0, do: {:ok, n}
   defp grade(:w), do: {:ok, :w}

@@ -245,15 +245,20 @@ defmodule Muro do
   end
 
   @doc """
-  Write `<stem>.mbi` next to `path`. The file is one exported run: a
-  function, an application, zero, successor, or a match on Nat, with
-  the binder's grade kept. A definition, data, a pair, a word, or a
-  stream is refused. The runtime that reads the image checks it again.
+  Write `<stem>.mbi` next to `path`. Success is exactly one exported
+  run: a function, an application, zero, successor, or a match on Nat,
+  with the binder's grade kept. A Π erases as `gpi` when it is the
+  term. A definition, data, a pair, a word, or a stream is refused.
+  An unknown grade is refused. The runtime that reads the image checks
+  it again. Writing the file is not that check.
 
-  The first exported run whose body erases is the entry. A later
-  exported run is named in the error, and the file is still written.
-  A book with no exported run, and a book whose runs all fail, writes
-  nothing and removes a previous image at that path. `opts` is `fuel:`
+  `run internal` is not exported. Spec, evidence, data, and sessions
+  are omitted. Zero exported runs is `beam:entry`. More than one
+  exported run is an error. When one of those bodies erases, the file
+  is the first such body in book order, and the error names the others.
+  When every exported run fails, nothing is written and a previous
+  image at that path is removed. A book that does not check writes
+  nothing and leaves a previous image where it is. `opts` is `fuel:`
   and `root:`, as in `check_file/2`. This is not a manifest target.
   """
   def emit_beam(path, opts \\ []) do
