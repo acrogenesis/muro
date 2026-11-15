@@ -6,7 +6,7 @@
 
 `examples/cshrl/envs/queens4.muro` is four rows and declares no feature. The cover has 18 states. The features separate the boards, and no predicate at depth 0 or depth 1 matches the observations, so the command exits 1 and writes no policy. `examples/cshrl/envs/queens8.muro` is eight rows. The cover has 2058 states. `mix muro.check` accepts it. The same synthesis was stopped after 15 minutes and wrote no policy. The paper's certificate for this MDP is a class-level homomorphism. This search does not build that homomorphism, so queens is not certified.
 
-0.21.7 is the entry below. It arrived with the merge of main, which carries pull request #242.
+0.21.8 is the entry below. It arrived with the merge of main, which carries pull request #245.
 
 ### Manual
 
@@ -15,6 +15,20 @@
 ### Package
 
 - Version 0.21.9.
+
+## 0.21.8
+
+A Nat in a decoded state is a host integer. The search sends that Nat to `step` and to `eval-feature` as Peano, so a match on `suc` runs.
+
+`examples/cshrl/envs/tip_suc.muro` declares no feature. The cover is `tip 0` and `tip (suc 0)`. `step` matches the Nat. The survivor is `(feat has-pos-reward-go)`. It prefers `stay` at `tip 0` and `go` at `tip (suc 0)`, and the book checks `CoindHomo`.
+
+### Manual
+
+- Synthesis. Examples.
+
+### Package
+
+- Version 0.21.8.
 
 ## 0.21.7
 
