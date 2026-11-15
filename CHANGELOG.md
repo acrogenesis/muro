@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.21.10
+
+`--backend beam` writes `<stem>.mbi` beside the book. The file is one run: a function, an application, zero, successor, or a match on Nat. The binder's grade stays. A definition, data, a pair, a word, or a stream is refused. The runtime that reads the image checks it again.
+
+### Manual
+
+- Beam images.
+
+### Package
+
+- Version 0.21.10.
+
 ## 0.21.8
 
 A Nat in a decoded state is a host integer. The search sends that Nat to `step` and to `eval-feature` as Peano, so a match on `suc` runs.
