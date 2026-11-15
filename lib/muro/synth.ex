@@ -492,8 +492,6 @@ defmodule Muro.Synth do
     end
   end
 
-  defp add_size(st, _size) when is_binary(st.stop), do: st
-
   defp add_size(st, 1) do
     reduce_stop(st.atoms, st, fn atom, st ->
       sized_insert(st, fn -> atom end, 1, Map.fetch!(st.sigs, atom))
