@@ -6,7 +6,7 @@ A horizon-bounded placement is solved by the constraint and the goal the structu
 
 `examples/cshrl/envs/queens4.muro` is four rows and declares no feature. The cover has 18 states. The search reads 23 templates, keeps 18, and reduces them to six `pair-any` tests. The goal is `len-is-4`. From the empty board the policy plays `c1`, `c3`, `c0`, `c2`, and the book checks `CoindHomo`. `examples/cshrl/envs/queens8.muro` is the same dynamics at eight rows. The search reads 93 templates, keeps 84, and reduces them to 28 `pair-any` tests. The goal is `len-is-8`. From the empty board the policy plays `c0`, `c4`, `c7`, `c5`, `c2`, `c6`, `c1`, `c3`. The cover has 2058 states, so the case split is refused.
 
-0.21.7 is held by open pull request #242 and is not on this branch. A later merge of main will insert that entry.
+0.21.7 is the entry below. It arrived with the merge of main, which carries pull request #242.
 
 ### Manual
 
@@ -15,6 +15,20 @@ A horizon-bounded placement is solved by the constraint and the goal the structu
 ### Package
 
 - Version 0.21.8.
+
+## 0.21.7
+
+`mix muro.synth` reads a constructor, a list, and a closed Nat at a path into an inductive `State`. The first pass opens one field. When two cover states agree on every test and the values differ, a later pass opens further fields, up to three. One deepen can open several of them before the search resumes. A name the path has already opened is not another field. A test that is true at every cover state, or false at every one, is dropped, and so is a duplicate of an earlier test. A `ctor-is` name carries each constructor guard from the root, then the tag.
+
+`examples/cshrl/envs/nested_bin.muro` declares no feature. The cover is two trees that agree one field deep. The survivor is `(feat ctor-is-p0-0-bin-bin-bin)`. It prefers `stay` at `bin (bin (tip 0) (tip 0)) (tip 0)` and `move` at `bin (bin (bin (tip 0) (tip 0)) (tip 0)) (tip 0)`, and the book checks `CoindHomo`.
+
+### Manual
+
+- Synthesis. CSHRL. Examples.
+
+### Package
+
+- Version 0.21.7.
 
 ## 0.21.6
 
