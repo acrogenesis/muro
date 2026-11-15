@@ -226,6 +226,97 @@ defmodule Muro.SynthFeatureTest do
     assert Enum.any?(specs, &(&1.kind == :ctor_is and &1.tag == "bin" and &1.path == []))
     assert Enum.any?(specs, &(&1.kind == :nat_is and &1.path == [0]))
     refute Enum.any?(specs, &(&1.path == [0, 0]))
+    assert Enum.all?(specs, &(length(&1.path) <= 1))
+
+    {nested, _} =
+      Muro.Synth.Term.templates(
+        schema,
+        [{:tip, 0}, raw],
+        MapSet.new(),
+        Muro.Synth.Term.path_bound()
+      )
+
+    assert Enum.any?(nested, &(&1.kind == :nat_is and &1.path == [0, 0]))
+    assert Enum.any?(nested, &(length(&1.path) == 2))
+    assert Enum.all?(nested, &(length(&1.path) <= Muro.Synth.Term.path_bound()))
+    assert Enum.all?(nested, &known_structural?/1)
+  end
+
+  test "a nested Nat is invisible one field deep and visible one field further" do
+    schema = tree_schema()
+    low = {:bin, {:tip, 0}, {:tip, 0}}
+    high = {:bin, {:tip, 1}, {:tip, 0}}
+
+    {shallow, _} = Muro.Synth.Term.templates(schema, [low, high], MapSet.new(), 1)
+
+    refute Enum.any?(shallow, fn spec ->
+             Muro.Synth.Term.eval_spec(schema, spec, low) !=
+               Muro.Synth.Term.eval_spec(schema, spec, high)
+           end)
+
+    {deep, _} = Muro.Synth.Term.templates(schema, [low, high], MapSet.new(), 2)
+    nat = Enum.find(deep, &(&1.kind == :nat_is and &1.path == [0, 0] and &1.n == 1))
+    assert nat
+    assert nat.name =~ "nat-is"
+    assert Muro.Synth.Term.eval_spec(schema, nat, high)
+    refute Muro.Synth.Term.eval_spec(schema, nat, low)
+
+    host = %{
+      book: [],
+      schema: schema,
+      structured: true,
+      feature_specs: [],
+      path_depth: 1,
+      all_states: [low, high],
+      eval_feature: fn _, _ -> false end
+    }
+
+    assert {:ok, specs, 2} = Feature.deepen(host, low, high)
+    assert Enum.any?(specs, &(&1.kind == :nat_is and &1.path == [0, 0] and &1.n == 1))
+    assert {:stop, nil, 3} = Feature.deepen(Map.put(host, :path_depth, 3), low, high)
+  end
+
+  test "a constant path test is dropped and a duplicate vector is dropped" do
+    schema = tree_schema()
+    low = {:bin, {:bin, {:tip, 0}, {:tip, 0}}, {:tip, 0}}
+    high = {:bin, {:bin, {:bin, {:tip, 0}, {:tip, 0}}, {:tip, 0}}, {:tip, 0}}
+
+    host = %{
+      book: [],
+      schema: schema,
+      structured: true,
+      feature_specs: [],
+      path_depth: 1,
+      all_states: [low, high],
+      eval_feature: fn _, _ -> false end
+    }
+
+    assert {:ok, specs, 2} = Feature.deepen(host, low, high)
+
+    vectors =
+      Enum.map(specs, fn spec ->
+        [
+          Muro.Synth.Term.eval_spec(schema, spec, low),
+          Muro.Synth.Term.eval_spec(schema, spec, high)
+        ]
+      end)
+
+    refute [] in vectors
+    refute Enum.any?(vectors, &(&1 == [true, true] or &1 == [false, false]))
+    assert length(Enum.uniq(vectors)) == length(vectors)
+    refute Enum.any?(specs, &(&1.path == []))
+    assert Enum.any?(specs, &(&1.kind == :ctor_is and &1.path == [0, 0] and &1.tag == "bin"))
+    assert Enum.any?(specs, &(&1.kind == :ctor_is and &1.path == [0, 0] and &1.tag == "tip"))
+  end
+
+  test "a deep walk of a recursive schema stays inside the bound" do
+    schema = tree_schema()
+    states = [{:tip, 0}, {:bin, {:bin, {:tip, 0}, {:tip, 1}}, {:tip, 0}}]
+    {specs, _} = Muro.Synth.Term.templates(schema, states, MapSet.new(), 8)
+    assert specs != []
+    assert Enum.any?(specs, &(&1.kind == :ctor_is and &1.path == [0, 0]))
+    assert Enum.all?(specs, &(length(&1.path) <= 8))
+    assert Enum.all?(specs, &known_structural?/1)
   end
 
   test "a back-edge under a list or a product is not equatable" do
@@ -238,6 +329,10 @@ defmodule Muro.SynthFeatureTest do
 
     refute match?({:open, _}, listed)
     refute Muro.Synth.Term.equatable?(listed)
+
+    assert Muro.Synth.Term.cert_refusal(listed) ==
+             "State recursion under List/product cannot be certified"
+
     assert {:ok, term} = Muro.Synth.Term.decode({:nest, {:cons, :tip, nil}}, listed)
     assert term.value == {:nest, {:cons, :tip, nil}}
 
@@ -249,6 +344,9 @@ defmodule Muro.SynthFeatureTest do
       """)
 
     refute Muro.Synth.Term.equatable?(paired)
+
+    assert Muro.Synth.Term.cert_refusal(paired) ==
+             "State recursion under List/product cannot be certified"
   end
 
   test "a linear field and an erased argument are not equatable" do
@@ -292,6 +390,101 @@ defmodule Muro.SynthFeatureTest do
   defp parsed_schema(src) do
     assert {:ok, book} = Muro.Parser.parse(src)
     Muro.Synth.Term.schema(book, "State")
+  end
+
+  defp tree_schema do
+    parsed_schema("""
+    data State : Type where
+      tip : Π (n : Nat) → State
+      bin : Π (+ l : State) → Π (r : State) → State
+    """)
+  end
+
+  test "two ctor-is tests at one path keep every constructor guard in the name" do
+    schema =
+      parsed_schema("""
+      data Bit : Type where
+        off : Bit
+        on : Bit
+
+      data Mid : Type where
+        go : Π (b : Bit) → Mid
+        stop : Mid
+
+      data State : Type where
+        left : Π (m : Mid) → State
+        right : Π (m : Mid) → State
+      """)
+
+    states = [
+      {:left, {:go, :on}},
+      {:right, {:go, :on}},
+      {:left, :stop},
+      {:right, :stop}
+    ]
+
+    {specs, _} = Muro.Synth.Term.templates(schema, states, MapSet.new(), 2)
+
+    ons =
+      Enum.filter(specs, &(&1.kind == :ctor_is and &1.path == [0, 0] and &1.tag == "on"))
+
+    names = Enum.map(ons, & &1.name) |> Enum.sort()
+    assert names == ["ctor-is-p0-0-left-go-on", "ctor-is-p0-0-right-go-on"]
+    refute Enum.any?(names, &String.ends_with?(&1, "-2"))
+
+    left = Enum.find(ons, &(&1.name == "ctor-is-p0-0-left-go-on"))
+    assert left.guards == [{[0], "go"}, {[], "left"}]
+    assert Muro.Synth.Term.eval_spec(schema, left, {:left, {:go, :on}})
+    refute Muro.Synth.Term.eval_spec(schema, left, {:right, {:go, :on}})
+  end
+
+  test "an unguarded ctor-is keeps the path and the tag, and a guarded bin carries both constructors" do
+    bit = {:enum, "Bit", ["off", "on"]}
+    inner = {:data, "Inner", [%{name: "inn", fields: [bit]}]}
+    schema = {:data, "State", [%{name: "wrap", fields: [inner]}]}
+    off = {:wrap, {:inn, :off}}
+    on = {:wrap, {:inn, :on}}
+
+    {specs, _} = Muro.Synth.Term.templates(schema, [off, on], MapSet.new(), 2)
+    on_spec = Enum.find(specs, &(&1.kind == :ctor_is and &1.path == [0, 0] and &1.tag == "on"))
+    assert on_spec.name == "ctor-is-p0-0-on"
+    refute Map.has_key?(on_spec, :guards)
+
+    tree = tree_schema()
+    low = {:bin, {:bin, {:tip, 0}, {:tip, 0}}, {:tip, 0}}
+    high = {:bin, {:bin, {:bin, {:tip, 0}, {:tip, 0}}, {:tip, 0}}, {:tip, 0}}
+    {nested, _} = Muro.Synth.Term.templates(tree, [low, high], MapSet.new(), 2)
+
+    bin =
+      Enum.find(nested, &(&1.kind == :ctor_is and &1.path == [0, 0] and &1.tag == "bin"))
+
+    assert bin.name == "ctor-is-p0-0-bin-bin-bin"
+    assert bin.guards == [{[0], "bin"}, {[], "bin"}]
+  end
+
+  test "templates do not emit a binder test, including at the path bound" do
+    schema = tree_schema()
+    assert {:data, "State", rows} = schema
+
+    assert Enum.any?(rows, fn row ->
+             Enum.any?(row.fields, fn field -> field.qty != nil and is_binary(field.name) end)
+           end)
+
+    states = [{:tip, 0}, {:bin, {:bin, {:tip, 0}, {:tip, 1}}, {:tip, 0}}]
+
+    {specs, _} =
+      Muro.Synth.Term.templates(schema, states, MapSet.new(), Muro.Synth.Term.path_bound())
+
+    assert specs != []
+    assert Enum.all?(specs, &known_structural?/1)
+
+    refute Enum.any?(specs, fn spec ->
+             spec.kind in [:binder, :qty, :use_count, :binder_test]
+           end)
+  end
+
+  defp known_structural?(spec) do
+    spec.kind in [:ctor_is, :vals_eq, :spread_eq, :pair_any, :len_is, :nat_is]
   end
 
   defp pos_host, do: host(step: pos_step())
