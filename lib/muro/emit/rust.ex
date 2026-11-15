@@ -236,6 +236,10 @@ defmodule Muro.Emit.Rust do
   defp emit_tm(:tt, _env, st), do: {:ok, {[], g("Unit"), :unit, st}}
   defp emit_tm(:abort, _env, st), do: {:ok, {[], "::std::process::abort()", :never, st}}
 
+  defp emit_tm({:nat, n}, env, st) when is_integer(n) and n >= 0 do
+    emit_tm(nat_spine(n), env, st)
+  end
+
   defp emit_tm({:su, u}, env, st) do
     with {:ok, {lines, ex, lay, st}} <- emit_tm(u, env, st) do
       {:ok, {lines, "#{g("suc")}(#{coerce(ex, lay, :nat, st)})", :nat, st}}
@@ -1700,4 +1704,7 @@ defmodule Muro.Emit.Rust do
     """
     |> String.trim()
   end
+
+  defp nat_spine(0), do: :ze
+  defp nat_spine(n) when is_integer(n) and n > 0, do: {:su, nat_spine(n - 1)}
 end

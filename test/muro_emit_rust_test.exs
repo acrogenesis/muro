@@ -839,6 +839,13 @@ defmodule Muro.EmitRustTest do
     |> Enum.uniq()
   end
 
+  test "a closed numeral is the successor chain" do
+    dir = tmp_dir()
+    File.write!(Path.join(dir, "two.muro"), "def two : run Nat := 2\n")
+    source = File.read!(emit_rust!(dir, "two"))
+    assert source =~ "muro__suc(muro__suc(muro__zero()))"
+  end
+
   defp emit_rust!(dir, name) do
     path = Path.join(dir, "#{name}.muro")
     out = capture_io(fn -> Mix.Tasks.Muro.Emit.run([path, "--backend", "rust"]) end)

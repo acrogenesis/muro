@@ -1232,6 +1232,15 @@ defmodule Muro.EmitZigTest do
     |> Enum.uniq()
   end
 
+  test "a closed numeral is the successor chain" do
+    dir = tmp_dir()
+    File.write!(Path.join(dir, "two.muro"), "def two : run Nat := 2\n")
+    source = File.read!(emit_zig!(dir, "two"))
+
+    assert source =~
+             "return try muro__suc(muro__allocator, try muro__suc(muro__allocator, muro__zero()));"
+  end
+
   defp emit_zig!(dir, name) do
     path = Path.join(dir, "#{name}.muro")
     out = capture_io(fn -> Mix.Tasks.Muro.Emit.run([path, "--backend", "zig"]) end)

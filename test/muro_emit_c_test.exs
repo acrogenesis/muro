@@ -1111,6 +1111,16 @@ defmodule Muro.EmitCTest do
     out
   end
 
+  test "a closed numeral is the successor chain" do
+    dir = tmp_dir()
+    path = Path.join(dir, "two.muro")
+    File.write!(path, "def two : run Nat := 2\n")
+    capture_io(fn -> Mix.Tasks.Muro.Emit.run([path, "--backend", "c"]) end)
+    source = File.read!(Path.join(dir, "two.c"))
+    assert source =~ "muro__suc(muro__suc(muro__zero()))"
+    cc!(dir, "two.c", "two.o")
+  end
+
   defp tmp_dir do
     dir = Path.join(System.tmp_dir!(), "muro_c_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
