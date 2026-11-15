@@ -30,8 +30,8 @@ In brief: `examples/cshrl/` is [CSHRL](https://github.com/doctorcorral/csh-rl) i
 | `envs/nested_bit.muro` | A bit under two constructors, no declared feature. `trace` checks `CoindHomo` for the constructor of that bit |
 | `envs/list_cover.muro` | Two lists of Nat, no declared feature. `trace` checks `CoindHomo` for the reward of `go` |
 | `envs/nested_bin.muro` | A constructor under a recursive child, no declared feature. `trace` checks `CoindHomo` for that constructor |
-| `envs/queens4.muro` | Four rows, no declared feature. The features separate the boards. No predicate at depth 0 or 1 matches, so `trace` exits 1 and writes no book |
-| `envs/queens8.muro` | Eight rows, no declared feature. The same ranking loop, outside `mix test` |
+| `envs/queens4.muro` | Four rows, no declared feature. `trace` checks `CoindHomo` for the trace order of `placed-find-policy` |
+| `envs/queens8.muro` | Eight rows, no declared feature. The cover is too large for that case split |
 | `std/` | Bool, Nat order and `maxN`, List, Stream with `Dom` |
 
 A library file does not check on its own: `mix muro.check examples/cshrl/lib/core.muro` refuses with `param State is supplied by a file that imports this one`. Check an environment instead:
@@ -73,7 +73,7 @@ The Finder adds `leb`, `default-action` and `horizon`. `successor_sum.muro` adds
 
 **SkillInvestment.** `train` moves from novice to apprentice to expert to master and earns 0 each time. `work` earns 1, 2 or 3 and stays put. Master earns 5. `value novice` is 1, 2, 3, 5, 5, …. `skill-homomorphism` ranks `train` above `work` below master. Three impossibilities refute a `CoindHomo` ranking `work` at or below `train` at novice, apprentice and expert. The Finder works and the successor Finder trains.
 
-**Queens.** Four rows, and no declared feature. The cover is the safe boards and `dead`. `trace` separates `(ongoing (cons (suc 0) nil))` from `(ongoing (cons (suc (suc 0)) nil))` by `leads-terminal`, and no predicate at depth 0 or depth 1 matches the observations, so the command exits 1 and writes no book. Eight rows is the same dynamics. That command was stopped after 15 minutes and wrote no book. The paper certifies this MDP with the class-level homomorphism of `CombinatorialPlacementMDP` and `WithTraceBridge`. That homomorphism is not in this search, so queens is not certified.
+**Queens.** Four rows, and no declared feature. The cover is the safe boards and `dead`. `trace` checks `CoindHomo` for the Finder. From the empty board it plays `c1`, `c3`, `c0`, `c2`. Eight rows is the same dynamics. The cover is too large for the case split, so that command does not exit 0.
 
 ## The agents
 

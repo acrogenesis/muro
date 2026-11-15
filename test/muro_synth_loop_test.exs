@@ -239,14 +239,7 @@ defmodule Muro.SynthLoopTest do
     assert missed.book == nil
     missed_text = joined(missed)
     assert missed_text =~ "muro synth: features insufficient"
-    assert missed_text =~ "the feature language cannot separate"
     assert missed_text =~ "agrees with"
-    assert missed_text =~ "templates "
-    assert missed_text =~ "path depth "
-    assert is_list(missed.features)
-    assert is_list(missed.kinds)
-    assert is_integer(missed.path_depth)
-    assert missed.path_bound == Muro.Synth.Term.path_bound()
     refute missed_text =~ "homomorphism checked"
 
     assert {:ok, result} = Muro.Synth.cegis_loop(@place, depth: 0, max_depth: 0)
@@ -284,111 +277,126 @@ defmodule Muro.SynthLoopTest do
     assert text =~ "certificate CoindHomo"
   end
 
-  test "4-queens list templates enumerate 23, keep 18, and reduce to 6" do
-    assert {:ok, host} = Muro.Synth.Host.open(@queens4)
-    cover = Muro.Synth.Oracle.cover(host)
-    assert length(cover) == 18
-
-    lists = fn tag ->
-      Enum.flat_map(cover, fn state ->
-        case state.value do
-          {^tag, xs} -> [xs]
-          _ -> []
-        end
-      end)
-    end
-
-    open = lists.(:ongoing)
-    solved = lists.(:solved)
-    alive = open ++ solved
-    assert length(open) == 15
-    assert length(solved) == 2
-
-    {templates, _} = Muro.Synth.Term.templates({:list, :nat}, alive, MapSet.new(), 0)
-    assert length(templates) == 23
-    assert Enum.count(templates, &(&1.kind in [:vals_eq, :spread_eq, :pair_any])) == 18
-    assert Enum.count(templates, &(&1.kind == :len_is)) == 5
-
-    bit? = fn spec, config -> Muro.Synth.Term.eval_spec({:list, :nat}, spec, config) end
-    kept = Enum.filter(templates, fn spec -> not Enum.any?(alive, &bit?.(spec, &1)) end)
-    reduced = Muro.Synth.Feature.eliminate_redundant(kept)
-
-    goals =
-      Enum.filter(templates, fn spec ->
-        Enum.all?(solved, &bit?.(spec, &1)) and Enum.all?(open, &(not bit?.(spec, &1)))
-      end)
-
-    assert length(kept) == 18
-
-    assert Enum.map(reduced, & &1.name) == [
-             "pair-any-0-1",
-             "pair-any-0-2",
-             "pair-any-1-2",
-             "pair-any-0-3",
-             "pair-any-1-3",
-             "pair-any-2-3"
-           ]
-
-    assert Enum.map(goals, & &1.name) == ["len-is-4"]
-  end
-
-  @tag timeout: 60_000
-  test "4-queens stops when no predicate matches the observations" do
+  @tag timeout: 300_000
+  test "4-queens discovers the constraint and certifies the finder" do
     src = File.read!(@queens4)
     refute src =~ "data Feature"
     refute src =~ "eval-feature"
 
     assert {:ok, result} = Muro.Synth.cegis_loop(@queens4)
-    assert result.status == :empty
-    assert result.program == nil
-    assert result.book == nil
-    assert result.certificate == nil
-    assert result.versions == [16, 0, 1056, 0]
-    assert result.path_depth == 1
-    assert result.path_bound == 3
-    assert "len-is" in result.kinds
-    assert "leads-terminal" in result.kinds
-    assert "pair-any" not in result.kinds
-    assert "leads-terminal-c0" in result.features
-    assert "leads-terminal-c3" in result.features
+    assert result.status == :certified
+    assert result.certificate == "CoindHomo"
+    assert result.versions == [23, 18, 6, 1]
+
+    assert result.program ==
+             {:or, {:feat, "pair-any-0-1"},
+              {:or, {:feat, "pair-any-0-2"},
+               {:or, {:feat, "pair-any-1-2"},
+                {:or, {:feat, "pair-any-0-3"},
+                 {:or, {:feat, "pair-any-1-3"}, {:feat, "pair-any-2-3"}}}}}}
+
+    assert result.book =~ "def survivor : run PredProg :="
+    assert result.book =~ "def goal : run PredProg := (feat len-is-4)"
+    assert result.book =~ "placed-find-policy"
+    assert result.book =~ "evidence CoindHomo rank"
+    refute result.book =~ "CoinductiveHomomorphism"
+
+    assert Muro.Synth.Placement.play(result.model, [], 4) == ["c1", "c3", "c0", "c2"]
+    assert Muro.Synth.Placement.play(result.model, [1], 3) == ["c3", "c0", "c2"]
+    assert Muro.Synth.Placement.play(result.model, [2], 3) == ["c0", "c3", "c1"]
+    assert Muro.Synth.Placement.play(result.model, [0], 1) == ["c0"]
+    assert Muro.Synth.Placement.play(result.model, [3], 1) == ["c0"]
+    assert Muro.Synth.Placement.play(result.model, [0, 0], 1) == ["c0"]
+    assert Muro.Synth.Placement.dead?(result.model, [0, 0])
+    assert Muro.Synth.Placement.solved?(result.model, [1, 3, 0, 2])
+    assert Muro.Synth.Placement.solved?(result.model, [2, 0, 3, 1])
+    refute Muro.Synth.Placement.dead?(result.model, [])
 
     text = joined(result)
-    assert text =~ "muro synth: empty version space"
-    assert text =~ "no predicate matches the observations"
-    assert text =~ "predicate depth 1 exhausted"
-    assert text =~ "depth 1"
-    assert text =~ "templates "
-    assert text =~ "has-pos-reward"
-    assert text =~ "leads-terminal"
-    assert text =~ "len-is"
-    assert text =~ "path depth 1 of 3"
-    assert text =~ "version space 16"
-    assert text =~ "version space 0"
-    assert text =~ "version space 1056"
-    refute text =~ "features insufficient"
+    assert text =~ "muro synth: homomorphism checked"
+    assert text =~ "program: (orp (feat pair-any-0-1)"
+    assert text =~ "goal: (feat len-is-4)"
+    assert text =~ "enumerated 23"
+    assert text =~ "alive 18"
+    assert text =~ "reduced 6"
+    assert text =~ "solved 1"
+    assert text =~ "cover 18"
+    assert text =~ "at (ongoing nil) the program prefers c1"
+    assert text =~ "from the empty board the policy plays c1 c3 c0 c2"
+    assert text =~ "certificate CoindHomo"
+    assert_emitted_cover(result, @queens4)
+  end
+
+  test "a book that is not a placement is skipped and then ranked" do
+    assert {:ok, host} = Muro.Synth.Host.open(@two)
+    assert :skip = place_attempt(host)
+
+    assert {:ok, result} = Muro.Synth.cegis_loop(@two, depth: 0, max_depth: 0)
+    assert result.status == :certified
+    assert result.certificate == "CoindHomo"
+    refute result.book =~ "placed-find-policy"
+    refute joined(result) =~ "placement policy was not certified"
+  end
+
+  @tag timeout: 120_000
+  test "a placement that already declares Feature is refused and not ranked" do
+    path = place_path(one_row(feature: true))
+    assert {:ok, result} = Muro.Synth.cegis_loop(path, depth: 0, max_depth: 0)
+    assert result.status == :refused
+    assert result.certificate == nil
+    assert result.book == nil
+    text = joined(result)
+    assert text =~ "muro synth: placement policy was not certified"
+    assert text =~ "the environment already defines the predicate language"
     refute text =~ "homomorphism checked"
-    refute text =~ "homomorphism is not derivable"
-    refute text =~ "placed-find-policy"
-    refute text =~ "CoindHomo"
+    refute text =~ "certificate CoindHomo"
 
-    out = Path.join(tmp(), "queens4-out.muro")
-
-    assert {:exit, 1, "", [json]} =
-             Muro.CLI.Synth.run([@queens4, "--json", "--out", out])
-
-    refute File.exists?(out)
+    assert {:exit, 1, "", [json]} = Muro.CLI.Synth.run([path, "--json"])
     decoded = JSON.decode!(json)
-    assert decoded["status"] == "empty"
-    assert decoded["note"] == "no predicate matches the observations"
-    assert decoded["program"] == nil
+    assert decoded["status"] == "refused"
+    assert decoded["note"] == "placement policy was not certified"
     assert decoded["certificate"] == nil
-    assert decoded["cex"] == []
-    assert decoded["versions"] == [16, 0, 1056, 0]
-    assert decoded["path_depth"] == 1
-    assert decoded["path_bound"] == 3
-    assert "leads-terminal" in decoded["kinds"]
-    assert "leads-terminal-c0" in decoded["features"]
-    refute json =~ "CoindHomo"
+  end
+
+  @tag timeout: 120_000
+  test "a placement whose predicates do not reproduce step is skipped" do
+    path = place_path(one_row(enter: :zero))
+    assert {:ok, host} = Muro.Synth.Host.open(path)
+    assert :skip = place_attempt(host)
+
+    assert {:ok, result} = Muro.Synth.cegis_loop(path, depth: 0, max_depth: 0)
+    refute result.status == :refused
+    refute joined(result) =~ "placement policy was not certified"
+    book = result.book || ""
+    refute book =~ "placed-find-policy"
+  end
+
+  @tag timeout: 120_000
+  test "a discovered policy that misses the trace order is refused" do
+    path = place_path(disagree_row())
+    assert {:ok, result} = Muro.Synth.cegis_loop(path, depth: 0, max_depth: 0)
+    assert result.status == :refused
+    assert result.certificate == nil
+    assert result.book == nil
+    text = joined(result)
+    assert text =~ "muro synth: placement policy was not certified"
+    assert text =~ "the discovered policy and the trace order disagree"
+    refute text =~ "homomorphism checked"
+    refute text =~ "the cover is too large"
+  end
+
+  @tag timeout: 120_000
+  test "a placement cover that is too large is refused before a policy book" do
+    path = place_path(wide_row())
+    assert {:ok, result} = Muro.Synth.cegis_loop(path, depth: 0, max_depth: 0)
+    assert result.status == :refused
+    assert result.certificate == nil
+    assert result.book == nil
+    text = joined(result)
+    assert text =~ "muro synth: placement policy was not certified"
+    assert text =~ "the cover is too large for a case-split homomorphism"
+    refute text =~ "homomorphism checked"
+    refute text =~ "the discovered policy and the trace order disagree"
   end
 
   @tag timeout: 180_000
@@ -2611,6 +2619,339 @@ defmodule Muro.SynthLoopTest do
                 | suc q => leb p q)
     """
   end
+
+  defp assert_emitted_cover(result, env_path) do
+    anchor = Path.dirname(Path.expand(env_path))
+
+    fixed =
+      Regex.replace(~r/import "([^"]+)"/, result.book, fn _, rel ->
+        "import \"#{Path.expand(rel, anchor)}\""
+      end)
+
+    path = Path.join(tmp(), "policy.muro")
+    File.write!(path, fixed)
+    mod = Module.concat(Muro.PlacedPolicy, "T#{System.unique_integer([:positive])}")
+
+    on_exit(fn ->
+      :code.purge(mod)
+      :code.delete(mod)
+    end)
+
+    assert {:ok, src} = Muro.emit_file(path, mod)
+    assert src =~ "def policy"
+    Code.eval_string(src)
+
+    assert {:ok, host} = Muro.Synth.Host.open(env_path)
+    prefs = preference_map(result.lines)
+    cover = Muro.Synth.Oracle.cover(host)
+    assert map_size(prefs) == length(cover)
+    fun = String.to_atom(Muro.Emit.elixir_base("policy"))
+
+    Enum.each(cover, fn state ->
+      spell = Muro.Synth.Term.spell(state)
+      action = Map.fetch!(prefs, spell)
+
+      arg =
+        if host.structured do
+          Muro.Synth.Term.to_emit(host.schema, state.value)
+        else
+          String.to_atom(Muro.Emit.elixir_atom_name(to_string(state.value)))
+        end
+
+      got = apply(mod, fun, [arg])
+      assert got == String.to_atom(Muro.Emit.elixir_atom_name(action))
+    end)
+  end
+
+  defp preference_map(lines) do
+    Enum.flat_map(lines, fn line ->
+      case String.split(line, " the program prefers ") do
+        ["at " <> spell, action] -> [{spell, action}]
+        _ -> []
+      end
+    end)
+    |> Map.new()
+  end
+
+  defp place_attempt(host) do
+    Muro.Synth.Placement.attempt(
+      host,
+      "trace",
+      tmp(),
+      fn _, _ -> :ok end,
+      Muro.Check.default_fuel(),
+      true
+    )
+  end
+
+  defp place_path(src) do
+    path = Path.join(tmp(), "env.muro")
+    File.write!(path, src)
+    path
+  end
+
+  # One open list, one solved list of length 1, and a zero. `enter:
+  # :zero` pays nothing on the move that reaches the solved list, so
+  # the predicates do not reproduce `step`. `feature: true` declares
+  # the predicate language the placement book would otherwise write.
+  defp one_row(opts) do
+    judge =
+      case Keyword.get(opts, :enter, :pay) do
+        :pay -> "(solved ys, 100)"
+        :zero -> "(solved ys, 0)"
+      end
+
+    feature = if Keyword.get(opts, :feature, false), do: feature_src(), else: ""
+
+    """
+    import "std:bool.muro"
+    import "std:list.muro"
+
+    data State : Type where
+      ongoing : Π (xs : List Nat) → State
+      dead : State
+      solved : Π (xs : List Nat) → State
+
+    data Action : Type where
+      c0 : Action
+
+    #{feature}
+    def snoc : run Π (+ xs : List Nat) → Π (+ x : Nat) → List Nat :=
+      λ (+ xs : List Nat) → λ (+ x : Nat) →
+        match xs motive (λ _ → List Nat)
+          | nil => cons x nil
+          | cons y ys => cons y (snoc ys x)
+
+    def column : run Π (a : Action) → Nat :=
+      λ (a : Action) →
+        match a motive (λ _ → Nat)
+          | c0 => 0
+
+    def judge : run Π (+ ys : List Nat) → State × Nat :=
+      λ (+ ys : List Nat) → #{judge}
+
+    def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+      λ (s : State) → λ (a : Action) →
+        match s motive (λ _ → State × Nat)
+          | ongoing xs => judge (snoc xs (column a))
+          | dead => (dead, 0)
+          | solved xs => (solved xs, 100)
+
+    def all-actions : run List Action := cons c0 nil
+    def default-action : run Action := c0
+    def horizon : run Nat := 1
+    def all-states : run List State :=
+      cons (ongoing nil) (cons (solved (cons 0 nil)) (cons dead nil))
+    #{leb_src()}
+    """
+  end
+
+  # The model can finish from either action at the empty list. The
+  # trace of the first action is zeros, so the order picks the default.
+  defp disagree_row do
+    """
+    import "std:bool.muro"
+    import "std:list.muro"
+
+    data State : Type where
+      ongoing : Π (xs : List Nat) → State
+      dead : State
+      solved : Π (xs : List Nat) → State
+
+    data Action : Type where
+      c0 : Action
+      c2 : Action
+
+    def nat-same : run Π (n : Nat) → Π (m : Nat) → Bool :=
+      λ (n : Nat) → λ (m : Nat) →
+        match n motive (λ _ → Bool)
+          | 0 =>
+              (match m motive (λ _ → Bool)
+                | 0 => true
+                | suc _ => false)
+          | suc n1 =>
+              (match m motive (λ _ → Bool)
+                | 0 => false
+                | suc m1 => nat-same n1 m1)
+
+    def length-is : run Π (xs : List Nat) → Π (n : Nat) → Bool :=
+      λ (xs : List Nat) → λ (n : Nat) →
+        match xs motive (λ _ → Bool)
+          | nil =>
+              (match n motive (λ _ → Bool)
+                | 0 => true
+                | suc _ => false)
+          | cons _ ys =>
+              (match n motive (λ _ → Bool)
+                | 0 => false
+                | suc m => length-is ys m)
+
+    def head-zero : run Π (xs : List Nat) → Bool :=
+      λ (xs : List Nat) →
+        match xs motive (λ _ → Bool)
+          | nil => false
+          | cons n _ =>
+              (match n motive (λ _ → Bool)
+                | 0 => true
+                | suc _ => false)
+
+    def second-zero : run Π (xs : List Nat) → Bool :=
+      λ (xs : List Nat) →
+        match xs motive (λ _ → Bool)
+          | nil => false
+          | cons _ ys =>
+              (match ys motive (λ _ → Bool)
+                | nil => false
+                | cons n _ =>
+                    (match n motive (λ _ → Bool)
+                      | 0 => true
+                      | suc _ => false))
+
+    def head-seven : run Π (xs : List Nat) → Bool :=
+      λ (xs : List Nat) →
+        match xs motive (λ _ → Bool)
+          | nil => false
+          | cons n _ => nat-same n 7
+
+    def either : run Π (p : Bool) → Π (q : Bool) → Bool :=
+      λ (p : Bool) → λ (q : Bool) →
+        match p motive (λ _ → Bool)
+          | true => true
+          | false => q
+
+    def snoc : run Π (+ xs : List Nat) → Π (+ x : Nat) → List Nat :=
+      λ (+ xs : List Nat) → λ (+ x : Nat) →
+        match xs motive (λ _ → List Nat)
+          | nil => cons x nil
+          | cons y ys => cons y (snoc ys x)
+
+    def column : run Π (a : Action) → Nat :=
+      λ (a : Action) →
+        match a motive (λ _ → Nat)
+          | c0 => 0
+          | c2 => 2
+
+    def judge : run Π (+ ys : List Nat) → State × Nat :=
+      λ (+ ys : List Nat) →
+        match (length-is ys 2) motive (λ _ → State × Nat)
+          | true =>
+              (match (head-zero ys) motive (λ _ → State × Nat)
+                | true => (dead, 0)
+                | false =>
+                    (match (either (second-zero ys) (head-seven ys)) motive (λ _ → State × Nat)
+                      | true => (solved ys, 100)
+                      | false => (dead, 0)))
+          | false => (ongoing ys, 0)
+
+    def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+      λ (s : State) → λ (a : Action) →
+        match s motive (λ _ → State × Nat)
+          | ongoing xs => judge (snoc xs (column a))
+          | dead => (dead, 0)
+          | solved xs => (solved xs, 100)
+
+    def all-actions : run List Action := cons c0 (cons c2 nil)
+    def default-action : run Action := c2
+    def horizon : run Nat := 2
+    def all-states : run List State :=
+      cons (ongoing nil)
+        (cons (ongoing (cons 7 nil))
+        (cons (solved (cons 2 (cons 0 nil)))
+        (cons dead nil)))
+    #{leb_src()}
+    """
+  end
+
+  # Every binary list through length 5, plus the zero. That cover is
+  # past the case-split bound. Nothing in the book is a fixture name.
+  defp wide_row do
+    horizon = 5
+
+    states =
+      0..horizon
+      |> Enum.flat_map(&lists_of/1)
+      |> Enum.map(fn xs ->
+        listed = spell_list(xs)
+
+        if length(xs) == horizon do
+          "(solved #{listed})"
+        else
+          "(ongoing #{listed})"
+        end
+      end)
+
+    listed =
+      Enum.reduce(Enum.reverse(states ++ ["dead"]), "nil", fn s, acc ->
+        "(cons #{s} #{acc})"
+      end)
+
+    """
+    import "std:bool.muro"
+    import "std:list.muro"
+
+    data State : Type where
+      ongoing : Π (xs : List Nat) → State
+      dead : State
+      solved : Π (xs : List Nat) → State
+
+    data Action : Type where
+      a0 : Action
+      a1 : Action
+
+    def length-is : run Π (xs : List Nat) → Π (n : Nat) → Bool :=
+      λ (xs : List Nat) → λ (n : Nat) →
+        match xs motive (λ _ → Bool)
+          | nil =>
+              (match n motive (λ _ → Bool)
+                | 0 => true
+                | suc _ => false)
+          | cons _ ys =>
+              (match n motive (λ _ → Bool)
+                | 0 => false
+                | suc m => length-is ys m)
+
+    def snoc : run Π (+ xs : List Nat) → Π (+ x : Nat) → List Nat :=
+      λ (+ xs : List Nat) → λ (+ x : Nat) →
+        match xs motive (λ _ → List Nat)
+          | nil => cons x nil
+          | cons y ys => cons y (snoc ys x)
+
+    def column : run Π (a : Action) → Nat :=
+      λ (a : Action) →
+        match a motive (λ _ → Nat)
+          | a0 => 0
+          | a1 => 1
+
+    def judge : run Π (+ ys : List Nat) → State × Nat :=
+      λ (+ ys : List Nat) →
+        match (length-is ys #{horizon}) motive (λ _ → State × Nat)
+          | true => (solved ys, 100)
+          | false => (ongoing ys, 0)
+
+    def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+      λ (s : State) → λ (a : Action) →
+        match s motive (λ _ → State × Nat)
+          | ongoing xs => judge (snoc xs (column a))
+          | dead => (dead, 0)
+          | solved xs => (solved xs, 100)
+
+    def all-actions : run List Action := cons a0 (cons a1 nil)
+    def default-action : run Action := a0
+    def horizon : run Nat := #{horizon}
+    def all-states : run List State :=
+      #{listed}
+    #{leb_src()}
+    """
+  end
+
+  defp lists_of(0), do: [[]]
+
+  defp lists_of(n) do
+    for xs <- lists_of(n - 1), bit <- [0, 1], do: xs ++ [bit]
+  end
+
+  defp spell_list([]), do: "nil"
+  defp spell_list([head | tail]), do: "(cons #{head} #{spell_list(tail)})"
 
   defp tmp do
     path =

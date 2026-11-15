@@ -221,25 +221,17 @@ defmodule Muro.CLI.Synth do
   end
 
   defp json(result) do
-    payload =
-      %{
-        status: result.status,
-        program: program_json(result.program),
-        versions: result.versions,
-        cex: Enum.map(result.cex, &cex_json/1),
-        note: note(result.status),
-        certificate: Map.get(result, :certificate)
-      }
-      |> put_present(:features, Map.get(result, :features))
-      |> put_present(:kinds, Map.get(result, :kinds))
-      |> put_present(:path_depth, Map.get(result, :path_depth))
-      |> put_present(:path_bound, Map.get(result, :path_bound))
+    payload = %{
+      status: result.status,
+      program: program_json(result.program),
+      versions: result.versions,
+      cex: Enum.map(result.cex, &cex_json/1),
+      note: note(result.status),
+      certificate: Map.get(result, :certificate)
+    }
 
     JSON.encode!(payload) <> "\n"
   end
-
-  defp put_present(map, _key, nil), do: map
-  defp put_present(map, key, value), do: Map.put(map, key, value)
 
   defp program_json(nil), do: nil
 
@@ -265,7 +257,6 @@ defmodule Muro.CLI.Synth do
 
   defp note(:certified), do: "homomorphism checked"
   defp note(:policy), do: "homomorphism is not derivable"
-  defp note(:insufficient), do: "features cannot separate the counterexample"
-  defp note(:empty), do: "no predicate matches the observations"
+  defp note(:refused), do: "placement policy was not certified"
   defp note(_status), do: nil
 end
