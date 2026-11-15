@@ -245,22 +245,25 @@ defmodule Muro do
   end
 
   @doc """
-  Write `<stem>.mbi` next to `path`. Success is exactly one exported
-  run: a function, an application, zero, successor, or a match on Nat,
-  with the binder's grade kept. A Π erases as `gpi` when it is the
-  term. A definition, data, a pair, a word, or a stream is refused.
+  Write `<stem>.mbi` next to `path` only when exactly one exported
+  run erases: a function, an application, zero, successor, or a match
+  on Nat, with the binder's grade kept. A Π erases as `gpi` when it is
+  the term. A definition, data, a pair, a word, or a stream is refused.
   An unknown grade is refused. muro-beam loads the image and checks
   it again. The file is not Erlang BEAM bytecode. Writing the file is
   not that check.
 
   `run internal` is not exported. Spec, evidence, data, and sessions
-  are omitted. Zero exported runs is `mbi:entry`. More than one
-  exported run is an error. When one of those bodies erases, the file
-  is the first such body in book order, and the error names the others.
-  When every exported run fails, nothing is written and a previous
-  image at that path is removed. A book that does not check writes
-  nothing and leaves a previous image where it is. `opts` is `fuel:`
-  and `root:`, as in `check_file/2`. This is not a manifest target.
+  are omitted. The file is written only when exactly one exported run
+  erases. Zero exported runs is `mbi:entry`: nothing is written, and a
+  previous image at that path is removed. More than one exported run
+  is an error, including when one body erases. Nothing is written, and
+  a previous image is left byte for byte. The error names the other
+  runs. When every exported run fails, nothing is written and a
+  previous image is left where it is. A book that does not check
+  writes nothing and leaves a previous image where it is. `opts` is
+  `fuel:` and `root:`, as in `check_file/2`. This is not a manifest
+  target.
   """
   def emit_mbi(path, opts \\ []) do
     stem = Path.basename(path, ".muro")
@@ -273,12 +276,17 @@ defmodule Muro do
           File.write!(file, image)
           {:ok, [file]}
 
-        {:ok, image, refused} ->
-          File.write!(file, image)
+        # One body erased and another exported run remains. The image
+        # is not written, so a previous file stays byte for byte.
+        {:ok, _image, refused} ->
           {:error, refused}
 
-        {:error, message} ->
+        # No exported run. A previous image is not this book's entry.
+        {:error, "mbi:entry" = message} ->
           _ = File.rm(file)
+          {:error, message}
+
+        {:error, message} ->
           {:error, message}
       end
     end

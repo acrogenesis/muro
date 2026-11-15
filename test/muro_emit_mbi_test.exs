@@ -5,7 +5,7 @@ defmodule Muro.EmitMbiTest do
 
   alias Muro.Emit.Mbi
 
-  @images ~w(once affine reuse drop app suc match pi iv)
+  @images ~w(once affine reuse twice drop app suc match pi iv)
 
   @failures ~w(
     fail-typ fail-nat fail-unit fail-empty fail-data fail-id fail-def
@@ -144,11 +144,13 @@ defmodule Muro.EmitMbiTest do
     assert File.read!(file) == Mbi.show_pure(:gze) <> "\n"
   end
 
-  test "grades.muro writes once and refuses many" do
+  test "grades.muro refuses many and writes nothing" do
     dir = tmp_dir()
     path = Path.join(dir, "grades.muro")
     File.cp!("examples/grades.muro", path)
     file = Path.join(dir, "grades.mbi")
+    prior = "prior-image\n"
+    File.write!(file, prior)
 
     out =
       capture_io(fn ->
@@ -157,9 +159,12 @@ defmodule Muro.EmitMbiTest do
         end
       end)
 
-    assert out == file <> "\n"
-    assert File.read!(file) == golden("once")
+    assert out == ""
+    assert File.read!(file) == prior
     assert {:error, "mbi:def in many"} = Muro.emit_mbi(path)
+    assert File.read!(file) == prior
+    assert {:raise, "", "mbi:def in many"} = Muro.CLI.Emit.run([path, "--backend", "mbi"])
+    assert File.read!(file) == prior
   end
 
   test "a later run is named, an earlier failure keeps its reason, and a miss writes nothing" do
@@ -167,11 +172,11 @@ defmodule Muro.EmitMbiTest do
 
     path = write_book(dir, "two", two_src())
     assert {:error, "mbi:entry in b"} = Muro.emit_mbi(path)
-    assert File.read!(Path.join(dir, "two.mbi")) == Mbi.show_pure(:gze) <> "\n"
+    refute File.exists?(Path.join(dir, "two.mbi"))
 
     path = write_book(dir, "repair", repair_src())
     assert {:error, "mbi:pair in bad"} = Muro.emit_mbi(path)
-    assert File.read!(Path.join(dir, "repair.mbi")) == Mbi.show_pure(:gze) <> "\n"
+    refute File.exists?(Path.join(dir, "repair.mbi"))
 
     path = write_book(dir, "none", "def p : spec Nat := 0\n")
     File.write!(Path.join(dir, "none.mbi"), "stale\n")
@@ -237,16 +242,47 @@ defmodule Muro.EmitMbiTest do
 
     path = write_book(dir, "three", three_src())
     assert {:error, "mbi:entry in b\nmbi:entry in c"} = Muro.emit_mbi(path)
-    assert File.read!(Path.join(dir, "three.mbi")) == Mbi.show_pure(:gze) <> "\n"
+    refute File.exists?(Path.join(dir, "three.mbi"))
 
     path = write_book(dir, "bothbad", both_bad_src())
     File.write!(Path.join(dir, "bothbad.mbi"), "stale\n")
     assert {:error, "mbi:pair in a\nmbi:string in b"} = Muro.emit_mbi(path)
-    refute File.exists?(Path.join(dir, "bothbad.mbi"))
+    assert File.read!(Path.join(dir, "bothbad.mbi")) == "stale\n"
 
     path = write_book(dir, "only", "def n : run Nat × Nat := (0, 0)\n")
     assert {:error, "mbi:pair in n"} = Muro.emit_mbi(path)
     refute File.exists?(Path.join(dir, "only.mbi"))
+  end
+
+  test "a multi-run refusal leaves a previous image byte for byte" do
+    dir = tmp_dir()
+    prior = "prior-image\nnot-rewritten\n"
+
+    for {name, src, message} <- [
+          {"two", two_src(), "mbi:entry in b"},
+          {"repair", repair_src(), "mbi:pair in bad"},
+          {"three", three_src(), "mbi:entry in b\nmbi:entry in c"},
+          {"bothbad", both_bad_src(), "mbi:pair in a\nmbi:string in b"}
+        ] do
+      path = write_book(dir, name, src)
+      file = Path.join(dir, name <> ".mbi")
+      File.write!(file, prior)
+      assert {:error, ^message} = Muro.emit_mbi(path)
+      assert File.read!(file) == prior
+
+      assert {:raise, "", ^message} = Muro.CLI.Emit.run([path, "--backend", "mbi"])
+      assert File.read!(file) == prior
+    end
+
+    path = write_book(dir, "only", "def n : run Nat × Nat := (0, 0)\n")
+    file = Path.join(dir, "only.mbi")
+    File.write!(file, prior)
+    assert {:error, "mbi:pair in n"} = Muro.emit_mbi(path)
+    assert File.read!(file) == prior
+
+    help = Muro.CLI.Emit.help()
+    assert help =~ "Writing it is not acceptance."
+    refute help =~ "The module or the files were emitted."
   end
 
   test "a constructor or a data type is mbi:data, and a definition is mbi:def" do

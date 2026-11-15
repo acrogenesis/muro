@@ -133,4 +133,4 @@ pages:
   - file: mbi.md
     slug: mbi
     title: MBI images
-    summary: muro emit --backend mbi writes one exported run, with its binder grades, as a .mbi image. muro-beam loads the image and checks it again.
+    summary: muro emit --backend mbi writes exactly one exported run, with its binder grades, as a .mbi image. Writing the file is not acceptance. muro-beam loads the image and checks it again.

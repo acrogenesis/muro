@@ -69,14 +69,15 @@ defmodule Mix.Tasks.Muro.Emit do
   Nothing is written next to the book.
 
   `--backend mbi` writes `<stem>.mbi` next to the file and prints that
-  path. Success is exactly one exported run, and the binder grades
+  path only when exactly one exported run erases. The binder grades
   stay. muro-beam loads that file. It is not Erlang BEAM bytecode.
   A definition, data, a pair, a word, or a stream is refused.
-  Zero exported runs, and more than one, are refused. When one body
-  among several erases, the path is still printed and the command
-  fails. muro-beam checks the image again. Writing the file is not
-  that check. This is not a manifest target. `--backend beam` is
-  refused. See the MBI images page.
+  Zero exported runs, and more than one, are refused. A refusal
+  writes nothing and prints no path. An image already beside the book
+  stays, except that a book with no exported run removes it.
+  muro-beam checks the image again. Writing the file is not that
+  check. This is not a manifest target. `--backend beam` is refused.
+  See the MBI images page.
 
   `--node` writes `<stem>_node.ex` next to the file and prints that
   path. `place.muro` with `--node a` is `place_node.ex`. Each `cross`

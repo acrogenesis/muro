@@ -31,9 +31,10 @@ defmodule Muro.Emit.Mbi do
   of every other exported run.
 
   `{:ok, image, ""}` is exactly one exported run, and that body erased.
-  `{:ok, image, message}` is the first body that erased, and `message`
-  names every other exported run. `Muro.emit_mbi/2` writes that file
-  and returns `{:error, message}`.
+  `Muro.emit_mbi/2` writes that image.
+  `{:ok, _image, message}` is the first body that erased, and `message`
+  names every other exported run. `Muro.emit_mbi/2` does not write that
+  image. It returns `{:error, message}` and leaves a previous file.
   `{:error, "mbi:entry"}` is a book with no exported run.
   `{:error, message}` is a book whose exported runs all failed. Nothing
   is written by this function.
