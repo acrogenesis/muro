@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.21.9
+## 0.21.8
 
 A Nat in a decoded state is a host integer. The search sends that Nat to `step` and to `eval-feature` as Peano, so a match on `suc` runs.
 
@@ -12,7 +12,7 @@ A Nat in a decoded state is a host integer. The search sends that Nat to `step` 
 
 ### Package
 
-- Version 0.21.9.
+- Version 0.21.8.
 
 ## 0.21.7
 
