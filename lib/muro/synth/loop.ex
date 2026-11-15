@@ -74,26 +74,16 @@ defmodule Muro.Synth.Loop do
         err
 
       {:ok, host} ->
-        case Muro.Synth.Placement.attempt(host, oracle, anchor, checker, fuel, structural) do
-          :skip ->
-            observe(host, oracle, blind, depth, max_depth, rounds, score, anchor, checker, fuel)
+        case Oracle.observe(host, oracle, blind) do
+          {:error, _kind, _msg} = err ->
+            err
 
-          {:done, result} ->
-            {:ok, result}
+          {:silent, cex} ->
+            {:ok, silent(cex)}
+
+          {:ok, spec} ->
+            search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel)
         end
-    end
-  end
-
-  defp observe(host, oracle, blind, depth, max_depth, rounds, score, anchor, checker, fuel) do
-    case Oracle.observe(host, oracle, blind) do
-      {:error, _kind, _msg} = err ->
-        err
-
-      {:silent, cex} ->
-        {:ok, silent(cex)}
-
-      {:ok, spec} ->
-        search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel)
     end
   end
 
@@ -127,7 +117,7 @@ defmodule Muro.Synth.Loop do
       :ok ->
         case fit(host, spec.tasks, depth, max_depth, score, feat, [], %{}) do
           {:empty, versions, at} ->
-            {:ok, empty(versions, at)}
+            {:ok, empty(host, versions, at)}
 
           {:ok, arms, versions, at} ->
             certify(
@@ -538,9 +528,20 @@ defmodule Muro.Synth.Loop do
     end
   end
 
+  # Refinement has stopped. The two carriers still agree on every
+  # installed test, and a test at the subterm where the values differ
+  # did not separate them. The report names that pair, the templates,
+  # and the path depth that was reached. It does not deploy a predicate.
   defp insufficient(host, task, depth, feat, earlier, later, predicted, oracle) do
     vs = Synth.enumerate(host.features, depth)
     kept = Synth.refine_all(vs, task.observations, feat)
+    specs = List.wrap(host[:feature_specs])
+    names = Enum.map(specs, & &1.name)
+    kinds = specs |> Enum.map(&kind_word/1) |> Enum.uniq()
+    path_depth = Map.get(host, :path_depth, Term.first_path_depth())
+    path_bound = Term.path_bound()
+    left = Term.spell(earlier)
+    right = Term.spell(later)
 
     cex = %{
       carrier: later,
@@ -548,16 +549,21 @@ defmodule Muro.Synth.Loop do
       oracle: oracle,
       fed: 1,
       agrees: earlier,
-      pair: {task.action, task.else}
+      pair: {task.action, task.else},
+      reason: "the feature language cannot separate these carriers"
     }
 
     lines = [
       "muro synth: features insufficient",
-      "#{Term.spell(later)} agrees with #{Term.spell(earlier)} on every feature",
-      "carrier #{Term.spell(later)}",
+      "the feature language cannot separate #{left} and #{right}",
+      "#{right} agrees with #{left} on every feature",
+      "carrier #{right}",
       "predicted #{predicted}",
       "oracle #{oracle}",
       "fed back 1",
+      template_line(kinds),
+      feature_line(names),
+      depth_line(path_depth, path_bound),
       "version space #{length(vs)}",
       "version space #{length(kept)}"
     ]
@@ -568,16 +574,72 @@ defmodule Muro.Synth.Loop do
       book: nil,
       lines: lines,
       versions: [length(vs), length(kept)],
-      cex: [cex]
+      cex: [cex],
+      features: names,
+      kinds: kinds,
+      path_depth: path_depth,
+      path_bound: path_bound
     }
   end
 
-  defp empty(versions, depth) do
-    lines =
-      ["muro synth: empty version space", "depth #{depth}"] ++
-        Enum.map(versions, &"version space #{&1}")
+  defp template_line([]), do: "templates none"
+  defp template_line(kinds), do: "templates " <> Enum.join(kinds, " ")
 
-    %{status: :empty, program: nil, book: nil, lines: lines, versions: versions, cex: []}
+  defp feature_line([]), do: "features none"
+  defp feature_line(names), do: "features " <> Enum.join(names, " ")
+
+  defp depth_line(depth, bound) when depth >= bound,
+    do: "path depth #{depth} of #{bound} exhausted"
+
+  defp depth_line(depth, bound), do: "path depth #{depth} of #{bound}"
+
+  defp kind_word(%{kind: :ctor_is}), do: "ctor-is"
+  defp kind_word(%{kind: :vals_eq}), do: "vals-eq"
+  defp kind_word(%{kind: :spread_eq}), do: "spread-eq"
+  defp kind_word(%{kind: :pair_any}), do: "pair-any"
+  defp kind_word(%{kind: :len_is}), do: "len-is"
+  defp kind_word(%{kind: :nat_is}), do: "nat-is"
+  defp kind_word(%{kind: :has_pos_reward}), do: "has-pos-reward"
+  defp kind_word(%{kind: :is_self_loop}), do: "is-self-loop"
+  defp kind_word(%{kind: :leads_terminal}), do: "leads-terminal"
+  defp kind_word(%{kind: :hint}), do: "hint"
+  defp kind_word(%{kind: kind}), do: Atom.to_string(kind)
+
+  # The observations agree with the features: no two carriers share a
+  # vector and disagree. No predicate at the depths that were searched
+  # matches them. The report names those depths and the templates. It
+  # does not deploy a predicate.
+  defp empty(host, versions, depth) do
+    specs = List.wrap(host[:feature_specs])
+    names = Enum.map(specs, & &1.name)
+    kinds = specs |> Enum.map(&kind_word/1) |> Enum.uniq()
+    path_depth = Map.get(host, :path_depth, Term.first_path_depth())
+    path_bound = Term.path_bound()
+
+    lines =
+      [
+        "muro synth: empty version space",
+        "no predicate matches the observations",
+        "predicate depth #{depth} exhausted",
+        "depth #{depth}",
+        template_line(kinds),
+        feature_line(names),
+        depth_line(path_depth, path_bound)
+      ] ++ Enum.map(versions, &"version space #{&1}")
+
+    %{
+      status: :empty,
+      program: nil,
+      book: nil,
+      lines: lines,
+      versions: versions,
+      cex: [],
+      certificate: nil,
+      features: names,
+      kinds: kinds,
+      path_depth: path_depth,
+      path_bound: path_bound
+    }
   end
 
   defp silent(cex) do
