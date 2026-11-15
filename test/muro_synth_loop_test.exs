@@ -337,7 +337,9 @@ defmodule Muro.SynthLoopTest do
 
   # The certificate reduces the tabulated reachability runs.
   # Locally that check took 53 seconds. Before the table it took 169 seconds.
+  # Default `mix test` excludes `:slow`. CI runs this with `mix test --only slow`.
   @tag timeout: 720_000
+  @tag :slow
   test "4-queens certifies positive-reward reachability" do
     src = File.read!(@queens4)
     refute src =~ "data Feature"

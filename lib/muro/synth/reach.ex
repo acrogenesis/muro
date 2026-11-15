@@ -10,19 +10,23 @@ defmodule Muro.Synth.Reach do
   When the cover is finite, closed under `step`, and `cover_match`
   can split it, the book tabulates `dyn-best-pos` for every cover
   state and every horizon up to the environment's. The table is a
-  match in the book. The checker does not trust the fill. Each cell
-  is one `refl`: `dyn-best-pos s (j + 1)` agrees with one step of
-  `dyn-any s j`, and `dyn-best-pos s 0` agrees with `false`. That
-  step reads the table at the smaller horizon. The zero arm is the
-  base, so a wrong cell fails at the first horizon where it
-  disagrees with the recurrence.
+  match in the book. The checker does not trust the fill.
+
+  Soundness inside the table is an inductive family of `refl`s.
+  `dyn-best-pos s 0` agrees with `false`. `dyn-best-pos s (j + 1)`
+  agrees with one step of `dyn-any s j`, and that step reads the
+  table at horizon `j`. The chain ends at the zero arm. A wrong cell
+  fails at the first horizon where it disagrees with that step. The
+  table is not shown to be sound by comparing it, in one shot, with
+  the recurrence unfolded out to the horizon.
 
   Horizons past the table, and a state the match does not hit, call
   the same recurrence as a separate block: `dyn-best-rec`,
-  `dyn-one-rec`, and `dyn-any-rec`. That block does not call the
-  table. The table's fallback calls it, which is legal because the
-  call is not inside the block. Above the horizon the runs are the
-  recurrence itself, not a second table.
+  `dyn-one-rec`, and `dyn-any-rec`. That block is only the fallback.
+  It does not call the table. The table's fallback calls it, which
+  is legal because the call is not inside the block. Above the
+  horizon, and off the cover, the runs are the recurrence itself,
+  not a second table.
 
   The agreement term is a balanced tree, in chunks of `@chunk`
   cells, so the match depth stays inside the checker's fuel. A cover

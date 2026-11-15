@@ -345,6 +345,8 @@ defmodule Muro.Synth.Feature do
     end)
   end
 
+  # Search memo only. `Muro.Synth.Loop.run/2` deletes `:muro_synth_reaches`
+  # at the start and at the end. The checker does not read this key.
   # The table is re-read after the computation. An inner call stores its
   # own bit, and writing the outer snapshot over that table would drop it.
   defp remember(host, key, fun) do

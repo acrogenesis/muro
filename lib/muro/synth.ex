@@ -119,6 +119,13 @@ defmodule Muro.Synth do
   # subset, and the report names this budget. A cover of 76 features
   # shrinks to five, because C(76, 6) is 218618940.
   @subset_budget 100_000_000
+  # Four queens considers 94970 programs. One million is above that
+  # walk and below the eight-queens size walk, which had already
+  # considered 3766542 programs by the end of size 7.
+  @considered_budget 1_000_000
+  # Growth of this enumeration, not the size of the VM. 512 MiB stops
+  # a walk that is still under the considered budget.
+  @memory_budget 512 * 1_048_576
 
   @doc """
   The size `enumerate_sized/4` searches up to.
@@ -135,6 +142,32 @@ defmodule Muro.Synth do
   names the budget.
   """
   def subset_budget, do: @subset_budget
+
+  @doc """
+  Programs `enumerate_sized/4` considers before it stops.
+
+  The walk stops once it has considered this many programs. The report
+  names `considered budget` and does not deploy a predicate. A test
+  overrides the bound with
+  `Application.put_env(:muro, :synth_considered_budget, n)` before the
+  walk starts. The walk reads the bound once, at the start.
+  """
+  def considered_budget do
+    Application.get_env(:muro, :synth_considered_budget, @considered_budget)
+  end
+
+  @doc """
+  Bytes of growth `enumerate_sized/4` may add before it stops.
+
+  The bound is the growth of `:erlang.memory(:total)` during that walk,
+  not the size of the VM. The report names `memory budget`. A test
+  overrides it with
+  `Application.put_env(:muro, :synth_memory_budget, n)` before the walk
+  starts. A negative override stops at the first program.
+  """
+  def memory_budget do
+    Application.get_env(:muro, :synth_memory_budget, @memory_budget)
+  end
 
   @doc """
   Pack `pred` on `states` into an integer. The first state is the high bit.
@@ -158,14 +191,23 @@ defmodule Muro.Synth do
   Programs from `features` up to `max_size`, one per observation signature.
 
   `sig_fun.(pred)` is that signature. `width` is the number of states the
-  signature packs, and it is the mask a negation flips. The result is
-  `{index, meta}`. `index` maps a signature to `{program, size, order}`.
-  `meta` counts the programs considered, the distinct signatures, the
-  new signatures at each size, and whether a subset was skipped because
-  its binomial coefficient passed `subset_budget/0`.
+  signature packs, and it is the mask a negation flips. `index` maps a
+  signature to `{program, size, order}`. `meta` counts the programs
+  considered, the distinct signatures, the new signatures at each size,
+  and whether a subset was skipped because its binomial coefficient
+  passed `subset_budget/0`.
 
   `wanted` is a set of signatures to retain. Counts still include every
-  new signature. `nil` retains every signature.
+  new signature. `nil` retains every signature. The bank keeps a program
+  only for a wanted signature. `seen` still records every signature, so
+  a later smaller program of a wanted signature replaces the one kept,
+  and a repeated signature is not counted twice.
+
+  `{:ok, index, meta}` is a finished walk. `{:empty, reason, meta}` is
+  a stop: `reason` is `considered budget` or `memory budget`. `meta`
+  counts only the programs considered before that stop. A partial bank
+  is not returned. The bounds are `considered_budget/0` and
+  `memory_budget/0`, read once at the start.
   """
   def enumerate_sized(features, max_size, sig_fun, width)
       when is_list(features) and is_integer(max_size) and max_size >= 1 and
@@ -210,38 +252,62 @@ defmodule Muro.Synth do
       distinct: 0,
       ord: 0,
       trace: trace?(),
-      started: started
+      started: started,
+      stop: nil,
+      considered_budget: considered_budget(),
+      memory_budget: memory_budget(),
+      base_mem: :erlang.memory(:total)
     }
 
     st =
       Enum.reduce_while(1..max_size, st, fn size, st ->
-        trace_begin(st, size)
-        st = add_size(st, size)
-        trace_size(st, size, started)
-
-        if wanted != nil and Enum.all?(wanted, &Map.has_key?(st.seen, &1)) do
+        if stopped?(st) do
           {:halt, st}
         else
-          {:cont, st}
+          trace_begin(st, size)
+          st = add_size(st, size)
+          trace_size(st, size, started)
+
+          cond do
+            stopped?(st) ->
+              {:halt, st}
+
+            wanted != nil and Enum.all?(wanted, &Map.has_key?(st.seen, &1)) ->
+              {:halt, st}
+
+            true ->
+              {:cont, st}
+          end
         end
       end)
 
+    meta = sized_meta(st, k_ideal, k_cap, started)
+
+    if stopped?(st) do
+      {:empty, st.stop, meta}
+    else
+      {:ok, st.bank, meta}
+    end
+  end
+
+  defp sized_meta(st, k_ideal, k_cap, started) do
     sizes =
       st.counts
       |> Enum.reject(fn {_size, count} -> count <= 0 end)
       |> Enum.sort_by(&elem(&1, 0))
       |> Enum.map(fn {size, count} -> [size, count] end)
 
-    meta = %{
+    %{
       considered: st.considered,
       distinct: st.distinct,
       truncated: k_ideal >= 2 and k_cap < k_ideal,
       sizes: sizes,
       enum_ms: System.monotonic_time(:millisecond) - started
     }
-
-    {st.bank, meta}
   end
+
+  defp stopped?(%{stop: stop}) when is_binary(stop), do: true
+  defp stopped?(_st), do: false
 
   @doc """
   Predicates in `vs` that match the observation `{state, bit}`.
@@ -426,14 +492,16 @@ defmodule Muro.Synth do
     end
   end
 
+  defp add_size(st, _size) when is_binary(st.stop), do: st
+
   defp add_size(st, 1) do
-    Enum.reduce(st.atoms, st, fn atom, st ->
+    reduce_stop(st.atoms, st, fn atom, st ->
       sized_insert(st, fn -> atom end, 1, Map.fetch!(st.sigs, atom))
     end)
   end
 
   defp add_size(st, 2) do
-    Enum.reduce(st.atoms, st, fn atom, st ->
+    reduce_stop(st.atoms, st, fn atom, st ->
       sig = negate_sig(Map.fetch!(st.sigs, atom), st.mask)
       sized_insert(st, fn -> {:not, atom} end, 2, sig)
     end)
@@ -459,11 +527,23 @@ defmodule Muro.Synth do
     |> add_wraps(size)
   end
 
+  defp reduce_stop(enum, acc, fun) do
+    Enum.reduce_while(enum, acc, fn item, acc ->
+      if stopped?(acc) do
+        {:halt, acc}
+      else
+        {:cont, fun.(item, acc)}
+      end
+    end)
+  end
+
+  defp add_atom_pairs(st, _op, _size, _negated?) when is_binary(st.stop), do: st
+
   defp add_atom_pairs(st, op, size, negated?) do
-    Enum.reduce(st.atoms, st, fn left, st ->
+    reduce_stop(st.atoms, st, fn left, st ->
       left_sig = Map.fetch!(st.sigs, left)
 
-      Enum.reduce(st.atoms, st, fn right, st ->
+      reduce_stop(st.atoms, st, fn right, st ->
         right_sig =
           if negated?,
             do: negate_sig(Map.fetch!(st.sigs, right), st.mask),
@@ -478,6 +558,8 @@ defmodule Muro.Synth do
     end)
   end
 
+  defp add_bare_nary(st, _size) when is_binary(st.stop), do: st
+
   defp add_bare_nary(st, size) do
     k = div(size + 1, 2)
 
@@ -491,6 +573,8 @@ defmodule Muro.Synth do
       st
     end
   end
+
+  defp add_not_nary(st, _size) when is_binary(st.stop), do: st
 
   defp add_not_nary(st, size) do
     body = size - 1
@@ -518,6 +602,8 @@ defmodule Muro.Synth do
     end
   end
 
+  defp add_wraps(st, _size) when is_binary(st.stop), do: st
+
   defp add_wraps(st, size) do
     k = div(size - 2, 2)
 
@@ -528,7 +614,7 @@ defmodule Muro.Synth do
         or_sig = negate_sig(fold_sig(chosen, st.sigs, :or), st.mask)
         and_sig = negate_sig(fold_sig(chosen, st.sigs, :and), st.mask)
 
-        Enum.reduce(st.atoms, st, fn atom, st ->
+        reduce_stop(st.atoms, st, fn atom, st ->
           atom_sig = Map.fetch!(st.sigs, atom)
 
           st
@@ -559,10 +645,13 @@ defmodule Muro.Synth do
     end
   end
 
+  defp add_subsets(st, _k, _fun) when is_binary(st.stop), do: st
+
   defp add_subsets(st, k, fun) do
     combine(st.feat_atoms, k, [], fun, st)
   end
 
+  defp combine(_list, _k, _chosen, _fun, %{stop: stop} = acc) when is_binary(stop), do: acc
   defp combine(_list, 0, chosen, fun, acc), do: fun.(Enum.reverse(chosen), acc)
   defp combine([], _k, _chosen, _fun, acc), do: acc
 
@@ -585,47 +674,68 @@ defmodule Muro.Synth do
   defp combine_sig(:and, left, right), do: Bitwise.band(left, right)
   defp negate_sig(sig, mask), do: Bitwise.bxor(sig, mask)
 
+  # One choke point for both bounds. A program past either bound is not
+  # inserted. `seen` still records every signature that was inserted, so
+  # the counts stay the counts of the programs actually considered.
+  defp sized_insert(%{stop: stop} = st, _prog_fun, _size, _sig) when is_binary(stop), do: st
+
+  defp sized_insert(st, _prog_fun, _size, _sig) when st.considered >= st.considered_budget do
+    %{st | stop: "considered budget"}
+  end
+
+  defp sized_insert(st, _prog_fun, _size, _sig) when st.memory_budget < 0 do
+    %{st | stop: "memory budget"}
+  end
+
   defp sized_insert(st, prog_fun, size, sig) do
-    st =
-      if size > st.max_size do
-        st
-      else
-        considered = st.considered + 1
+    if over_memory?(st) do
+      %{st | stop: "memory budget"}
+    else
+      st = insert_counted(st, prog_fun, size, sig)
+      heartbeat(st)
+    end
+  end
 
-        case Map.fetch(st.seen, sig) do
-          {:ok, old} when old <= size ->
-            %{st | considered: considered}
+  defp over_memory?(st) do
+    :erlang.memory(:total) - st.base_mem > st.memory_budget
+  end
 
-          {:ok, old} ->
-            %{
-              st
-              | considered: considered,
-                seen: Map.put(st.seen, sig, size),
-                counts: move_count(st.counts, old, size),
-                bank: replace_bank(st, sig, prog_fun, size)
-            }
+  defp insert_counted(st, _prog_fun, size, _sig) when size > st.max_size, do: st
 
-          :error ->
-            bank =
-              if st.wanted == nil or MapSet.member?(st.wanted, sig) do
-                Map.put(st.bank, sig, {prog_fun.(), size, st.ord})
-              else
-                st.bank
-              end
+  defp insert_counted(st, prog_fun, size, sig) do
+    considered = st.considered + 1
 
-            %{
-              st
-              | considered: considered,
-                seen: Map.put(st.seen, sig, size),
-                counts: Map.update(st.counts, size, 1, &(&1 + 1)),
-                bank: bank,
-                ord: st.ord + 1,
-                distinct: st.distinct + 1
-            }
-        end
-      end
+    case Map.fetch(st.seen, sig) do
+      {:ok, old} when old <= size ->
+        %{st | considered: considered}
 
-    heartbeat(st)
+      {:ok, old} ->
+        %{
+          st
+          | considered: considered,
+            seen: Map.put(st.seen, sig, size),
+            counts: move_count(st.counts, old, size),
+            bank: replace_bank(st, sig, prog_fun, size)
+        }
+
+      :error ->
+        bank =
+          if st.wanted == nil or MapSet.member?(st.wanted, sig) do
+            Map.put(st.bank, sig, {prog_fun.(), size, st.ord})
+          else
+            st.bank
+          end
+
+        %{
+          st
+          | considered: considered,
+            seen: Map.put(st.seen, sig, size),
+            counts: Map.update(st.counts, size, 1, &(&1 + 1)),
+            bank: bank,
+            ord: st.ord + 1,
+            distinct: st.distinct + 1
+        }
+    end
   end
 
   defp heartbeat(%{trace: true, considered: considered} = st)

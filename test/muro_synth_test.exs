@@ -237,7 +237,7 @@ defmodule Muro.SynthTest do
       _feature, _state -> false
     end
 
-    {index, meta} =
+    {:ok, index, meta} =
       Synth.enumerate_sized(
         features,
         Synth.pred_size_bound(),
