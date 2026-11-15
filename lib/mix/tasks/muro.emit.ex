@@ -1,7 +1,7 @@
 defmodule Mix.Tasks.Muro.Emit do
   use Mix.Task
 
-  @shortdoc "Emit run definitions as Elixir, C, Rust, Zig, JavaScript, or Cortex-M assembly, a session as OTP or a state machine, a cross as a call, or closed equations as ExUnit"
+  @shortdoc "Emit run definitions as Elixir, C, Rust, Zig, JavaScript, or Cortex-M assembly, a session as OTP or a state machine, a cross as a call, closed equations as ExUnit, or one graded run as a beam image"
 
   @moduledoc """
   Emit the `run` definitions of a `.muro` file.
@@ -16,6 +16,7 @@ defmodule Mix.Tasks.Muro.Emit do
       mix muro.emit path.muro --backend otp
       mix muro.emit path.muro --backend fsm
       mix muro.emit path.muro --backend exunit
+      mix muro.emit path.muro --backend beam
       mix muro.emit path.muro --node a
 
   The default backend is Elixir, the same text as `Muro.emit_file/3`.
@@ -66,6 +67,12 @@ defmodule Mix.Tasks.Muro.Emit do
   name is the stem plus `Fsm` (`meet.muro` is `MeetFsm`). Each session
   is a child module of pure functions. The host keeps the transport.
   Nothing is written next to the book.
+
+  `--backend beam` writes `<stem>.mbi` next to the file and prints that
+  path. The file is one exported run, and the binder grades stay. A
+  definition, data, a pair, a word, or a stream is refused. The
+  runtime that reads the image checks it again. This is not a manifest
+  target. See the Beam images page.
 
   `--node` writes `<stem>_node.ex` next to the file and prints that
   path. `place.muro` with `--node a` is `place_node.ex`. Each `cross`

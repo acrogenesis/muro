@@ -23,7 +23,8 @@ defmodule Muro.CLI.Emit do
           "asm     <stem>.s, Thumb for Cortex-M0",
           "otp     <stem>_otp.ex, a GenServer per process",
           "fsm     one state-machine module on standard output",
-          "exunit  one ExUnit module for the closed equations"
+          "exunit  one ExUnit module for the closed equations",
+          "beam    <stem>.mbi beside the book, one graded run"
         ]
       },
       %{
@@ -48,7 +49,7 @@ defmodule Muro.CLI.Emit do
   def help do
     Muro.CLI.Text.page([
       Muro.CLI.Text.prose("""
-      muro emit reads one .muro file, checks it, and emits run definitions. Spec and evidence are omitted. elixir, the default, prints one module on standard output and writes no file. c, rust, zig, and asm write a file beside the book and print that path. js writes <stem>.mjs and <stem>.d.ts beside the book and prints both paths. The executable does not load a Mix project, so c writes the .h and the .c only and does not build a NIF. otp writes a GenServer for each conforming process. fsm prints a state machine and leaves the transport with the host. exunit prints one ExUnit module for the book's closed equations. Nothing here is a proof that the host translation is the book. The proof stops at the run image.
+      muro emit reads one .muro file, checks it, and emits run definitions. Spec and evidence are omitted. elixir, the default, prints one module on standard output and writes no file. c, rust, zig, asm, and beam write a file beside the book and print that path. js writes <stem>.mjs and <stem>.d.ts beside the book and prints both paths. The executable does not load a Mix project, so c writes the .h and the .c only and does not build a NIF. otp writes a GenServer for each conforming process. fsm prints a state machine and leaves the transport with the host. exunit prints one ExUnit module for the book's closed equations. beam writes <stem>.mbi: one exported run, and the binder grades stay. A definition, data, a pair, a word, or a stream is refused. The runtime that reads the image checks it again. Nothing here is a proof that the host translation is the book. The proof stops at the run image.
       """),
       Muro.CLI.Text.section(
         "USAGE",
@@ -70,7 +71,8 @@ defmodule Muro.CLI.Emit do
             {"muro emit book.muro --backend zig", "Write book.zig beside the book."},
             {"muro emit book.muro --backend js", "Write book.mjs and book.d.ts."},
             {"muro emit book.muro --backend c", "Write book.h and book.c. No NIF."},
-            {"muro emit book.muro --backend exunit", "Print an ExUnit module."}
+            {"muro emit book.muro --backend exunit", "Print an ExUnit module."},
+            {"muro emit book.muro --backend beam", "Write book.mbi beside the book."}
           ],
           "\n\n"
         )
@@ -80,7 +82,7 @@ defmodule Muro.CLI.Emit do
         Muro.CLI.Text.exits([
           {"0", "The module or the files were emitted."},
           {"1",
-           "The book does not check, the backend is unknown, the path is missing or not exactly one, or a flag does not apply."}
+           "The book does not check, a beam image refuses a run, the backend is unknown, the path is missing or not exactly one, or a flag does not apply."}
         ])
       ),
       Muro.CLI.Text.section(
@@ -192,6 +194,24 @@ defmodule Muro.CLI.Emit do
     files(Muro.emit_otp(path))
   end
 
+  defp dispatch(path, "beam", nil, _nif) do
+    case Muro.emit_beam(path) do
+      {:ok, paths} ->
+        {:ok, Muro.CLI.join_lines(paths), ""}
+
+      {:error, message} ->
+        file = Path.join(Path.dirname(path), Path.basename(path, ".muro") <> ".mbi")
+
+        # The path is the image this call wrote. A load or check error
+        # is not that, even when an older image is still beside the book.
+        if refusal?(message) and File.regular?(file) do
+          {:raise, Muro.CLI.join_lines([file]), message}
+        else
+          {:raise, "", message}
+        end
+    end
+  end
+
   defp dispatch(path, "fsm", nil, _nif) do
     case Muro.emit_fsm(path, Muro.Emit.fsm_module(path)) do
       {:ok, src} -> {:ok, src <> "\n", ""}
@@ -205,6 +225,9 @@ defmodule Muro.CLI.Emit do
 
   defp files({:ok, paths}), do: {:ok, Muro.CLI.join_lines(paths), ""}
   defp files({:error, message}), do: {:raise, "", message}
+
+  defp refusal?(message) when is_binary(message), do: String.starts_with?(message, "beam:")
+  defp refusal?(_), do: false
 
   defp nif?(:force), do: true
   defp nif?(:auto), do: mix_project_cwd?()

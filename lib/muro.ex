@@ -244,6 +244,40 @@ defmodule Muro do
     end
   end
 
+  @doc """
+  Write `<stem>.mbi` next to `path`. The file is one exported run: a
+  function, an application, zero, successor, or a match on Nat, with
+  the binder's grade kept. A definition, data, a pair, a word, or a
+  stream is refused. The runtime that reads the image checks it again.
+
+  The first exported run whose body erases is the entry. A later
+  exported run is named in the error, and the file is still written.
+  A book with no exported run, and a book whose runs all fail, writes
+  nothing and removes a previous image at that path. `opts` is `fuel:`
+  and `root:`, as in `check_file/2`. This is not a manifest target.
+  """
+  def emit_beam(path, opts \\ []) do
+    stem = Path.basename(path, ".muro")
+    dir = Path.dirname(path)
+    file = Path.join(dir, stem <> ".mbi")
+
+    with {:ok, book} <- Load.file(path, opts) do
+      case Emit.Beam.render(Prelude.for_emit(book)) do
+        {:ok, image, ""} ->
+          File.write!(file, image)
+          {:ok, [file]}
+
+        {:ok, image, refused} ->
+          File.write!(file, image)
+          {:error, refused}
+
+        {:error, message} ->
+          _ = File.rm(file)
+          {:error, message}
+      end
+    end
+  end
+
   defp checked_book(path, opts) do
     with {:ok, book} <- Load.file(path, opts) do
       {:ok, book |> Prelude.for_emit() |> Grade.erase_book()}
