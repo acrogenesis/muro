@@ -347,6 +347,7 @@ defmodule Muro.Synth.Loop do
       end)
 
     max_size = Synth.pred_size_bound()
+    trace_features(host)
 
     {index, meta} =
       Synth.enumerate_sized(
@@ -468,6 +469,27 @@ defmodule Muro.Synth.Loop do
 
   defp finish(other), do: other
 
+  defp trace_note(text) do
+    if System.get_env("MURO_SYNTH_TRACE") in ["1", "true"] do
+      IO.puts(:stderr, "muro synth: #{text}")
+    end
+  end
+
+  defp trace_features(host) do
+    if System.get_env("MURO_SYNTH_TRACE") in ["1", "true"] do
+      specs = host[:feature_specs] || []
+
+      kinds =
+        specs
+        |> Enum.map(& &1.kind)
+        |> Enum.frequencies()
+        |> Enum.map_join(" ", fn {kind, count} -> "#{kind} #{count}" end)
+
+      IO.puts(:stderr, "muro synth: feature kinds #{kinds}")
+      IO.puts(:stderr, "muro synth: feature names #{Enum.join(host.features, " ")}")
+    end
+  end
+
   defp fit_tasks(tasks, vs, score, feat, rejected) do
     initial = length(vs)
 
@@ -515,6 +537,8 @@ defmodule Muro.Synth.Loop do
          rejected,
          oracle
        ) do
+    trace_note("policy render start")
+
     case Book.render(host, arms, anchor, oracle) do
       {:error, _reason} ->
         advance(
@@ -536,9 +560,19 @@ defmodule Muro.Synth.Loop do
         )
 
       {:ok, source, meta} ->
+        started = System.monotonic_time(:millisecond)
+
+        trace_note(
+          "certificate start bytes #{byte_size(source)} " <>
+            Enum.map_join(arms, " | ", fn arm ->
+              "#{arm.name} #{Synth.render(arm.pred)}"
+            end)
+        )
+
         case Book.check(source, anchor, fn path -> checker.(path, fuel) end) do
           :ok ->
-            {:ok, checked(arms, source, versions, meta)}
+            cert_ms = System.monotonic_time(:millisecond) - started
+            {:ok, checked(arms, source, versions, Map.put(meta, :cert_ms, cert_ms))}
 
           {:error, :storage, diagnostic} ->
             {:error, :storage, diagnostic}
@@ -880,6 +914,8 @@ defmodule Muro.Synth.Loop do
         preference(arms) ++
         Enum.map(versions, &"version space #{&1}")
 
+    cert_line = "certificate check #{meta.cert_ms} ms"
+
     case meta.kind do
       :certified ->
         also = if meta.also, do: ["also #{meta.also}"], else: []
@@ -887,7 +923,7 @@ defmodule Muro.Synth.Loop do
         lines =
           ["muro synth: homomorphism checked"] ++
             base ++
-            ["certificate #{meta.certificate}"] ++
+            ["certificate #{meta.certificate}", cert_line] ++
             also
 
         %{
@@ -898,14 +934,15 @@ defmodule Muro.Synth.Loop do
           versions: versions,
           cex: [],
           certificate: meta.certificate,
-          reason: nil
+          reason: nil,
+          cert_ms: meta.cert_ms
         }
 
       :policy ->
         lines =
           ["muro synth: policy checked"] ++
             base ++
-            ["homomorphism is not derivable", meta.reason]
+            ["homomorphism is not derivable", meta.reason, cert_line]
 
         %{
           status: :policy,
@@ -915,7 +952,8 @@ defmodule Muro.Synth.Loop do
           versions: versions,
           cex: [],
           certificate: nil,
-          reason: meta.reason
+          reason: meta.reason,
+          cert_ms: meta.cert_ms
         }
     end
   end

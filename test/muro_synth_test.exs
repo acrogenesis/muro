@@ -267,6 +267,14 @@ defmodule Muro.SynthTest do
     assert {true, 1, _ord} = Map.fetch!(index, Synth.signature(true, states, feat))
   end
 
+  test "the subset budget covers a nine-feature subset of thirty-six features" do
+    # Size 18 asks for a subset of nine. C(36, 9) is 94143280.
+    # C(40, 8) is 76904685. Both are built. C(40, 9) stays above the budget.
+    assert Synth.pred_size_bound() == 18
+    assert Synth.subset_budget() >= 94_143_280
+    assert Synth.subset_budget() >= 76_904_685
+  end
+
   test "the predicate evaluator is part of the compiler and does not import Bool" do
     src = Muro.Synth.Book.evaluator()
     assert src =~ "data PredProg"

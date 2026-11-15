@@ -902,12 +902,15 @@ defmodule Muro.Synth.Book do
         {nil, taken, ""}
       end
 
+    # A closed cover gets a table the checker re-checks. Anything else
+    # keeps the recurrence.
     {one, taken, reach_text} =
       if need_reach do
         {best, taken} = alloc("dyn-best-pos", taken)
         {one, taken} = alloc("dyn-one", taken)
         {any, taken} = alloc("dyn-any", taken)
-        {one, taken, reach_sources(best, one, any, pos, host.actions)}
+        {text, taken} = Muro.Synth.Reach.sources(host, best, one, any, pos, taken)
+        {one, taken, text}
       else
         {nil, taken, ""}
       end
@@ -1021,44 +1024,6 @@ defmodule Muro.Synth.Book do
     def #{name} : run Π (+ s : State) → Bool :=
       λ (+ s : State) →
         #{terminal_body(same, actions)}
-    """
-  end
-
-  # `dyn-best-pos` is first and descends on `k`. `dyn-one` passes that
-  # same `k` to it. `dyn-any` passes its `j` to `dyn-one`. The call the
-  # other way, from `suc j`, is the smaller argument. These three runs
-  # are not memoized. The search memos the same recursion while it
-  # filters. Checking the run at every cover state is the cost that
-  # stops eight queens: the cover there has 2058 states.
-  defp reach_sources(best, one, any, pos, actions) do
-    """
-    def #{best} : run Π (+ s : State) → Π (+ k : Nat) → Bool :=
-      λ (+ s : State) → λ (+ k : Nat) →
-        match k motive (λ _ → Bool)
-          | 0 => false
-          | suc j => #{any} s j
-
-    def #{one} : run Π (+ s : State) → Π (+ a : Action) → Π (+ k : Nat) → Bool :=
-      λ (+ s : State) → λ (+ a : Action) → λ (+ k : Nat) →
-        (match (#{pos} (snd (step s a))) motive (λ _ → Bool)
-          | true => true
-          | false => #{best} (fst (step s a)) k)
-
-    def #{any} : run Π (+ s : State) → Π (+ j : Nat) → Bool :=
-      λ (+ s : State) → λ (+ j : Nat) →
-        #{reach_any_body(one, actions)}
-    """
-  end
-
-  defp reach_any_body(one, [action]) do
-    "#{one} s #{action} j"
-  end
-
-  defp reach_any_body(one, [action | rest]) do
-    """
-    (match (#{one} s #{action} j) motive (λ _ → Bool)
-      | true => true
-      | false => #{reach_any_body(one, rest)})
     """
   end
 

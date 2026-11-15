@@ -113,8 +113,12 @@ defmodule Muro.Synth do
   def enumerate(features, depth) when is_integer(depth) and depth > 0,
     do: extend(enumerate(features, depth - 1))
 
-  @pred_size_bound 16
-  @subset_budget 100_000
+  @pred_size_bound 18
+  # C(36, 9) is 94143280 and C(40, 8) is 76904685. C(40, 9) is
+  # 273438880, so a cover of forty features still shrinks the widest
+  # subset, and the report names this budget. A cover of 76 features
+  # shrinks to five, because C(76, 6) is 218618940.
+  @subset_budget 100_000_000
 
   @doc """
   The size `enumerate_sized/4` searches up to.
@@ -123,6 +127,12 @@ defmodule Muro.Synth do
 
   @doc """
   A subset whose binomial coefficient is above this is not enumerated.
+
+  The budget admits a subset of nine features out of thirty-six, which
+  is the widest subset a size of 18 builds, and a subset of eight
+  features out of forty. A cover of seventy-six features shrinks to a
+  subset of five. A wider subset is still skipped, and the report
+  names the budget.
   """
   def subset_budget, do: @subset_budget
 
@@ -176,6 +186,7 @@ defmodule Muro.Synth do
     k_wrap = if max_size >= 4, do: div(max_size - 2, 2), else: 0
     k_ideal = min(n, max(k_or, k_wrap))
     k_cap = shrink_k(n, k_ideal)
+    trace_open(n, max_size, k_cap, k_ideal)
 
     sigs =
       Map.new(atoms, fn
@@ -197,12 +208,16 @@ defmodule Muro.Synth do
       counts: %{},
       considered: 0,
       distinct: 0,
-      ord: 0
+      ord: 0,
+      trace: trace?(),
+      started: started
     }
 
     st =
       Enum.reduce_while(1..max_size, st, fn size, st ->
+        trace_begin(st, size)
         st = add_size(st, size)
+        trace_size(st, size, started)
 
         if wanted != nil and Enum.all?(wanted, &Map.has_key?(st.seen, &1)) do
           {:halt, st}
@@ -571,44 +586,62 @@ defmodule Muro.Synth do
   defp negate_sig(sig, mask), do: Bitwise.bxor(sig, mask)
 
   defp sized_insert(st, prog_fun, size, sig) do
-    if size > st.max_size do
-      st
-    else
-      considered = st.considered + 1
+    st =
+      if size > st.max_size do
+        st
+      else
+        considered = st.considered + 1
 
-      case Map.fetch(st.seen, sig) do
-        {:ok, old} when old <= size ->
-          %{st | considered: considered}
+        case Map.fetch(st.seen, sig) do
+          {:ok, old} when old <= size ->
+            %{st | considered: considered}
 
-        {:ok, old} ->
-          %{
-            st
-            | considered: considered,
-              seen: Map.put(st.seen, sig, size),
-              counts: move_count(st.counts, old, size),
-              bank: replace_bank(st, sig, prog_fun, size)
-          }
+          {:ok, old} ->
+            %{
+              st
+              | considered: considered,
+                seen: Map.put(st.seen, sig, size),
+                counts: move_count(st.counts, old, size),
+                bank: replace_bank(st, sig, prog_fun, size)
+            }
 
-        :error ->
-          bank =
-            if st.wanted == nil or MapSet.member?(st.wanted, sig) do
-              Map.put(st.bank, sig, {prog_fun.(), size, st.ord})
-            else
-              st.bank
-            end
+          :error ->
+            bank =
+              if st.wanted == nil or MapSet.member?(st.wanted, sig) do
+                Map.put(st.bank, sig, {prog_fun.(), size, st.ord})
+              else
+                st.bank
+              end
 
-          %{
-            st
-            | considered: considered,
-              seen: Map.put(st.seen, sig, size),
-              counts: Map.update(st.counts, size, 1, &(&1 + 1)),
-              bank: bank,
-              ord: st.ord + 1,
-              distinct: st.distinct + 1
-          }
+            %{
+              st
+              | considered: considered,
+                seen: Map.put(st.seen, sig, size),
+                counts: Map.update(st.counts, size, 1, &(&1 + 1)),
+                bank: bank,
+                ord: st.ord + 1,
+                distinct: st.distinct + 1
+            }
+        end
       end
-    end
+
+    heartbeat(st)
   end
+
+  defp heartbeat(%{trace: true, considered: considered} = st)
+       when rem(considered, 1_000_000) == 0 do
+    elapsed = System.monotonic_time(:millisecond) - st.started
+    heap = div(:erlang.memory(:total), 1_048_576)
+
+    IO.puts(
+      :stderr,
+      "muro synth: considered #{considered} distinct #{st.distinct} #{elapsed} ms heap #{heap} MB"
+    )
+
+    st
+  end
+
+  defp heartbeat(st), do: st
 
   defp replace_bank(st, sig, prog_fun, size) do
     if Map.has_key?(st.bank, sig) do
@@ -622,6 +655,43 @@ defmodule Muro.Synth do
     counts
     |> Map.update!(old, &(&1 - 1))
     |> Map.update(size, 1, &(&1 + 1))
+  end
+
+  defp trace_begin(%{trace: true} = st, size) do
+    elapsed = System.monotonic_time(:millisecond) - st.started
+
+    IO.puts(
+      :stderr,
+      "muro synth: size #{size} begin considered #{st.considered} distinct #{st.distinct} #{elapsed} ms"
+    )
+  end
+
+  defp trace_begin(_st, _size), do: :ok
+
+  defp trace_open(n, max_size, k_cap, k_ideal) do
+    if trace?() do
+      IO.puts(
+        :stderr,
+        "muro synth: enumerate features #{n} size bound #{max_size} k cap #{k_cap} k ideal #{k_ideal}"
+      )
+    end
+  end
+
+  defp trace_size(st, size, started) do
+    if trace?() do
+      elapsed = System.monotonic_time(:millisecond) - started
+      new = Map.get(st.counts, size, 0)
+      heap = div(:erlang.memory(:total), 1_048_576)
+
+      IO.puts(
+        :stderr,
+        "muro synth: size #{size} new #{new} considered #{st.considered} distinct #{st.distinct} #{elapsed} ms heap #{heap} MB"
+      )
+    end
+  end
+
+  defp trace? do
+    System.get_env("MURO_SYNTH_TRACE") in ["1", "true"]
   end
 
   defp shrink_k(_n, k) when not is_integer(k) or k < 2, do: 0

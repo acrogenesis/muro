@@ -31,7 +31,7 @@ In brief: `examples/cshrl/` is [CSHRL](https://github.com/doctorcorral/csh-rl) i
 | `envs/list_cover.muro` | Two lists of Nat, no declared feature. `trace` checks `CoindHomo` for the reward of `go` |
 | `envs/nested_bin.muro` | A constructor under a recursive child, no declared feature. `trace` checks `CoindHomo` for that constructor |
 | `envs/queens4.muro` | Four rows, no declared feature. Depth 0 and 1 are empty. Size 8 enumerates a survivor. `trace` checks `CoindHomo` |
-| `envs/queens8.muro` | Eight rows, no declared feature. The unmemoized runs do not finish, outside `mix test` |
+| `envs/queens8.muro` | Eight rows, no declared feature. Size 8 stops when the signature map exhausts memory, outside `mix test` |
 | `std/` | Bool, Nat order and `maxN`, List, Stream with `Dom` |
 
 A library file does not check on its own: `mix muro.check examples/cshrl/lib/core.muro` refuses with `param State is supplied by a file that imports this one`. Check an environment instead:
@@ -73,7 +73,7 @@ The Finder adds `leb`, `default-action` and `horizon`. `successor_sum.muro` adds
 
 **SkillInvestment.** `train` moves from novice to apprentice to expert to master and earns 0 each time. `work` earns 1, 2 or 3 and stays put. Master earns 5. `value novice` is 1, 2, 3, 5, 5, …. `skill-homomorphism` ranks `train` above `work` below master. Three impossibilities refute a `CoindHomo` ranking `work` at or below `train` at novice, apprentice and expert. The Finder works and the successor Finder trains.
 
-**Queens.** Four rows, and no declared feature. The cover is the safe boards and `dead`. Depth 0 and depth 1 name no predicate. `reaches-pos` holds when an action pays a positive reward now or within the horizon. The search then enumerates by size. The survivor for each action is size 8, and the book checks `CoindHomo`. `policy` is `eval` of that predicate. Eight rows is the same dynamics. The book evaluates the reachability runs without memoizing them, and that check does not finish. The size bound does not build a disjunction of eight actions. The paper certifies this MDP with the class-level homomorphism of `CombinatorialPlacementMDP` and `WithTraceBridge`, over predicates that are the step. That homomorphism is not in this search.
+**Queens.** Four rows, and no declared feature. The cover is the safe boards and `dead`. Depth 0 and depth 1 name no predicate. `reaches-pos` holds when an action pays a positive reward now or within the horizon. The search then enumerates by size. The survivor for each action is size 8, and the book checks `CoindHomo`. `policy` is `eval` of that predicate. Eight rows is the same dynamics. The search reads 76 features and stops during size 8, when the signature map exhausts memory. No predicate is certified. The subset budget does not build a disjunction of eight actions on that feature set. The paper certifies this MDP with the class-level homomorphism of `CombinatorialPlacementMDP` and `WithTraceBridge`, over predicates that are the step. That homomorphism is not in this search.
 
 ## The agents
 

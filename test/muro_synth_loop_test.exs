@@ -335,8 +335,8 @@ defmodule Muro.SynthLoopTest do
     assert Enum.map(goals, & &1.name) == ["len-is-4"]
   end
 
-  # The certificate reduces the reachability runs at every cover state.
-  # Locally that check took a few minutes.
+  # The certificate reduces the tabulated reachability runs.
+  # Locally that check took 53 seconds. Before the table it took 169 seconds.
   @tag timeout: 720_000
   test "4-queens certifies positive-reward reachability" do
     src = File.read!(@queens4)
@@ -415,8 +415,16 @@ defmodule Muro.SynthLoopTest do
     assert result.book =~ "def dyn-best-pos "
     assert result.book =~ "def dyn-one "
     assert result.book =~ "def dyn-any "
-    assert result.book =~ "| suc j => dyn-any s j"
+    assert result.book =~ "def dyn-known "
+    assert result.book =~ "def dyn-best-rec "
+    assert result.book =~ "def dyn-one-rec "
+    assert result.book =~ "def dyn-any-rec "
+    assert result.book =~ "| suc j => dyn-any-rec s j"
+    assert result.book =~ "def dyn-reach-agrees "
+    assert result.book =~ "def dyn-reach-holds "
+    assert result.book =~ "≡ true : Bool"
     assert result.book =~ "evidence CoindHomo rank"
+    assert result.cert_ms < 180_000
     refute result.book =~ "find-policy"
     refute result.book =~ "placed-find-policy"
 
@@ -427,7 +435,8 @@ defmodule Muro.SynthLoopTest do
     assert text =~ "enumeration"
     assert text =~ "considered 94970"
     assert text =~ "distinct 1499"
-    assert text =~ "predicate size bound 16"
+    assert text =~ "predicate size bound 18"
+    assert text =~ "certificate check"
     assert text =~ "at (ongoing nil) the program prefers c1"
     assert text =~ "at (ongoing (cons (suc 0) nil)) the program prefers c3"
     assert text =~ "at (ongoing (cons (suc (suc 0)) nil)) the program prefers c0"
