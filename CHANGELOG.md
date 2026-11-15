@@ -2,15 +2,15 @@
 
 ## 0.21.8
 
-A horizon-bounded placement is solved by the constraint and the goal the structural templates find. The constraint is the disjunction of the `pair-any` tests that stay false on every open or finished board. The goal is the length test that holds on every finished board and fails on every shorter open board. `placed-find-policy` is the run. When the cover is small enough to split, the checker sees `CoindHomo` for the trace order of that run, on the environment's own `step`, and only when the emitted policy takes that action at every cover state. A larger cover is reported and is not given that case split. A closed numeral in a run is emitted by the C, Rust, Zig, JavaScript, and assembly backends.
+`mix muro.synth` deploys the predicate the checker accepted. A closed numeral in a run is emitted by the C, Rust, Zig, JavaScript, and assembly backends.
 
-`examples/cshrl/envs/queens4.muro` is four rows and declares no feature. The cover has 18 states. The search reads 23 templates, keeps 18, and reduces them to six `pair-any` tests. The goal is `len-is-4`. From the empty board the policy plays `c1`, `c3`, `c0`, `c2`, and the book checks `CoindHomo`. `examples/cshrl/envs/queens8.muro` is the same dynamics at eight rows. The search reads 93 templates, keeps 84, and reduces them to 28 `pair-any` tests. The goal is `len-is-8`. From the empty board the search finds `c0`, `c4`, `c7`, `c5`, `c2`, `c6`, `c1`, `c3`. The cover has 2058 states, so no policy book is written and the case split is refused.
+`examples/cshrl/envs/queens4.muro` is four rows and declares no feature. The cover has 18 states. The features separate the boards, and no predicate at depth 0 or depth 1 matches the observations, so the command exits 1 and writes no policy. `examples/cshrl/envs/queens8.muro` is eight rows. The cover has 2058 states. `mix muro.check` accepts it. The same synthesis was stopped after 15 minutes and wrote no policy. The paper's certificate for this MDP is a class-level homomorphism. This search does not build that homomorphism, so queens is not certified.
 
 0.21.7 is the entry below. It arrived with the merge of main, which carries pull request #242.
 
 ### Manual
 
-- Synthesis. Examples.
+- Synthesis. CSHRL. Examples.
 
 ### Package
 
