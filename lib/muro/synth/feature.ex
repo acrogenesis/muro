@@ -118,39 +118,6 @@ defmodule Muro.Synth.Feature do
     end
   end
 
-  @doc """
-  One predicate per action: that action reaches a positive reward, or
-  no action does.
-
-  This is weak optimality for the boolean order `reaches-pos` defines.
-  Depth 1 cannot write a disjunction of every action, so the predicate
-  is proposed whole. It is a candidate. The observations drop it when
-  it disagrees, and an environment with no `reaches-pos` test proposes
-  nothing. Fewer than two actions has no such comparison.
-  """
-  def weak_optima(host) do
-    actions = List.wrap(host[:actions])
-
-    names =
-      host
-      |> Map.get(:feature_specs, [])
-      |> List.wrap()
-      |> Enum.filter(&(&1.kind == :reaches_pos))
-      |> Map.new(&{&1.action, &1.name})
-
-    if length(actions) >= 2 and Enum.all?(actions, &Map.has_key?(names, &1)) do
-      atoms = Enum.map(actions, &{:feat, Map.fetch!(names, &1)})
-      any = disjoin(atoms)
-      Enum.map(atoms, &{:or, &1, {:not, any}})
-    else
-      []
-    end
-  end
-
-  defp disjoin([first | rest]) do
-    Enum.reduce(rest, first, fn atom, acc -> {:or, acc, atom} end)
-  end
-
   def terminal?(host, state) do
     Enum.all?(host.actions, fn action ->
       {next, _reward} = host.step.(state, action)

@@ -18,6 +18,15 @@ defmodule Muro.Synth do
   remaining tie. A score does not put a program that missed an
   observation back into the space.
 
+  `enumerate_sized/4` is the search after `reaches-pos` is installed.
+  It builds programs by size, up to `pred_size_bound/0`: the atoms, their
+  negations, a conjunction or a disjunction of two atoms, the same with
+  the right atom negated, and a left-associated conjunction or
+  disjunction of feature tests. One further layer negates such a
+  disjunction or conjunction and joins it with an atom. One observation
+  signature keeps the smallest program. A later program of the same
+  signature is kept only when it is smaller.
+
   `cegis_loop/2` is the closed search. It enumerates, refines by
   observations taken from the environment's emitted `step`, deepens
   while the space is empty and the depth bound allows it, and, when a
@@ -103,6 +112,121 @@ defmodule Muro.Synth do
 
   def enumerate(features, depth) when is_integer(depth) and depth > 0,
     do: extend(enumerate(features, depth - 1))
+
+  @pred_size_bound 16
+  @subset_budget 100_000
+
+  @doc """
+  The size `enumerate_sized/4` searches up to.
+  """
+  def pred_size_bound, do: @pred_size_bound
+
+  @doc """
+  A subset whose binomial coefficient is above this is not enumerated.
+  """
+  def subset_budget, do: @subset_budget
+
+  @doc """
+  Pack `pred` on `states` into an integer. The first state is the high bit.
+  """
+  def signature(pred, states, feat) when is_function(feat, 2) and is_list(states) do
+    states
+    |> Enum.map(&eval(pred, feat, &1))
+    |> pack_bits()
+  end
+
+  @doc """
+  Pack booleans into an integer. The first boolean is the high bit.
+  """
+  def pack_bits(bits) when is_list(bits) do
+    Enum.reduce(bits, 0, fn bit, acc ->
+      Bitwise.bor(Bitwise.bsl(acc, 1), if(bit, do: 1, else: 0))
+    end)
+  end
+
+  @doc """
+  Programs from `features` up to `max_size`, one per observation signature.
+
+  `sig_fun.(pred)` is that signature. `width` is the number of states the
+  signature packs, and it is the mask a negation flips. The result is
+  `{index, meta}`. `index` maps a signature to `{program, size, order}`.
+  `meta` counts the programs considered, the distinct signatures, the
+  new signatures at each size, and whether a subset was skipped because
+  its binomial coefficient passed `subset_budget/0`.
+
+  `wanted` is a set of signatures to retain. Counts still include every
+  new signature. `nil` retains every signature.
+  """
+  def enumerate_sized(features, max_size, sig_fun, width)
+      when is_list(features) and is_integer(max_size) and max_size >= 1 and
+             is_function(sig_fun, 1) and is_integer(width) and width >= 0 do
+    enumerate_sized(features, max_size, sig_fun, width, nil)
+  end
+
+  def enumerate_sized(features, max_size, sig_fun, width, wanted)
+      when is_list(features) and is_integer(max_size) and max_size >= 1 and
+             is_function(sig_fun, 1) and is_integer(width) and width >= 0 and
+             (is_nil(wanted) or is_struct(wanted, MapSet)) do
+    started = System.monotonic_time(:millisecond)
+    mask = Bitwise.bsl(1, width) - 1
+    feat_atoms = Enum.map(features, &{:feat, &1})
+    atoms = [true, false | feat_atoms]
+    n = length(features)
+    k_or = div(max_size + 1, 2)
+    k_wrap = if max_size >= 4, do: div(max_size - 2, 2), else: 0
+    k_ideal = min(n, max(k_or, k_wrap))
+    k_cap = shrink_k(n, k_ideal)
+
+    sigs =
+      Map.new(atoms, fn
+        true -> {true, mask}
+        false -> {false, 0}
+        atom -> {atom, sig_fun.(atom)}
+      end)
+
+    st = %{
+      max_size: max_size,
+      mask: mask,
+      sigs: sigs,
+      atoms: atoms,
+      feat_atoms: feat_atoms,
+      k_cap: k_cap,
+      wanted: wanted,
+      seen: %{},
+      bank: %{},
+      counts: %{},
+      considered: 0,
+      distinct: 0,
+      ord: 0
+    }
+
+    st =
+      Enum.reduce_while(1..max_size, st, fn size, st ->
+        st = add_size(st, size)
+
+        if wanted != nil and Enum.all?(wanted, &Map.has_key?(st.seen, &1)) do
+          {:halt, st}
+        else
+          {:cont, st}
+        end
+      end)
+
+    sizes =
+      st.counts
+      |> Enum.reject(fn {_size, count} -> count <= 0 end)
+      |> Enum.sort_by(&elem(&1, 0))
+      |> Enum.map(fn {size, count} -> [size, count] end)
+
+    meta = %{
+      considered: st.considered,
+      distinct: st.distinct,
+      truncated: k_ideal >= 2 and k_cap < k_ideal,
+      sizes: sizes,
+      enum_ms: System.monotonic_time(:millisecond) - started
+    }
+
+    {st.bank, meta}
+  end
 
   @doc """
   Predicates in `vs` that match the observation `{state, bit}`.
@@ -284,6 +408,238 @@ defmodule Muro.Synth do
       text
     else
       raise ArgumentError, "not a Muro name: #{inspect(name)}"
+    end
+  end
+
+  defp add_size(st, 1) do
+    Enum.reduce(st.atoms, st, fn atom, st ->
+      sized_insert(st, fn -> atom end, 1, Map.fetch!(st.sigs, atom))
+    end)
+  end
+
+  defp add_size(st, 2) do
+    Enum.reduce(st.atoms, st, fn atom, st ->
+      sig = negate_sig(Map.fetch!(st.sigs, atom), st.mask)
+      sized_insert(st, fn -> {:not, atom} end, 2, sig)
+    end)
+  end
+
+  defp add_size(st, 3) do
+    st
+    |> add_atom_pairs(:and, 3, false)
+    |> add_atom_pairs(:or, 3, false)
+  end
+
+  defp add_size(st, 4) do
+    st
+    |> add_atom_pairs(:and, 4, true)
+    |> add_atom_pairs(:or, 4, true)
+    |> add_not_nary(4)
+  end
+
+  defp add_size(st, size) do
+    st
+    |> add_bare_nary(size)
+    |> add_not_nary(size)
+    |> add_wraps(size)
+  end
+
+  defp add_atom_pairs(st, op, size, negated?) do
+    Enum.reduce(st.atoms, st, fn left, st ->
+      left_sig = Map.fetch!(st.sigs, left)
+
+      Enum.reduce(st.atoms, st, fn right, st ->
+        right_sig =
+          if negated?,
+            do: negate_sig(Map.fetch!(st.sigs, right), st.mask),
+            else: Map.fetch!(st.sigs, right)
+
+        prog = fn ->
+          if negated?, do: {op, left, {:not, right}}, else: {op, left, right}
+        end
+
+        sized_insert(st, prog, size, combine_sig(op, left_sig, right_sig))
+      end)
+    end)
+  end
+
+  defp add_bare_nary(st, size) do
+    k = div(size + 1, 2)
+
+    if k >= 3 and k <= st.k_cap and 2 * k - 1 == size do
+      add_subsets(st, k, fn chosen, st ->
+        st
+        |> sized_insert(fn -> fold_prog(chosen, :or) end, size, fold_sig(chosen, st.sigs, :or))
+        |> sized_insert(fn -> fold_prog(chosen, :and) end, size, fold_sig(chosen, st.sigs, :and))
+      end)
+    else
+      st
+    end
+  end
+
+  defp add_not_nary(st, size) do
+    body = size - 1
+    k = div(body + 1, 2)
+
+    if k >= 2 and k <= st.k_cap and 2 * k - 1 == body do
+      add_subsets(st, k, fn chosen, st ->
+        or_sig = fold_sig(chosen, st.sigs, :or)
+        and_sig = fold_sig(chosen, st.sigs, :and)
+
+        st
+        |> sized_insert(
+          fn -> {:not, fold_prog(chosen, :or)} end,
+          size,
+          negate_sig(or_sig, st.mask)
+        )
+        |> sized_insert(
+          fn -> {:not, fold_prog(chosen, :and)} end,
+          size,
+          negate_sig(and_sig, st.mask)
+        )
+      end)
+    else
+      st
+    end
+  end
+
+  defp add_wraps(st, size) do
+    k = div(size - 2, 2)
+
+    if k >= 2 and k <= st.k_cap and 2 * k + 2 == size do
+      add_subsets(st, k, fn chosen, st ->
+        or_prog = fn -> {:not, fold_prog(chosen, :or)} end
+        and_prog = fn -> {:not, fold_prog(chosen, :and)} end
+        or_sig = negate_sig(fold_sig(chosen, st.sigs, :or), st.mask)
+        and_sig = negate_sig(fold_sig(chosen, st.sigs, :and), st.mask)
+
+        Enum.reduce(st.atoms, st, fn atom, st ->
+          atom_sig = Map.fetch!(st.sigs, atom)
+
+          st
+          |> sized_insert(
+            fn -> {:or, atom, or_prog.()} end,
+            size,
+            combine_sig(:or, atom_sig, or_sig)
+          )
+          |> sized_insert(
+            fn -> {:and, atom, or_prog.()} end,
+            size,
+            combine_sig(:and, atom_sig, or_sig)
+          )
+          |> sized_insert(
+            fn -> {:or, atom, and_prog.()} end,
+            size,
+            combine_sig(:or, atom_sig, and_sig)
+          )
+          |> sized_insert(
+            fn -> {:and, atom, and_prog.()} end,
+            size,
+            combine_sig(:and, atom_sig, and_sig)
+          )
+        end)
+      end)
+    else
+      st
+    end
+  end
+
+  defp add_subsets(st, k, fun) do
+    combine(st.feat_atoms, k, [], fun, st)
+  end
+
+  defp combine(_list, 0, chosen, fun, acc), do: fun.(Enum.reverse(chosen), acc)
+  defp combine([], _k, _chosen, _fun, acc), do: acc
+
+  defp combine([head | tail], k, chosen, fun, acc) do
+    acc = combine(tail, k - 1, [head | chosen], fun, acc)
+    combine(tail, k, chosen, fun, acc)
+  end
+
+  defp fold_prog([first | rest], op) do
+    Enum.reduce(rest, first, fn atom, prog -> {op, prog, atom} end)
+  end
+
+  defp fold_sig([first | rest], sigs, op) do
+    Enum.reduce(rest, Map.fetch!(sigs, first), fn atom, sig ->
+      combine_sig(op, sig, Map.fetch!(sigs, atom))
+    end)
+  end
+
+  defp combine_sig(:or, left, right), do: Bitwise.bor(left, right)
+  defp combine_sig(:and, left, right), do: Bitwise.band(left, right)
+  defp negate_sig(sig, mask), do: Bitwise.bxor(sig, mask)
+
+  defp sized_insert(st, prog_fun, size, sig) do
+    if size > st.max_size do
+      st
+    else
+      considered = st.considered + 1
+
+      case Map.fetch(st.seen, sig) do
+        {:ok, old} when old <= size ->
+          %{st | considered: considered}
+
+        {:ok, old} ->
+          %{
+            st
+            | considered: considered,
+              seen: Map.put(st.seen, sig, size),
+              counts: move_count(st.counts, old, size),
+              bank: replace_bank(st, sig, prog_fun, size)
+          }
+
+        :error ->
+          bank =
+            if st.wanted == nil or MapSet.member?(st.wanted, sig) do
+              Map.put(st.bank, sig, {prog_fun.(), size, st.ord})
+            else
+              st.bank
+            end
+
+          %{
+            st
+            | considered: considered,
+              seen: Map.put(st.seen, sig, size),
+              counts: Map.update(st.counts, size, 1, &(&1 + 1)),
+              bank: bank,
+              ord: st.ord + 1,
+              distinct: st.distinct + 1
+          }
+      end
+    end
+  end
+
+  defp replace_bank(st, sig, prog_fun, size) do
+    if Map.has_key?(st.bank, sig) do
+      Map.put(st.bank, sig, {prog_fun.(), size, st.ord})
+    else
+      st.bank
+    end
+  end
+
+  defp move_count(counts, old, size) do
+    counts
+    |> Map.update!(old, &(&1 - 1))
+    |> Map.update(size, 1, &(&1 + 1))
+  end
+
+  defp shrink_k(_n, k) when not is_integer(k) or k < 2, do: 0
+
+  defp shrink_k(n, k) do
+    if binom(n, k) > @subset_budget, do: shrink_k(n, k - 1), else: k
+  end
+
+  defp binom(_n, 0), do: 1
+  defp binom(n, k) when k < 0 or n < 0 or k > n, do: 0
+
+  defp binom(n, k) do
+    k = min(k, n - k)
+
+    if k == 0 do
+      1
+    else
+      Enum.reduce(1..k, 1, fn i, acc -> div(acc * (n - k + i), i) end)
     end
   end
 

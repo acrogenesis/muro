@@ -16,6 +16,7 @@ defmodule Muro.Synth.Loop do
   because of either bound has not established `sufficient-cegis`.
   """
   def run(path, opts \\ []) when is_binary(path) and is_list(opts) do
+    Process.delete(:muro_synth_search_log)
     oracle = Keyword.get(opts, :oracle, "trace")
     depth = Keyword.get(opts, :depth, default_depth())
     max_depth = Keyword.get(opts, :max_depth, depth + 1)
@@ -83,6 +84,7 @@ defmodule Muro.Synth.Loop do
 
           {:ok, spec} ->
             search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel)
+            |> finish()
         end
     end
   end
@@ -116,7 +118,7 @@ defmodule Muro.Synth.Loop do
 
       :ok ->
         case fit(host, spec.tasks, depth, max_depth, score, feat, [], %{}) do
-          {:empty, versions, at} ->
+          {:empty, versions, at} when depth == 0 and at >= 1 ->
             widen_reach(
               host,
               spec,
@@ -130,6 +132,9 @@ defmodule Muro.Synth.Loop do
               checker,
               fuel
             )
+
+          {:empty, versions, at} ->
+            {:ok, empty(host, versions, at)}
 
           {:ok, arms, versions, at} ->
             certify(
@@ -254,7 +259,7 @@ defmodule Muro.Synth.Loop do
   end
 
   defp fit(host, tasks, depth, max_depth, score, feat, versions, rejected) do
-    vs = Synth.enumerate(host.features, depth) ++ Muro.Synth.Feature.weak_optima(host)
+    vs = Synth.enumerate(host.features, depth)
 
     case fit_tasks(tasks, vs, score, feat, rejected) do
       {:empty, sizes} when depth < max_depth ->
@@ -268,18 +273,18 @@ defmodule Muro.Synth.Loop do
     end
   end
 
-  # Depth 0 and depth 1 name no predicate. `reaches-pos` is has-pos-reward
-  # read out to the horizon. The grammar cannot write a disjunction of
-  # every action at depth 1, so each action is offered the one predicate
-  # "this action reaches a positive reward, or none does". The
-  # observations keep it or drop it. The deployed term is still `eval`
-  # of the predicate that remains.
+  # Depth 0 and a depth of at least 1 were both searched, and both were
+  # empty. `reaches-pos` is has-pos-reward read out to the horizon. The
+  # next search enumerates by size, including a disjunction of the
+  # feature tests. A search that never reached depth 1 does not install
+  # the test. The deployed term is still `eval` of the predicate that
+  # remains.
   defp widen_reach(
          host,
          spec,
          versions,
          at,
-         depth,
+         _depth,
          max_depth,
          rounds,
          score,
@@ -295,7 +300,7 @@ defmodule Muro.Synth.Loop do
         host = Muro.Synth.Host.install_features(host, specs)
         feat = fn feature, state -> host.eval_feature.(feature, state) end
 
-        case fit(host, spec.tasks, depth, max_depth, score, feat, versions, %{}) do
+        case fit_sized(host, spec.tasks, score, feat, versions, %{}) do
           {:empty, versions, at} ->
             {:ok, empty(host, versions, at)}
 
@@ -319,6 +324,149 @@ defmodule Muro.Synth.Loop do
         end
     end
   end
+
+  # One signature keeps the smallest program. The version-space count at
+  # a size is the number of distinct signatures of that size or smaller.
+  # A size that adds none is not recorded. The walk stops at the first
+  # size that satisfies every task. A task with no program by the size
+  # bound is an empty space at that bound.
+  defp fit_sized(host, tasks, score, feat, versions, rejected) do
+    states =
+      case tasks do
+        [%{observations: observations} | _] -> Enum.map(observations, &elem(&1, 0))
+        [] -> []
+      end
+
+    task_sigs =
+      Enum.map(tasks, fn task ->
+        bits = Map.new(task.observations)
+
+        states
+        |> Enum.map(&Map.fetch!(bits, &1))
+        |> Synth.pack_bits()
+      end)
+
+    max_size = Synth.pred_size_bound()
+
+    {index, meta} =
+      Synth.enumerate_sized(
+        host.features,
+        max_size,
+        &Synth.signature(&1, states, feat),
+        length(states),
+        MapSet.new(task_sigs)
+      )
+
+    remember_search(meta, max_size)
+
+    rows = cumulative(meta.sizes)
+
+    case sized_versions(tasks, task_sigs, index, rows, versions, rejected, score) do
+      {versions, {arms, size}} ->
+        {:ok, arms, versions, size}
+
+      {versions, nil} ->
+        {:empty, versions, max_size}
+    end
+  end
+
+  defp cumulative(sizes) do
+    {rows, _cum} =
+      Enum.map_reduce(sizes, 0, fn [size, count], cum ->
+        cum = cum + count
+        {{size, cum}, cum}
+      end)
+
+    rows
+  end
+
+  defp sized_versions(tasks, task_sigs, index, rows, versions, rejected, score) do
+    Enum.reduce_while(rows, {versions, nil}, fn {size, cum}, {versions, _found} ->
+      case sized_arms(tasks, task_sigs, index, size, rejected, score) do
+        {:ok, arms} ->
+          {:halt, {versions ++ Enum.flat_map(arms, fn _arm -> [cum, 1] end), {arms, size}}}
+
+        :miss ->
+          {:cont, {versions ++ [cum, 0], nil}}
+      end
+    end)
+  end
+
+  defp sized_arms(tasks, task_sigs, index, size, rejected, score) do
+    tasks
+    |> Enum.zip(task_sigs)
+    |> Enum.reduce_while({:ok, []}, fn {task, sig}, {:ok, arms} ->
+      name = arm_name(task, length(tasks), length(arms))
+
+      case Map.fetch(index, sig) do
+        {:ok, {prog, prog_size, _ord}} when prog_size <= size ->
+          if rejected?(rejected, name, prog) do
+            {:halt, :miss}
+          else
+            arm = %{
+              name: name,
+              pred: Synth.pick([prog], score),
+              kept: [prog],
+              action: task.action,
+              else: task.else,
+              observations: task.observations
+            }
+
+            {:cont, {:ok, arms ++ [arm]}}
+          end
+
+        _ ->
+          {:halt, :miss}
+      end
+    end)
+    |> case do
+      {:ok, arms} -> {:ok, arms}
+      :miss -> :miss
+    end
+  end
+
+  defp rejected?(rejected, name, prog) do
+    MapSet.member?(Map.get(rejected, name, MapSet.new()), prog)
+  end
+
+  defp remember_search(meta, max_size) do
+    lines =
+      [
+        "enumeration #{meta.enum_ms} ms",
+        "considered #{meta.considered}",
+        "distinct #{meta.distinct}",
+        "predicate size bound #{max_size}"
+      ] ++
+        Enum.map(meta.sizes, fn [size, count] -> "size #{size} #{count}" end) ++
+        if meta.truncated, do: ["subset bound #{Synth.subset_budget()}"], else: []
+
+    Process.put(:muro_synth_search_log, %{
+      sizes: meta.sizes,
+      enum_ms: meta.enum_ms,
+      considered: meta.considered,
+      distinct: meta.distinct,
+      lines: lines,
+      sized: true
+    })
+  end
+
+  defp finish({:ok, result}) do
+    case Process.get(:muro_synth_search_log) do
+      nil ->
+        {:ok, result}
+
+      log ->
+        {:ok,
+         result
+         |> Map.put(:sizes, log.sizes)
+         |> Map.put(:enum_ms, log.enum_ms)
+         |> Map.put(:considered, log.considered)
+         |> Map.put(:distinct, log.distinct)
+         |> Map.update(:lines, log.lines, &(&1 ++ log.lines))}
+    end
+  end
+
+  defp finish(other), do: other
 
   defp fit_tasks(tasks, vs, score, feat, rejected) do
     initial = length(vs)
@@ -646,7 +794,13 @@ defmodule Muro.Synth.Loop do
     }
   end
 
-  defp template_line([]), do: "templates none"
+  defp exhausted_line(depth) do
+    case Process.get(:muro_synth_search_log) do
+      %{sized: true} -> "predicate size #{depth} exhausted"
+      _ -> "predicate depth #{depth} exhausted"
+    end
+  end
+
   defp template_line(kinds), do: "templates " <> Enum.join(kinds, " ")
 
   defp feature_line([]), do: "features none"
@@ -685,7 +839,7 @@ defmodule Muro.Synth.Loop do
       [
         "muro synth: empty version space",
         "no predicate matches the observations",
-        "predicate depth #{depth} exhausted",
+        exhausted_line(depth),
         "depth #{depth}",
         template_line(kinds),
         feature_line(names),

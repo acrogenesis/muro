@@ -1026,7 +1026,10 @@ defmodule Muro.Synth.Book do
 
   # `dyn-best-pos` is first and descends on `k`. `dyn-one` passes that
   # same `k` to it. `dyn-any` passes its `j` to `dyn-one`. The call the
-  # other way, from `suc j`, is the smaller argument.
+  # other way, from `suc j`, is the smaller argument. These three runs
+  # are not memoized. The search memos the same recursion while it
+  # filters. Checking the run at every cover state is the cost that
+  # stops eight queens: the cover there has 2058 states.
   defp reach_sources(best, one, any, pos, actions) do
     """
     def #{best} : run Π (+ s : State) → Π (+ k : Nat) → Bool :=

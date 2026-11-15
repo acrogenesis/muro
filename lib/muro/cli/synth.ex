@@ -234,6 +234,8 @@ defmodule Muro.CLI.Synth do
       |> put_present(:kinds, Map.get(result, :kinds))
       |> put_present(:path_depth, Map.get(result, :path_depth))
       |> put_present(:path_bound, Map.get(result, :path_bound))
+      |> put_present(:sizes, Map.get(result, :sizes))
+      |> put_present(:enum_ms, Map.get(result, :enum_ms))
 
     JSON.encode!(payload) <> "\n"
   end
