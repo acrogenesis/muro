@@ -12,8 +12,9 @@ defmodule Muro.Synth.Placement do
   # disjunction of the `pair-any` templates that are false on every
   # open or finished list. The goal is the template that holds on every
   # finished list and fails on every shorter open list. Both are read
-  # by `eval`. `placed-find-policy` is the run. The homomorphism ranks
-  # the action that run takes, on the environment's own `step`.
+  # by `eval`. `placed-find-policy` is the run. The emitted policy is
+  # run on every cover state and kept only when it takes the action the
+  # trace order picks. The homomorphism is evidence about that run.
   #
   # A book that is not this shape is `:skip`, and the ranking loop
   # continues. A book that is this shape is not handed to that loop:
@@ -72,16 +73,19 @@ defmodule Muro.Synth.Placement do
     winners = winner_map(host, spec)
     model = model(host, shape, found)
 
+    # The size gate is first. Agreement walks the cover, and so does
+    # running the emitted policy. A cover that cannot be split does
+    # not pay for either.
     cond do
-      not agree?(model, winners, spec.cover, shape) ->
-        refuse(found, nil, "the discovered policy and the trace order disagree")
-
       too_big?(spec.cover, host.actions) ->
         refuse(
           found,
           nil,
           "the cover is too large for a case-split homomorphism"
         )
+
+      not agree?(model, winners, spec.cover, shape) ->
+        refuse(found, nil, "the discovered policy and the trace order disagree")
 
       true ->
         certify(host, shape, found, model, winners, anchor, checker, fuel)
@@ -102,8 +106,20 @@ defmodule Muro.Synth.Placement do
       {:ok, source, meta} ->
         case Book.check(source, anchor, fn path -> checker.(path, fuel) end) do
           :ok ->
-            found = Map.put(found, :winners, winners)
-            done(:certified, found, source, meta.certificate, nil, model)
+            case deployed_agrees?(source, anchor, host, winners, meta.policy, fuel) do
+              :ok ->
+                found = Map.put(found, :winners, winners)
+                done(:certified, found, source, meta.certificate, nil, model)
+
+              {:error, :storage, diagnostic} ->
+                {:error, :storage, diagnostic}
+
+              {:error, reason} ->
+                # The book may contain a CoindHomo for the trace order.
+                # That is not a certificate for a policy that took
+                # another action, so the book is not returned.
+                refuse(found, nil, reason)
+            end
 
           {:error, :storage, diagnostic} ->
             {:error, :storage, diagnostic}
@@ -203,6 +219,80 @@ defmodule Muro.Synth.Placement do
       end)
 
     ok
+  end
+
+  # The trace order and the Elixir finder can agree while the run that
+  # was written does not. Exit 0 requires this comparison. The policy
+  # is the run a caller invokes on a state.
+  defp deployed_agrees?(source, anchor, host, winners, policy, fuel) do
+    case File.mkdir_p(anchor) do
+      :ok ->
+        path =
+          Path.join(anchor, "placed-agree-#{System.unique_integer([:positive])}.muro")
+
+        case File.write(path, source) do
+          :ok ->
+            try do
+              run_deployed(path, host, winners, policy, fuel)
+            after
+              _ = File.rm(path)
+            end
+
+          {:error, reason} ->
+            {:error, :storage,
+             "could not write a temporary book in #{anchor}: #{inspect(reason)}"}
+        end
+
+      {:error, reason} ->
+        {:error, :storage, "could not write a temporary book in #{anchor}: #{inspect(reason)}"}
+    end
+  end
+
+  defp run_deployed(path, host, winners, policy, fuel) do
+    module = Module.concat(__MODULE__, "D#{System.unique_integer([:positive])}")
+
+    case Muro.emit_file(path, module, fuel: fuel) do
+      {:ok, src} ->
+        try do
+          Code.eval_string(src)
+          compare_policy(module, host, winners, policy)
+        rescue
+          error ->
+            {:error, "the deployed policy did not run (#{Exception.message(error)})"}
+        end
+
+      {:error, message} ->
+        {:error, "the deployed policy did not emit (#{message})"}
+    end
+  end
+
+  defp compare_policy(module, host, winners, policy) do
+    fun = String.to_atom(Muro.Emit.elixir_base(policy))
+
+    Enum.reduce_while(winners, :ok, fn {state, action}, :ok ->
+      got = apply(module, fun, [emit_state(host, state)])
+      want = String.to_atom(Muro.Emit.elixir_atom_name(action))
+
+      if got == want do
+        {:cont, :ok}
+      else
+        {:halt,
+         {:error,
+          "the deployed policy and the certified choices disagree at #{Term.spell(state)}"}}
+      end
+    end)
+  end
+
+  defp emit_state(host, %Term{value: value}) do
+    if host.structured do
+      Term.to_emit(host.schema, value)
+    else
+      String.to_atom(Muro.Emit.elixir_atom_name(to_string(value)))
+    end
+  end
+
+  defp emit_state(_host, state) when is_binary(state) do
+    String.to_atom(Muro.Emit.elixir_atom_name(state))
   end
 
   defp model(host, shape, found) do
@@ -574,7 +664,8 @@ defmodule Muro.Synth.Placement do
              policy: names.policy
            }) do
         {:ok, cert} ->
-          {:ok, source <> "\n" <> cert.text, %{certificate: cert.certificate}}
+          {:ok, source <> "\n" <> cert.text,
+           %{certificate: cert.certificate, policy: names.policy}}
 
         {:skip, reason} ->
           {:error, reason}
@@ -693,8 +784,10 @@ defmodule Muro.Synth.Placement do
     """
     -- The survivor is the constraint the search discovered.
     -- goal is the length that finishes a placement.
-    -- placed-find-policy runs both. rank is the trace order of that policy.
-    -- The homomorphism is evidence about that run.
+    -- placed-find-policy is the run. policy runs it on a state.
+    -- Both are checked against the action the trace order picks.
+    -- The homomorphism is evidence about that run, and only when
+    -- those actions agree.
     -- The checker sees this book. It does not see the search.
     import "#{rel(anchor, host.path)}"
 

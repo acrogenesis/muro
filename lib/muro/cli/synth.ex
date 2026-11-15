@@ -257,5 +257,6 @@ defmodule Muro.CLI.Synth do
 
   defp note(:certified), do: "homomorphism checked"
   defp note(:policy), do: "homomorphism is not derivable"
+  defp note(:refused), do: "placement policy was not certified"
   defp note(_status), do: nil
 end

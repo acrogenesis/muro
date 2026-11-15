@@ -632,9 +632,11 @@ defmodule Muro.Synth.Cert do
     }
   end
 
-  # `host.winners` is the action the deployed policy takes at each cover
-  # state. The ranking is that action, not `eval` of a predicate arm.
-  # A book that does not set the map keeps the predicate ranking.
+  # `host.winners` is the action the trace order picks at each cover
+  # state. The deployed policy is run there and refused unless it
+  # takes this action. The ranking is that action, not `eval` of a
+  # predicate arm. A book that does not set the map keeps the
+  # predicate ranking.
   defp chosen(host, arms, state) do
     case Map.get(host, :winners) do
       winners when is_map(winners) ->
