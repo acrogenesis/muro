@@ -249,11 +249,12 @@ defmodule Muro do
   run: a function, an application, zero, successor, or a match on Nat,
   with the binder's grade kept. A Π erases as `gpi` when it is the
   term. A definition, data, a pair, a word, or a stream is refused.
-  An unknown grade is refused. The runtime that reads the image checks
-  it again. Writing the file is not that check.
+  An unknown grade is refused. muro-beam loads the image and checks
+  it again. The file is not Erlang BEAM bytecode. Writing the file is
+  not that check.
 
   `run internal` is not exported. Spec, evidence, data, and sessions
-  are omitted. Zero exported runs is `beam:entry`. More than one
+  are omitted. Zero exported runs is `mbi:entry`. More than one
   exported run is an error. When one of those bodies erases, the file
   is the first such body in book order, and the error names the others.
   When every exported run fails, nothing is written and a previous
@@ -261,13 +262,13 @@ defmodule Muro do
   nothing and leaves a previous image where it is. `opts` is `fuel:`
   and `root:`, as in `check_file/2`. This is not a manifest target.
   """
-  def emit_beam(path, opts \\ []) do
+  def emit_mbi(path, opts \\ []) do
     stem = Path.basename(path, ".muro")
     dir = Path.dirname(path)
     file = Path.join(dir, stem <> ".mbi")
 
     with {:ok, book} <- Load.file(path, opts) do
-      case Emit.Beam.render(Prelude.for_emit(book)) do
+      case Emit.Mbi.render(Prelude.for_emit(book)) do
         {:ok, image, ""} ->
           File.write!(file, image)
           {:ok, [file]}

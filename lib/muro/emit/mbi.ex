@@ -1,12 +1,12 @@
-defmodule Muro.Emit.Beam do
+defmodule Muro.Emit.Mbi do
   @moduledoc """
-  Erase one exported run to a beam image.
+  Erase one exported run to an .mbi image.
 
   The rules are `agda/Muro/Beam.agda`. A grade pair and the `%1` mark
   are not constructors of `Tm`, so this module reads them. Success is
-  exactly one exported run. The image is text. The runtime that reads
-  it checks the term again. Writing the image is not that check. See
-  [Beam images](manual/beam.md).
+  exactly one exported run. The image is text. muro-beam loads it and
+  checks the term again. The file is not Erlang BEAM bytecode. Writing
+  the image is not that check. See [MBI images](manual/mbi.md).
   """
 
   alias Muro.Ast
@@ -32,16 +32,16 @@ defmodule Muro.Emit.Beam do
 
   `{:ok, image, ""}` is exactly one exported run, and that body erased.
   `{:ok, image, message}` is the first body that erased, and `message`
-  names every other exported run. `Muro.emit_beam/2` writes that file
+  names every other exported run. `Muro.emit_mbi/2` writes that file
   and returns `{:error, message}`.
-  `{:error, "beam:entry"}` is a book with no exported run.
+  `{:error, "mbi:entry"}` is a book with no exported run.
   `{:error, message}` is a book whose exported runs all failed. Nothing
   is written by this function.
   """
   def render(book) when is_list(book) do
     case Enum.filter(book, &entry?/1) do
       [] ->
-        {:error, "beam:entry"}
+        {:error, "mbi:entry"}
 
       entries ->
         case choose(Enum.map(entries, &classify(book, &1))) do
@@ -59,7 +59,7 @@ defmodule Muro.Emit.Beam do
 
   @doc """
   Erase one de Bruijn term. `{:error, reason}` is the bare tag, without
-  the `beam:` prefix and without a definition name.
+  the `mbi:` prefix and without a definition name.
   """
   def erase({:var, i}) when is_integer(i) and i >= 0, do: {:ok, {:gvar, i}}
 
@@ -288,10 +288,10 @@ defmodule Muro.Emit.Beam do
 
   defp choose([], failed), do: {:error, failed}
 
-  defp rest_reason({:ok, name, _gtm}), do: "beam:entry in #{name}"
+  defp rest_reason({:ok, name, _gtm}), do: "mbi:entry in #{name}"
   defp rest_reason({:error, name, tag}), do: named(name, tag)
 
-  defp named(name, tag), do: "beam:#{tag} in #{name}"
+  defp named(name, tag), do: "mbi:#{tag} in #{name}"
 
   # A quantity atom. The type grade is 0. A written pair is kept.
   # An unknown quantity is refused.

@@ -1,7 +1,7 @@
 defmodule Mix.Tasks.Muro.Emit do
   use Mix.Task
 
-  @shortdoc "Emit run definitions as Elixir, C, Rust, Zig, JavaScript, or Cortex-M assembly, a session as OTP or a state machine, a cross as a call, closed equations as ExUnit, or exactly one graded run as a beam image"
+  @shortdoc "Emit run definitions as Elixir, C, Rust, Zig, JavaScript, or Cortex-M assembly, a session as OTP or a state machine, a cross as a call, closed equations as ExUnit, or exactly one graded run as an .mbi image"
 
   @moduledoc """
   Emit the `run` definitions of a `.muro` file.
@@ -16,7 +16,7 @@ defmodule Mix.Tasks.Muro.Emit do
       mix muro.emit path.muro --backend otp
       mix muro.emit path.muro --backend fsm
       mix muro.emit path.muro --backend exunit
-      mix muro.emit path.muro --backend beam
+      mix muro.emit path.muro --backend mbi
       mix muro.emit path.muro --node a
 
   The default backend is Elixir, the same text as `Muro.emit_file/3`.
@@ -68,14 +68,15 @@ defmodule Mix.Tasks.Muro.Emit do
   is a child module of pure functions. The host keeps the transport.
   Nothing is written next to the book.
 
-  `--backend beam` writes `<stem>.mbi` next to the file and prints that
+  `--backend mbi` writes `<stem>.mbi` next to the file and prints that
   path. Success is exactly one exported run, and the binder grades
-  stay. A definition, data, a pair, a word, or a stream is refused.
+  stay. muro-beam loads that file. It is not Erlang BEAM bytecode.
+  A definition, data, a pair, a word, or a stream is refused.
   Zero exported runs, and more than one, are refused. When one body
   among several erases, the path is still printed and the command
-  fails. The runtime that reads the image checks it again. Writing
-  the file is not that check. This is not a manifest target. See the
-  Beam images page.
+  fails. muro-beam checks the image again. Writing the file is not
+  that check. This is not a manifest target. `--backend beam` is
+  refused. See the MBI images page.
 
   `--node` writes `<stem>_node.ex` next to the file and prints that
   path. `place.muro` with `--node a` is `place_node.ex`. Each `cross`

@@ -101,7 +101,7 @@ lib/muro/emit/exunit.ex closed equations → one ExUnit module (`--backend exuni
 lib/muro/emit/otp.ex    a conformance, and a reading, is a GenServer; a marked peer is monitored and a `:DOWN` that is not a halt takes the failure arm; a book with no mark emits the previous module (`--backend otp`)
 lib/muro/emit/fsm.ex    a session endpoint is a state machine; a marked book has `down/1` and `down/2` for a failure arm; a book with no mark emits no `down`; the transport stays with the host (`--backend fsm`)
 lib/muro/emit/node.ex   a cross, and a cross reading, is one call and one monitor (`--node`)
-lib/muro/emit/beam.ex   exactly one exported run as a beam image (`--backend beam`); not a manifest target
+lib/muro/emit/mbi.ex    exactly one exported run as an .mbi image (`--backend mbi`); muro-beam loads it; not a manifest target
 lib/muro/example.ex     same book as Agda
 lib/muro/mutate.ex      mutants of run definitions (`mix muro.mutate`)
 lib/muro/synth.ex       version-space search on an emitted step (`mix muro.synth`)
@@ -180,7 +180,7 @@ A script run with `mix run --no-start` does not see the archive. Archives are on
 
 `--backend zig` writes `<name>.zig` next to the file. `zig` translates it. The proof stops at the run image.
 
-`--backend beam` writes `<stem>.mbi` next to the file when the book has exactly one exported run, and the binder grades stay. A definition, data, a pair, a word, or a stream is refused. The runtime that reads the image checks it again. Writing the file is not that check. The page is [Beam images](beam.md).
+`--backend mbi` writes `<stem>.mbi` next to the file when the book has exactly one exported run, and the binder grades stay. The file is the image muro-beam loads. It is not Erlang BEAM bytecode. A definition, data, a pair, a word, or a stream is refused. muro-beam checks the image again. Writing the file is not that check. The page is [MBI images](mbi.md).
 
 `--backend c` writes C. The Mix task builds a NIF when the working directory is the loaded Mix project. Add `{:elixir_make, "~> 0.10", runtime: false}` to the project deps, or run the task inside a project that depends on muro. Without `elixir_make`, that NIF stops and names the dependency. Outside the loaded project the task writes the `.h` and the `.c` only, and so does the executable. `nx` and `makeup` are optional. Checking and emitting Elixir do not load them.
 

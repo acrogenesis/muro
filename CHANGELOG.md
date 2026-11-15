@@ -2,11 +2,13 @@
 
 ## 0.21.10
 
-`--backend beam` writes `<stem>.mbi` beside the book when the book has exactly one exported run. The file is a function, an application, zero, successor, or a match on Nat. A Π erases as `gpi`. The binder's grade stays, and the domain type is not in the image. A definition, data, a pair, a word, or a stream is refused. An unknown grade is refused. The runtime that reads the image checks it again. Writing the file is not that check.
+`--backend mbi` writes `<stem>.mbi` beside the book when the book has exactly one exported run. The file is the image muro-beam loads. It is not Erlang BEAM bytecode. The flag was `--backend beam`, and that flag is refused.
+
+The file is a function, an application, zero, successor, or a match on Nat. A Π erases as `gpi`. The binder's grade stays, and the domain type is not in the image. A definition, data, a pair, a word, or a stream is refused. An unknown grade is refused. muro-beam checks the image again. Writing the file is not that check.
 
 ### Manual
 
-- Beam images.
+- MBI images.
 
 ### Package
 

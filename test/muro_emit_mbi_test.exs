@@ -1,9 +1,9 @@
-defmodule Muro.EmitBeamTest do
+defmodule Muro.EmitMbiTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
 
-  alias Muro.Emit.Beam
+  alias Muro.Emit.Mbi
 
   @images ~w(once affine reuse drop app suc match pi iv)
 
@@ -24,8 +24,8 @@ defmodule Muro.EmitBeamTest do
     end
 
     for {term, gtm, name} <- shared_terms() do
-      assert Beam.erase(term) == {:ok, gtm}
-      assert Beam.show_pure(gtm) == agreed[name]
+      assert Mbi.erase(term) == {:ok, gtm}
+      assert Mbi.show_pure(gtm) == agreed[name]
     end
 
     for name <- @images do
@@ -37,85 +37,85 @@ defmodule Muro.EmitBeamTest do
     agreed = agreements()
 
     for {term, gtm, name} <- shared_terms() do
-      assert {:ok, ^gtm} = Beam.erase(term)
-      assert Beam.show_pure(gtm) == agreed[name]
+      assert {:ok, ^gtm} = Mbi.erase(term)
+      assert Mbi.show_pure(gtm) == agreed[name]
     end
 
-    assert Beam.erase({:nat, 2}) == {:ok, {:gsu, {:gsu, :gze}}}
-    assert Beam.show_pure({:gsu, {:gsu, :gze}}) == agreed["suc"]
+    assert Mbi.erase({:nat, 2}) == {:ok, {:gsu, {:gsu, :gze}}}
+    assert Mbi.show_pure({:gsu, {:gsu, :gze}}) == agreed["suc"]
 
-    assert Beam.erase(:typ) == {:error, agreed["fail-typ"]}
-    assert Beam.erase(:nat) == {:error, agreed["fail-nat"]}
-    assert Beam.erase(:unit) == {:error, agreed["fail-unit"]}
-    assert Beam.erase(:one) == {:error, agreed["fail-unit"]}
-    assert Beam.erase({:munit, :ze, :ze, :ze}) == {:error, agreed["fail-unit"]}
-    assert Beam.erase(:empty) == {:error, agreed["fail-empty"]}
-    assert Beam.erase({:memp, :ze, :ze}) == {:error, agreed["fail-empty"]}
-    assert Beam.erase({:mdata, :ze, :ze, []}) == {:error, agreed["fail-data"]}
-    assert Beam.erase({:mwbool, :ze, :ze, []}) == {:error, agreed["fail-data"]}
-    assert Beam.erase({:mopt, :ze, :ze, []}) == {:error, agreed["fail-data"]}
-    assert Beam.erase(:rfl) == {:error, agreed["fail-id"]}
-    assert Beam.erase({:idt, :nat, :ze, :ze}) == {:error, agreed["fail-id"]}
-    assert Beam.erase({:rwt, :ze, :ze, :ze}) == {:error, agreed["fail-id"]}
-    assert Beam.erase({:def, 0}) == {:error, agreed["fail-def"]}
-    assert Beam.erase({:def, "plus"}) == {:error, agreed["fail-def"]}
-    assert Beam.erase({:pair, :ze, :ze}) == {:error, agreed["fail-pair"]}
-    assert Beam.erase({:prod, :nat, :nat}) == {:error, agreed["fail-pair"]}
-    assert Beam.erase({:letp, :ze, :ze}) == {:error, agreed["fail-pair"]}
-    assert Beam.erase({:nu, :ze}) == {:error, agreed["fail-stream"]}
-    assert Beam.erase({:unf, {:pair, :ze, :ze}, :ze}) == {:error, agreed["fail-stream"]}
-    assert Beam.erase({:ucons, :ze}) == {:error, agreed["fail-stream"]}
-    assert Beam.erase({:bisim, :ze, :ze}) == {:error, agreed["fail-stream"]}
-    assert Beam.erase({:stream, :nat}) == {:error, agreed["fail-stream"]}
-    assert Beam.erase({:always, :nat, :ze, :ze}) == {:error, agreed["fail-stream"]}
-    assert Beam.erase(:i64) == {:error, agreed["fail-machine"]}
-    assert Beam.erase(:f32ty) == {:error, agreed["fail-machine"]}
-    assert Beam.erase({:tensor, :ze, :ze}) == {:error, agreed["fail-machine"]}
-    assert Beam.erase({:addi, :ze, :ze}) == {:error, agreed["fail-machine"]}
-    assert Beam.erase({:muli, :ze, :ze}) == {:error, agreed["fail-machine"]}
-    assert Beam.erase({:addt, :ze, :ze}) == {:error, agreed["fail-machine"]}
-    assert Beam.erase({:toi64, :ze}) == {:error, agreed["fail-machine"]}
-    assert Beam.erase({:packi, :ze, :ze}) == {:error, agreed["fail-machine"]}
-    assert Beam.erase({:word, :add, []}) == {:error, agreed["fail-word"]}
+    assert Mbi.erase(:typ) == {:error, agreed["fail-typ"]}
+    assert Mbi.erase(:nat) == {:error, agreed["fail-nat"]}
+    assert Mbi.erase(:unit) == {:error, agreed["fail-unit"]}
+    assert Mbi.erase(:one) == {:error, agreed["fail-unit"]}
+    assert Mbi.erase({:munit, :ze, :ze, :ze}) == {:error, agreed["fail-unit"]}
+    assert Mbi.erase(:empty) == {:error, agreed["fail-empty"]}
+    assert Mbi.erase({:memp, :ze, :ze}) == {:error, agreed["fail-empty"]}
+    assert Mbi.erase({:mdata, :ze, :ze, []}) == {:error, agreed["fail-data"]}
+    assert Mbi.erase({:mwbool, :ze, :ze, []}) == {:error, agreed["fail-data"]}
+    assert Mbi.erase({:mopt, :ze, :ze, []}) == {:error, agreed["fail-data"]}
+    assert Mbi.erase(:rfl) == {:error, agreed["fail-id"]}
+    assert Mbi.erase({:idt, :nat, :ze, :ze}) == {:error, agreed["fail-id"]}
+    assert Mbi.erase({:rwt, :ze, :ze, :ze}) == {:error, agreed["fail-id"]}
+    assert Mbi.erase({:def, 0}) == {:error, agreed["fail-def"]}
+    assert Mbi.erase({:def, "plus"}) == {:error, agreed["fail-def"]}
+    assert Mbi.erase({:pair, :ze, :ze}) == {:error, agreed["fail-pair"]}
+    assert Mbi.erase({:prod, :nat, :nat}) == {:error, agreed["fail-pair"]}
+    assert Mbi.erase({:letp, :ze, :ze}) == {:error, agreed["fail-pair"]}
+    assert Mbi.erase({:nu, :ze}) == {:error, agreed["fail-stream"]}
+    assert Mbi.erase({:unf, {:pair, :ze, :ze}, :ze}) == {:error, agreed["fail-stream"]}
+    assert Mbi.erase({:ucons, :ze}) == {:error, agreed["fail-stream"]}
+    assert Mbi.erase({:bisim, :ze, :ze}) == {:error, agreed["fail-stream"]}
+    assert Mbi.erase({:stream, :nat}) == {:error, agreed["fail-stream"]}
+    assert Mbi.erase({:always, :nat, :ze, :ze}) == {:error, agreed["fail-stream"]}
+    assert Mbi.erase(:i64) == {:error, agreed["fail-machine"]}
+    assert Mbi.erase(:f32ty) == {:error, agreed["fail-machine"]}
+    assert Mbi.erase({:tensor, :ze, :ze}) == {:error, agreed["fail-machine"]}
+    assert Mbi.erase({:addi, :ze, :ze}) == {:error, agreed["fail-machine"]}
+    assert Mbi.erase({:muli, :ze, :ze}) == {:error, agreed["fail-machine"]}
+    assert Mbi.erase({:addt, :ze, :ze}) == {:error, agreed["fail-machine"]}
+    assert Mbi.erase({:toi64, :ze}) == {:error, agreed["fail-machine"]}
+    assert Mbi.erase({:packi, :ze, :ze}) == {:error, agreed["fail-machine"]}
+    assert Mbi.erase({:word, :add, []}) == {:error, agreed["fail-word"]}
   end
 
   test "every Elixir-only refusal is named, and a bad numeral is not a successor" do
-    assert Beam.erase(:string) == {:error, "string"}
-    assert Beam.erase({:slit, "hi"}) == {:error, "string"}
-    assert Beam.erase({:scat, :ze, :ze}) == {:error, "string"}
-    assert Beam.erase({:slen, :ze}) == {:error, "string"}
-    assert Beam.erase({:seq, :ze, :ze}) == {:error, "string"}
-    assert Beam.erase(:bytes) == {:error, "bytes"}
-    assert Beam.erase(:slice) == {:error, "bytes"}
-    assert Beam.erase({:blit, "hi"}) == {:error, "bytes"}
-    assert Beam.erase({:bcat, :ze, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:blen, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:beq, :ze, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:xlen, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:xeq, :ze, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:bsub, :ze, :ze, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:bget, :ze, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:aget, :ze, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:bunc, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:bfold, :ze, :ze, :ze, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:afold, :ze, :ze, :ze, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:sbytes, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:btil, :ze, :ze}) == {:error, "bytes"}
-    assert Beam.erase({:baft, :ze, :ze}) == {:error, "bytes"}
-    assert Beam.erase(:atom) == {:error, "atom"}
-    assert Beam.erase({:atom, "hello"}) == {:error, "atom"}
-    assert Beam.erase({:matom, :ze, :ze, []}) == {:error, "atom"}
-    assert Beam.erase({:hole, nil}) == {:error, "hole"}
-    assert Beam.erase({:nat, -1}) == {:error, "numeral"}
-    assert Beam.erase({:nat, 1.5}) == {:error, "numeral"}
-    assert Beam.erase({:lam, {:grade, :nope, 0}, :nat, "n", :ze}) == {:error, "grade"}
-    assert Beam.erase({:lam, {:grade, {:iv, :nope, 1}, 0}, :nat, "n", :ze}) == {:error, "grade"}
-    assert Beam.erase({:lam, :nope, :nat, "n", {:var, 0}}) == {:error, "grade"}
-    assert Beam.erase({:pi, :nope, :nat, "n", :ze}) == {:error, "grade"}
-    assert Beam.erase(:nope) == {:error, "term"}
-    assert Beam.show_grade(:w) == "w"
-    assert Beam.show_grade(10) == "10"
-    assert Beam.erase({:ann, :ze, :nat}) == {:ok, :gze}
+    assert Mbi.erase(:string) == {:error, "string"}
+    assert Mbi.erase({:slit, "hi"}) == {:error, "string"}
+    assert Mbi.erase({:scat, :ze, :ze}) == {:error, "string"}
+    assert Mbi.erase({:slen, :ze}) == {:error, "string"}
+    assert Mbi.erase({:seq, :ze, :ze}) == {:error, "string"}
+    assert Mbi.erase(:bytes) == {:error, "bytes"}
+    assert Mbi.erase(:slice) == {:error, "bytes"}
+    assert Mbi.erase({:blit, "hi"}) == {:error, "bytes"}
+    assert Mbi.erase({:bcat, :ze, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:blen, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:beq, :ze, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:xlen, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:xeq, :ze, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:bsub, :ze, :ze, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:bget, :ze, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:aget, :ze, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:bunc, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:bfold, :ze, :ze, :ze, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:afold, :ze, :ze, :ze, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:sbytes, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:btil, :ze, :ze}) == {:error, "bytes"}
+    assert Mbi.erase({:baft, :ze, :ze}) == {:error, "bytes"}
+    assert Mbi.erase(:atom) == {:error, "atom"}
+    assert Mbi.erase({:atom, "hello"}) == {:error, "atom"}
+    assert Mbi.erase({:matom, :ze, :ze, []}) == {:error, "atom"}
+    assert Mbi.erase({:hole, nil}) == {:error, "hole"}
+    assert Mbi.erase({:nat, -1}) == {:error, "numeral"}
+    assert Mbi.erase({:nat, 1.5}) == {:error, "numeral"}
+    assert Mbi.erase({:lam, {:grade, :nope, 0}, :nat, "n", :ze}) == {:error, "grade"}
+    assert Mbi.erase({:lam, {:grade, {:iv, :nope, 1}, 0}, :nat, "n", :ze}) == {:error, "grade"}
+    assert Mbi.erase({:lam, :nope, :nat, "n", {:var, 0}}) == {:error, "grade"}
+    assert Mbi.erase({:pi, :nope, :nat, "n", :ze}) == {:error, "grade"}
+    assert Mbi.erase(:nope) == {:error, "term"}
+    assert Mbi.show_grade(:w) == "w"
+    assert Mbi.show_grade(10) == "10"
+    assert Mbi.erase({:ann, :ze, :nat}) == {:ok, :gze}
   end
 
   test "a checked book writes the golden image" do
@@ -132,16 +132,16 @@ defmodule Muro.EmitBeamTest do
 
     dir = tmp_dir()
     path = write_book(dir, "keep", data_and_zero_src())
-    assert {:ok, [file]} = Muro.emit_beam(path)
-    assert File.read!(file) == Beam.show_pure(:gze) <> "\n"
+    assert {:ok, [file]} = Muro.emit_mbi(path)
+    assert File.read!(file) == Mbi.show_pure(:gze) <> "\n"
 
     path = write_book(dir, "both", spec_and_zero_src())
-    assert {:ok, [file]} = Muro.emit_beam(path)
-    assert File.read!(file) == Beam.show_pure(:gze) <> "\n"
+    assert {:ok, [file]} = Muro.emit_mbi(path)
+    assert File.read!(file) == Mbi.show_pure(:gze) <> "\n"
 
     path = write_book(dir, "hid", internal_and_zero_src())
-    assert {:ok, [file]} = Muro.emit_beam(path)
-    assert File.read!(file) == Beam.show_pure(:gze) <> "\n"
+    assert {:ok, [file]} = Muro.emit_mbi(path)
+    assert File.read!(file) == Mbi.show_pure(:gze) <> "\n"
   end
 
   test "grades.muro writes once and refuses many" do
@@ -152,62 +152,62 @@ defmodule Muro.EmitBeamTest do
 
     out =
       capture_io(fn ->
-        assert_raise Mix.Error, ~r/\Abeam:def in many\z/, fn ->
-          Mix.Tasks.Muro.Emit.run([path, "--backend", "beam"])
+        assert_raise Mix.Error, ~r/\Ambi:def in many\z/, fn ->
+          Mix.Tasks.Muro.Emit.run([path, "--backend", "mbi"])
         end
       end)
 
     assert out == file <> "\n"
     assert File.read!(file) == golden("once")
-    assert {:error, "beam:def in many"} = Muro.emit_beam(path)
+    assert {:error, "mbi:def in many"} = Muro.emit_mbi(path)
   end
 
   test "a later run is named, an earlier failure keeps its reason, and a miss writes nothing" do
     dir = tmp_dir()
 
     path = write_book(dir, "two", two_src())
-    assert {:error, "beam:entry in b"} = Muro.emit_beam(path)
-    assert File.read!(Path.join(dir, "two.mbi")) == Beam.show_pure(:gze) <> "\n"
+    assert {:error, "mbi:entry in b"} = Muro.emit_mbi(path)
+    assert File.read!(Path.join(dir, "two.mbi")) == Mbi.show_pure(:gze) <> "\n"
 
     path = write_book(dir, "repair", repair_src())
-    assert {:error, "beam:pair in bad"} = Muro.emit_beam(path)
-    assert File.read!(Path.join(dir, "repair.mbi")) == Beam.show_pure(:gze) <> "\n"
+    assert {:error, "mbi:pair in bad"} = Muro.emit_mbi(path)
+    assert File.read!(Path.join(dir, "repair.mbi")) == Mbi.show_pure(:gze) <> "\n"
 
     path = write_book(dir, "none", "def p : spec Nat := 0\n")
     File.write!(Path.join(dir, "none.mbi"), "stale\n")
-    assert {:error, "beam:entry"} = Muro.emit_beam(path)
+    assert {:error, "mbi:entry"} = Muro.emit_mbi(path)
     refute File.exists?(Path.join(dir, "none.mbi"))
 
     path = write_book(dir, "hid", "def hidden : run internal Nat := 0\n")
-    assert {:error, "beam:entry"} = Muro.emit_beam(path)
+    assert {:error, "mbi:entry"} = Muro.emit_mbi(path)
     refute File.exists?(Path.join(dir, "hid.mbi"))
 
     path = write_book(dir, "data", data_match_src())
-    assert {:error, "beam:data in n"} = Muro.emit_beam(path)
+    assert {:error, "mbi:data in n"} = Muro.emit_mbi(path)
     refute File.exists?(Path.join(dir, "data.mbi"))
 
     path = write_book(dir, "str", "def hello : run String := \"hello\"\n")
-    assert {:error, "beam:string in hello"} = Muro.emit_beam(path)
+    assert {:error, "mbi:string in hello"} = Muro.emit_mbi(path)
 
     path = write_book(dir, "oct", "def hello : run Bytes := b\"hello\"\n")
-    assert {:error, "beam:bytes in hello"} = Muro.emit_beam(path)
+    assert {:error, "mbi:bytes in hello"} = Muro.emit_mbi(path)
 
     path = write_book(dir, "tag", "def tag : run Atom := :hello\n")
-    assert {:error, "beam:atom in tag"} = Muro.emit_beam(path)
+    assert {:error, "mbi:atom in tag"} = Muro.emit_mbi(path)
 
     path = write_book(dir, "zeros", zeros_src())
-    assert {:error, "beam:stream in zeros"} = Muro.emit_beam(path)
+    assert {:error, "mbi:stream in zeros"} = Muro.emit_mbi(path)
 
     src = File.read!("examples/internal_ok.muro")
     path = write_book(dir, "internal_ok", src)
-    assert {:error, "beam:def in inc"} = Muro.emit_beam(path)
+    assert {:error, "mbi:def in inc"} = Muro.emit_mbi(path)
     refute File.exists?(Path.join(dir, "internal_ok.mbi"))
 
-    assert {:error, "beam:term in bad"} =
-             Beam.render([%{name: "bad", mode: :run, type: :nat, body: {:nope}}])
+    assert {:error, "mbi:term in bad"} =
+             Mbi.render([%{name: "bad", mode: :run, type: :nat, body: {:nope}}])
 
-    assert {:error, "beam:grade in id"} =
-             Beam.render([
+    assert {:error, "mbi:grade in id"} =
+             Mbi.render([
                %{
                  name: "id",
                  mode: :run,
@@ -216,64 +216,64 @@ defmodule Muro.EmitBeamTest do
                }
              ])
 
-    assert {:error, "beam:entry"} = Beam.render([])
+    assert {:error, "mbi:entry"} = Mbi.render([])
   end
 
   test "success is exactly one exported run" do
     dir = tmp_dir()
 
     path = write_book(dir, "one", "def z : run Nat := 0\n")
-    assert {:ok, [file]} = Muro.emit_beam(path)
-    assert File.read!(file) == Beam.show_pure(:gze) <> "\n"
+    assert {:ok, [file]} = Muro.emit_mbi(path)
+    assert File.read!(file) == Mbi.show_pure(:gze) <> "\n"
 
     path = write_book(dir, "empty", "")
     File.write!(Path.join(dir, "empty.mbi"), "stale\n")
-    assert {:error, "beam:entry"} = Muro.emit_beam(path)
+    assert {:error, "mbi:entry"} = Muro.emit_mbi(path)
     refute File.exists?(Path.join(dir, "empty.mbi"))
 
     path = write_book(dir, "spec", "def p : spec Nat := 0\n")
-    assert {:error, "beam:entry"} = Muro.emit_beam(path)
+    assert {:error, "mbi:entry"} = Muro.emit_mbi(path)
     refute File.exists?(Path.join(dir, "spec.mbi"))
 
     path = write_book(dir, "three", three_src())
-    assert {:error, "beam:entry in b\nbeam:entry in c"} = Muro.emit_beam(path)
-    assert File.read!(Path.join(dir, "three.mbi")) == Beam.show_pure(:gze) <> "\n"
+    assert {:error, "mbi:entry in b\nmbi:entry in c"} = Muro.emit_mbi(path)
+    assert File.read!(Path.join(dir, "three.mbi")) == Mbi.show_pure(:gze) <> "\n"
 
     path = write_book(dir, "bothbad", both_bad_src())
     File.write!(Path.join(dir, "bothbad.mbi"), "stale\n")
-    assert {:error, "beam:pair in a\nbeam:string in b"} = Muro.emit_beam(path)
+    assert {:error, "mbi:pair in a\nmbi:string in b"} = Muro.emit_mbi(path)
     refute File.exists?(Path.join(dir, "bothbad.mbi"))
 
     path = write_book(dir, "only", "def n : run Nat × Nat := (0, 0)\n")
-    assert {:error, "beam:pair in n"} = Muro.emit_beam(path)
+    assert {:error, "mbi:pair in n"} = Muro.emit_mbi(path)
     refute File.exists?(Path.join(dir, "only.mbi"))
   end
 
-  test "a constructor or a data type is beam:data, and a definition is beam:def" do
+  test "a constructor or a data type is mbi:data, and a definition is mbi:def" do
     dir = tmp_dir()
 
     path = write_book(dir, "ctor", ctor_src())
-    assert {:error, "beam:data in n"} = Muro.emit_beam(path)
+    assert {:error, "mbi:data in n"} = Muro.emit_mbi(path)
     refute File.exists?(Path.join(dir, "ctor.mbi"))
 
     path = write_book(dir, "box", box_src())
-    assert {:error, "beam:data in n"} = Muro.emit_beam(path)
+    assert {:error, "mbi:data in n"} = Muro.emit_mbi(path)
 
     path = write_book(dir, "call", "def n : run Nat := plus 0 0\n")
-    assert {:error, "beam:def in n"} = Muro.emit_beam(path)
+    assert {:error, "mbi:def in n"} = Muro.emit_mbi(path)
 
     bool = %{kind: :data, name: "Bool", ctors: [%{name: "true"}, %{name: "false"}]}
 
-    assert {:error, "beam:data in n"} =
-             Beam.render([
+    assert {:error, "mbi:data in n"} =
+             Mbi.render([
                bool,
                %{name: "n", mode: :run, type: {:var, "Bool"}, body: {:var, "true"}}
              ])
 
     # A checked run cannot return a data type. The tag is still `data`
     # when that name is the term `erase` refuses.
-    assert {:error, "beam:data in n"} =
-             Beam.render([
+    assert {:error, "mbi:data in n"} =
+             Mbi.render([
                bool,
                %{
                  name: "n",
@@ -283,14 +283,14 @@ defmodule Muro.EmitBeamTest do
                }
              ])
 
-    assert {:error, "beam:def in n"} =
-             Beam.render([
+    assert {:error, "mbi:def in n"} =
+             Mbi.render([
                %{name: "n", mode: :run, type: :nat, body: {:var, "plus"}}
              ])
   end
 
   test "a domain is dropped, so a data type written there is not a refusal" do
-    image = Beam.show_pure({:glam, {:iv, 0, 1}, 0, :gze}) <> "\n"
+    image = Mbi.show_pure({:glam, {:iv, 0, 1}, 0, :gze}) <> "\n"
     assert emit_src(dropped_domain_src()) == image
     assert image =~ "(glam ((iv 0 1) 0) gze)"
     refute image =~ "Bool"
@@ -301,25 +301,49 @@ defmodule Muro.EmitBeamTest do
     path = write_book(dir, "id", affine_src())
 
     assert capture_io(fn ->
-             Mix.Tasks.Muro.Emit.run([path, "--backend", "beam"])
+             Mix.Tasks.Muro.Emit.run([path, "--backend", "mbi"])
            end) == Path.join(dir, "id.mbi") <> "\n"
 
-    assert {:ok, out, ""} = Muro.CLI.Emit.run([path, "--backend", "beam"])
+    assert {:ok, out, ""} = Muro.CLI.Emit.run([path, "--backend", "mbi"])
     assert out == Path.join(dir, "id.mbi") <> "\n"
 
     assert {:raise, "", "--node writes the placement calls"} =
-             Muro.CLI.Emit.run([path, "--backend", "beam", "--node", "a"])
+             Muro.CLI.Emit.run([path, "--backend", "mbi", "--node", "a"])
 
     assert {:raise, "", "--imports is only valid with --backend exunit"} =
-             Muro.CLI.Emit.run([path, "--backend", "beam", "--imports"])
+             Muro.CLI.Emit.run([path, "--backend", "mbi", "--imports"])
 
     bad = write_book(dir, "bad", "def n : run Nat := (0, 0)\n")
     stale = Path.join(dir, "bad.mbi")
     File.write!(stale, "stale\n")
 
-    assert {:raise, "", message} = Muro.CLI.Emit.run([bad, "--backend", "beam"])
-    refute String.starts_with?(message, "beam:")
+    assert {:raise, "", message} = Muro.CLI.Emit.run([bad, "--backend", "mbi"])
+    refute String.starts_with?(message, "mbi:")
     assert File.read!(stale) == "stale\n"
+  end
+
+  test "--backend beam is refused and names --backend mbi" do
+    dir = tmp_dir()
+    path = write_book(dir, "id", affine_src())
+    stale = Path.join(dir, "id.mbi")
+    File.write!(stale, "stale\n")
+
+    message =
+      "--backend beam is refused. Use --backend mbi. The file is the .mbi image muro-beam loads, not Erlang BEAM bytecode."
+
+    assert {:raise, "", ^message} = Muro.CLI.Emit.run([path, "--backend", "beam"])
+    assert {:raise, "", ^message} = Muro.CLI.Emit.run([path, "--backend", "beam", "--node", "a"])
+
+    assert {:raise, "", ^message} =
+             Muro.CLI.Emit.run([path, "--backend", "beam", "--imports"])
+
+    assert File.read!(stale) == "stale\n"
+
+    assert capture_io(fn ->
+             assert_raise Mix.Error, ~r/\A#{Regex.escape(message)}\z/, fn ->
+               Mix.Tasks.Muro.Emit.run([path, "--backend", "beam"])
+             end
+           end) == ""
   end
 
   defp shared_terms do
@@ -356,7 +380,7 @@ defmodule Muro.EmitBeamTest do
   defp emit_src(src) do
     dir = tmp_dir()
     path = write_book(dir, "book", src)
-    assert {:ok, [file]} = Muro.emit_beam(path)
+    assert {:ok, [file]} = Muro.emit_mbi(path)
     File.read!(file)
   end
 
@@ -367,7 +391,7 @@ defmodule Muro.EmitBeamTest do
   end
 
   defp tmp_dir do
-    dir = Path.join(System.tmp_dir!(), "muro_beam_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "muro_mbi_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
     dir

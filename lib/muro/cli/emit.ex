@@ -24,7 +24,7 @@ defmodule Muro.CLI.Emit do
           "otp     <stem>_otp.ex, a GenServer per process",
           "fsm     one state-machine module on standard output",
           "exunit  one ExUnit module for the closed equations",
-          "beam    <stem>.mbi beside the book, exactly one graded run"
+          "mbi     <stem>.mbi beside the book, exactly one graded run"
         ]
       },
       %{
@@ -49,7 +49,7 @@ defmodule Muro.CLI.Emit do
   def help do
     Muro.CLI.Text.page([
       Muro.CLI.Text.prose("""
-      muro emit reads one .muro file, checks it, and emits run definitions. Spec and evidence are omitted. elixir, the default, prints one module on standard output and writes no file. c, rust, zig, asm, and beam write a file beside the book and print that path. js writes <stem>.mjs and <stem>.d.ts beside the book and prints both paths. The executable does not load a Mix project, so c writes the .h and the .c only and does not build a NIF. otp writes a GenServer for each conforming process. fsm prints a state machine and leaves the transport with the host. exunit prints one ExUnit module for the book's closed equations. beam writes <stem>.mbi when the book has exactly one exported run, and the binder grades stay. A definition, data, a pair, a word, or a stream is refused. Zero exported runs, and more than one, are refused. The runtime that reads the image checks it again. Writing the file is not that check. Nothing here is a proof that the host translation is the book. The proof stops at the run image.
+      muro emit reads one .muro file, checks it, and emits run definitions. Spec and evidence are omitted. elixir, the default, prints one module on standard output and writes no file. c, rust, zig, asm, and mbi write a file beside the book and print that path. js writes <stem>.mjs and <stem>.d.ts beside the book and prints both paths. The executable does not load a Mix project, so c writes the .h and the .c only and does not build a NIF. otp writes a GenServer for each conforming process. fsm prints a state machine and leaves the transport with the host. exunit prints one ExUnit module for the book's closed equations. mbi writes <stem>.mbi when the book has exactly one exported run, and the binder grades stay. muro-beam loads that file. It is not Erlang BEAM bytecode. A definition, data, a pair, a word, or a stream is refused. Zero exported runs, and more than one, are refused. muro-beam checks the image again. Writing the file is not that check. Nothing here is a proof that the host translation is the book. The proof stops at the run image.
       """),
       Muro.CLI.Text.section(
         "USAGE",
@@ -72,7 +72,7 @@ defmodule Muro.CLI.Emit do
             {"muro emit book.muro --backend js", "Write book.mjs and book.d.ts."},
             {"muro emit book.muro --backend c", "Write book.h and book.c. No NIF."},
             {"muro emit book.muro --backend exunit", "Print an ExUnit module."},
-            {"muro emit book.muro --backend beam", "Write book.mbi beside the book."}
+            {"muro emit book.muro --backend mbi", "Write book.mbi beside the book."}
           ],
           "\n\n"
         )
@@ -82,7 +82,7 @@ defmodule Muro.CLI.Emit do
         Muro.CLI.Text.exits([
           {"0", "The module or the files were emitted."},
           {"1",
-           "The book does not check, a beam image refuses a run, the backend is unknown, the path is missing or not exactly one, or a flag does not apply."}
+           "The book does not check, an .mbi image refuses a run, the backend is unknown, the path is missing or not exactly one, or a flag does not apply."}
         ])
       ),
       Muro.CLI.Text.section(
@@ -115,6 +115,10 @@ defmodule Muro.CLI.Emit do
 
   defp emit(path, backend, node, imports?, nif) do
     cond do
+      backend == "beam" ->
+        {:raise, "",
+         "--backend beam is refused. Use --backend mbi. The file is the .mbi image muro-beam loads, not Erlang BEAM bytecode."}
+
       imports? and backend != "exunit" ->
         {:raise, "", "--imports is only valid with --backend exunit"}
 
@@ -194,8 +198,8 @@ defmodule Muro.CLI.Emit do
     files(Muro.emit_otp(path))
   end
 
-  defp dispatch(path, "beam", nil, _nif) do
-    case Muro.emit_beam(path) do
+  defp dispatch(path, "mbi", nil, _nif) do
+    case Muro.emit_mbi(path) do
       {:ok, paths} ->
         {:ok, Muro.CLI.join_lines(paths), ""}
 
@@ -226,7 +230,7 @@ defmodule Muro.CLI.Emit do
   defp files({:ok, paths}), do: {:ok, Muro.CLI.join_lines(paths), ""}
   defp files({:error, message}), do: {:raise, "", message}
 
-  defp refusal?(message) when is_binary(message), do: String.starts_with?(message, "beam:")
+  defp refusal?(message) when is_binary(message), do: String.starts_with?(message, "mbi:")
   defp refusal?(_), do: false
 
   defp nif?(:force), do: true
