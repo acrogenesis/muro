@@ -5804,68 +5804,99 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "ack") == 0 && n == 0)
+  if (strcmp(name, "ack") == 0 && n == 0) {
   return muro__sess_ack_init();
-if (strcmp(name, "req") == 0 && n == 0)
+}
+if (strcmp(name, "req") == 0 && n == 0) {
   return muro__sess_req_init();
-if (strcmp(name, "req-back") == 0 && n == 0)
+}
+if (strcmp(name, "req-back") == 0 && n == 0) {
   return muro__sess_reqzdback_init();
-if (strcmp(name, "choice") == 0 && n == 0)
+}
+if (strcmp(name, "choice") == 0 && n == 0) {
   return muro__sess_choice_init();
-if (strcmp(name, "choice-back") == 0 && n == 0)
+}
+if (strcmp(name, "choice-back") == 0 && n == 0) {
   return muro__sess_choicezdback_init();
-if (strcmp(name, "route") == 0 && n == 0)
+}
+if (strcmp(name, "route") == 0 && n == 0) {
   return muro__sess_route_init();
-if (strcmp(name, "route-back") == 0 && n == 0)
+}
+if (strcmp(name, "route-back") == 0 && n == 0) {
   return muro__sess_routezdback_init();
-if (strcmp(name, "loop") == 0 && n == 0)
+}
+if (strcmp(name, "loop") == 0 && n == 0) {
   return muro__sess_loop_init();
-if (strcmp(name, "loop-back") == 0 && n == 0)
+}
+if (strcmp(name, "loop-back") == 0 && n == 0) {
   return muro__sess_loopzdback_init();
-if (strcmp(name, "split") == 0 && n == 0)
+}
+if (strcmp(name, "split") == 0 && n == 0) {
   return muro__sess_split_init();
-if (strcmp(name, "split-back") == 0 && n == 0)
+}
+if (strcmp(name, "split-back") == 0 && n == 0) {
   return muro__sess_splitzdback_init();
-if (strcmp(name, "flag") == 0 && n == 1 && args)
+}
+if (strcmp(name, "flag") == 0 && n == 1 && args) {
   return muro__sess_flag_init(args[0]);
-if (strcmp(name, "flag1") == 0 && n == 0)
+}
+if (strcmp(name, "flag1") == 0 && n == 0) {
   return muro__sess_flag1_init();
-if (strcmp(name, "flag-back") == 0 && n == 0)
+}
+if (strcmp(name, "flag-back") == 0 && n == 0) {
   return muro__sess_flagzdback_init();
-if (strcmp(name, "frames") == 0 && n == 1 && args)
+}
+if (strcmp(name, "frames") == 0 && n == 1 && args) {
   return muro__sess_frames_init(args[0]);
-if (strcmp(name, "three") == 0 && n == 0)
+}
+if (strcmp(name, "three") == 0 && n == 0) {
   return muro__sess_three_init();
-if (strcmp(name, "counted") == 0 && n == 0)
+}
+if (strcmp(name, "counted") == 0 && n == 0) {
   return muro__sess_counted_init();
-if (strcmp(name, "three-back") == 0 && n == 0)
+}
+if (strcmp(name, "three-back") == 0 && n == 0) {
   return muro__sess_threezdback_init();
-if (strcmp(name, "stream") == 0 && n == 1 && args)
+}
+if (strcmp(name, "stream") == 0 && n == 1 && args) {
   return muro__sess_stream_init(args[0]);
-if (strcmp(name, "stream0") == 0 && n == 0)
+}
+if (strcmp(name, "stream0") == 0 && n == 0) {
   return muro__sess_stream0_init();
-if (strcmp(name, "stream-back") == 0 && n == 0)
+}
+if (strcmp(name, "stream-back") == 0 && n == 0) {
   return muro__sess_streamzdback_init();
-if (strcmp(name, "wide") == 0 && n == 0)
+}
+if (strcmp(name, "wide") == 0 && n == 0) {
   return muro__sess_wide_init();
-if (strcmp(name, "wide-back") == 0 && n == 0)
+}
+if (strcmp(name, "wide-back") == 0 && n == 0) {
   return muro__sess_widezdback_init();
-if (strcmp(name, "nums") == 0 && n == 1 && args)
+}
+if (strcmp(name, "nums") == 0 && n == 1 && args) {
   return muro__sess_nums_init(args[0]);
-if (strcmp(name, "nums-back") == 0 && n == 0)
+}
+if (strcmp(name, "nums-back") == 0 && n == 0) {
   return muro__sess_numszdback_init();
-if (strcmp(name, "rest") == 0 && n == 1 && args)
+}
+if (strcmp(name, "rest") == 0 && n == 1 && args) {
   return muro__sess_rest_init(args[0]);
-if (strcmp(name, "sized") == 0 && n == 0)
+}
+if (strcmp(name, "sized") == 0 && n == 0) {
   return muro__sess_sizzed_init();
-if (strcmp(name, "sized-back") == 0 && n == 0)
+}
+if (strcmp(name, "sized-back") == 0 && n == 0) {
   return muro__sess_sizzedzdback_init();
-if (strcmp(name, "inner") == 0 && n == 1 && args)
+}
+if (strcmp(name, "inner") == 0 && n == 1 && args) {
   return muro__sess_inner_init(args[0]);
-if (strcmp(name, "outer") == 0 && n == 1 && args)
+}
+if (strcmp(name, "outer") == 0 && n == 1 && args) {
   return muro__sess_outer_init(args[0]);
-if (strcmp(name, "one") == 0 && n == 0)
+}
+if (strcmp(name, "one") == 0 && n == 0) {
   return muro__sess_one_init();
+}
   return res;
 }
 

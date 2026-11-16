@@ -5,6 +5,14 @@
 
 static char g_name[256];
 
+static char *copy_str(const char *s) {
+  size_t n = strlen(s) + 1;
+  char *p = malloc(n);
+  if (!p) abort();
+  memcpy(p, s, n);
+  return p;
+}
+
 static void put_field(const char *s) {
   size_t n = s ? strlen(s) : 0;
   printf("%zu\n", n);
@@ -135,7 +143,7 @@ static muro__sess_val *parse_val(const char **ps) {
       if (!take_word(ps, name, sizeof name)) return 0;
       one = parse_val(ps);
       if (!one) return 0;
-      names[i] = strdup(name);
+      names[i] = copy_str(name);
       items[i] = *one;
       free(one);
     }
@@ -152,7 +160,7 @@ static muro__sess_val *parse_val(const char **ps) {
     if (!take_word(ps, ctor, sizeof ctor) || !take_u64(ps, &n)) return 0;
     if (!parse_many(ps, n, &items)) return 0;
     v = box(MURO_SESS_DATA);
-    v->ctor = strdup(ctor);
+    v->ctor = copy_str(ctor);
     v->n = n;
     v->a = items;
     return v;

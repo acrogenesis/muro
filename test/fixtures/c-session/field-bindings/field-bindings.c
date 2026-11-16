@@ -1422,18 +1422,24 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "ask") == 0 && n == 0)
+  if (strcmp(name, "ask") == 0 && n == 0) {
   return muro__sess_ask_init();
-if (strcmp(name, "ask-back") == 0 && n == 0)
+}
+if (strcmp(name, "ask-back") == 0 && n == 0) {
   return muro__sess_askzdback_init();
-if (strcmp(name, "forward") == 0 && n == 0)
+}
+if (strcmp(name, "forward") == 0 && n == 0) {
   return muro__sess_forward_init();
-if (strcmp(name, "forward-back") == 0 && n == 0)
+}
+if (strcmp(name, "forward-back") == 0 && n == 0) {
   return muro__sess_forwardzdback_init();
-if (strcmp(name, "tail") == 0 && n == 0)
+}
+if (strcmp(name, "tail") == 0 && n == 0) {
   return muro__sess_tail_init();
-if (strcmp(name, "tail-back") == 0 && n == 0)
+}
+if (strcmp(name, "tail-back") == 0 && n == 0) {
   return muro__sess_tailzdback_init();
+}
   return res;
 }
 

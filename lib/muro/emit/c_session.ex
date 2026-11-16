@@ -2350,8 +2350,9 @@ defmodule Muro.Emit.C.Session do
         args = if n == 0, do: "", else: Enum.map_join(0..(n - 1), ", ", &"args[#{&1}]")
 
         """
-        if (strcmp(name, #{c_str(sess.name)}) == 0 && n == #{n}#{if n == 0, do: "", else: " && args"})
+        if (strcmp(name, #{c_str(sess.name)}) == 0 && n == #{n}#{if n == 0, do: "", else: " && args"}) {
           return #{fun}_init(#{args});
+        }
         """
         |> String.trim()
       end)

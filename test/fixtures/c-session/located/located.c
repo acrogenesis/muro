@@ -608,12 +608,15 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "ping") == 0 && n == 0)
+  if (strcmp(name, "ping") == 0 && n == 0) {
   return muro__sess_ping_init();
-if (strcmp(name, "ping-done") == 0 && n == 0)
+}
+if (strcmp(name, "ping-done") == 0 && n == 0) {
   return muro__sess_pingzddone_init();
-if (strcmp(name, "send-then-send") == 0 && n == 0)
+}
+if (strcmp(name, "send-then-send") == 0 && n == 0) {
   return muro__sess_sendzdthenzdsend_init();
+}
   return res;
 }
 

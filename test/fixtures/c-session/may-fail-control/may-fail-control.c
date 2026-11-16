@@ -387,10 +387,12 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "task-work") == 0 && n == 0)
+  if (strcmp(name, "task-work") == 0 && n == 0) {
   return muro__sess_taskzdwork_init();
-if (strcmp(name, "server-wait") == 0 && n == 0)
+}
+if (strcmp(name, "server-wait") == 0 && n == 0) {
   return muro__sess_serverzdwait_init();
+}
   return res;
 }
 

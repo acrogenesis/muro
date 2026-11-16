@@ -3038,34 +3038,48 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "out-frames") == 0 && n == 0)
+  if (strcmp(name, "out-frames") == 0 && n == 0) {
   return muro__sess_outzdframes_init();
-if (strcmp(name, "tolerate") == 0 && n == 0)
+}
+if (strcmp(name, "tolerate") == 0 && n == 0) {
   return muro__sess_tolerate_init();
-if (strcmp(name, "ping") == 0 && n == 0)
+}
+if (strcmp(name, "ping") == 0 && n == 0) {
   return muro__sess_ping_init();
-if (strcmp(name, "owed") == 0 && n == 0)
+}
+if (strcmp(name, "owed") == 0 && n == 0) {
   return muro__sess_owed_init();
-if (strcmp(name, "out") == 0 && n == 1 && args)
+}
+if (strcmp(name, "out") == 0 && n == 1 && args) {
   return muro__sess_out_init(args[0]);
-if (strcmp(name, "out1") == 0 && n == 0)
+}
+if (strcmp(name, "out1") == 0 && n == 0) {
   return muro__sess_out1_init();
-if (strcmp(name, "stream") == 0 && n == 1 && args)
+}
+if (strcmp(name, "stream") == 0 && n == 1 && args) {
   return muro__sess_stream_init(args[0]);
-if (strcmp(name, "stream0") == 0 && n == 0)
+}
+if (strcmp(name, "stream0") == 0 && n == 0) {
   return muro__sess_stream0_init();
-if (strcmp(name, "stream-back") == 0 && n == 0)
+}
+if (strcmp(name, "stream-back") == 0 && n == 0) {
   return muro__sess_streamzdback_init();
-if (strcmp(name, "echo") == 0 && n == 0)
+}
+if (strcmp(name, "echo") == 0 && n == 0) {
   return muro__sess_echo_init();
-if (strcmp(name, "echo-back") == 0 && n == 0)
+}
+if (strcmp(name, "echo-back") == 0 && n == 0) {
   return muro__sess_echozdback_init();
-if (strcmp(name, "spin") == 0 && n == 0)
+}
+if (strcmp(name, "spin") == 0 && n == 0) {
   return muro__sess_spin_init();
-if (strcmp(name, "hear") == 0 && n == 0)
+}
+if (strcmp(name, "hear") == 0 && n == 0) {
   return muro__sess_hear_init();
-if (strcmp(name, "line") == 0 && n == 0)
+}
+if (strcmp(name, "line") == 0 && n == 0) {
   return muro__sess_line_init();
+}
   return res;
 }
 

@@ -1324,20 +1324,27 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "ping") == 0 && n == 0)
+  if (strcmp(name, "ping") == 0 && n == 0) {
   return muro__sess_ping_init();
-if (strcmp(name, "back") == 0 && n == 0)
+}
+if (strcmp(name, "back") == 0 && n == 0) {
   return muro__sess_back_init();
-if (strcmp(name, "forth") == 0 && n == 0)
+}
+if (strcmp(name, "forth") == 0 && n == 0) {
   return muro__sess_forth_init();
-if (strcmp(name, "ping-done") == 0 && n == 0)
+}
+if (strcmp(name, "ping-done") == 0 && n == 0) {
   return muro__sess_pingzddone_init();
-if (strcmp(name, "reply") == 0 && n == 0)
+}
+if (strcmp(name, "reply") == 0 && n == 0) {
   return muro__sess_reply_init();
-if (strcmp(name, "choice") == 0 && n == 0)
+}
+if (strcmp(name, "choice") == 0 && n == 0) {
   return muro__sess_choice_init();
-if (strcmp(name, "offered") == 0 && n == 0)
+}
+if (strcmp(name, "offered") == 0 && n == 0) {
   return muro__sess_offered_init();
+}
   return res;
 }
 

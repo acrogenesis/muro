@@ -4835,40 +4835,57 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "gate") == 0 && n == 0)
+  if (strcmp(name, "gate") == 0 && n == 0) {
   return muro__sess_gate_init();
-if (strcmp(name, "gate-back") == 0 && n == 0)
+}
+if (strcmp(name, "gate-back") == 0 && n == 0) {
   return muro__sess_gatezdback_init();
-if (strcmp(name, "hdr-gate") == 0 && n == 0)
+}
+if (strcmp(name, "hdr-gate") == 0 && n == 0) {
   return muro__sess_hdrzdgate_init();
-if (strcmp(name, "hdr-back") == 0 && n == 0)
+}
+if (strcmp(name, "hdr-back") == 0 && n == 0) {
   return muro__sess_hdrzdback_init();
-if (strcmp(name, "wrap-gate") == 0 && n == 0)
+}
+if (strcmp(name, "wrap-gate") == 0 && n == 0) {
   return muro__sess_wrapzdgate_init();
-if (strcmp(name, "wrap-back") == 0 && n == 0)
+}
+if (strcmp(name, "wrap-back") == 0 && n == 0) {
   return muro__sess_wrapzdback_init();
-if (strcmp(name, "loop") == 0 && n == 0)
+}
+if (strcmp(name, "loop") == 0 && n == 0) {
   return muro__sess_loop_init();
-if (strcmp(name, "loop-back") == 0 && n == 0)
+}
+if (strcmp(name, "loop-back") == 0 && n == 0) {
   return muro__sess_loopzdback_init();
-if (strcmp(name, "ack") == 0 && n == 0)
+}
+if (strcmp(name, "ack") == 0 && n == 0) {
   return muro__sess_ack_init();
-if (strcmp(name, "called") == 0 && n == 0)
+}
+if (strcmp(name, "called") == 0 && n == 0) {
   return muro__sess_called_init();
-if (strcmp(name, "called-back") == 0 && n == 0)
+}
+if (strcmp(name, "called-back") == 0 && n == 0) {
   return muro__sess_calledzdback_init();
-if (strcmp(name, "sized") == 0 && n == 1 && args)
+}
+if (strcmp(name, "sized") == 0 && n == 1 && args) {
   return muro__sess_sizzed_init(args[0]);
-if (strcmp(name, "sized3") == 0 && n == 0)
+}
+if (strcmp(name, "sized3") == 0 && n == 0) {
   return muro__sess_sizzed3_init();
-if (strcmp(name, "sized3-back") == 0 && n == 0)
+}
+if (strcmp(name, "sized3-back") == 0 && n == 0) {
   return muro__sess_sizzed3zdback_init();
-if (strcmp(name, "counted") == 0 && n == 0)
+}
+if (strcmp(name, "counted") == 0 && n == 0) {
   return muro__sess_counted_init();
-if (strcmp(name, "counted-back") == 0 && n == 0)
+}
+if (strcmp(name, "counted-back") == 0 && n == 0) {
   return muro__sess_countedzdback_init();
-if (strcmp(name, "once") == 0 && n == 0)
+}
+if (strcmp(name, "once") == 0 && n == 0) {
   return muro__sess_once_init();
+}
   return res;
 }
 

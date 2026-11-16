@@ -1361,22 +1361,30 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "ping") == 0 && n == 0)
+  if (strcmp(name, "ping") == 0 && n == 0) {
   return muro__sess_ping_init();
-if (strcmp(name, "back") == 0 && n == 0)
+}
+if (strcmp(name, "back") == 0 && n == 0) {
   return muro__sess_back_init();
-if (strcmp(name, "loop") == 0 && n == 0)
+}
+if (strcmp(name, "loop") == 0 && n == 0) {
   return muro__sess_loop_init();
-if (strcmp(name, "loop-back") == 0 && n == 0)
+}
+if (strcmp(name, "loop-back") == 0 && n == 0) {
   return muro__sess_loopzdback_init();
-if (strcmp(name, "flag") == 0 && n == 0)
+}
+if (strcmp(name, "flag") == 0 && n == 0) {
   return muro__sess_flag_init();
-if (strcmp(name, "flag-back") == 0 && n == 0)
+}
+if (strcmp(name, "flag-back") == 0 && n == 0) {
   return muro__sess_flagzdback_init();
-if (strcmp(name, "flags") == 0 && n == 0)
+}
+if (strcmp(name, "flags") == 0 && n == 0) {
   return muro__sess_flags_init();
-if (strcmp(name, "flags-back") == 0 && n == 0)
+}
+if (strcmp(name, "flags-back") == 0 && n == 0) {
   return muro__sess_flagszdback_init();
+}
   return res;
 }
 

@@ -1161,14 +1161,18 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "out-frames") == 0 && n == 0)
+  if (strcmp(name, "out-frames") == 0 && n == 0) {
   return muro__sess_outzdframes_init();
-if (strcmp(name, "tolerate") == 0 && n == 0)
+}
+if (strcmp(name, "tolerate") == 0 && n == 0) {
   return muro__sess_tolerate_init();
-if (strcmp(name, "echo") == 0 && n == 0)
+}
+if (strcmp(name, "echo") == 0 && n == 0) {
   return muro__sess_echo_init();
-if (strcmp(name, "echo-back") == 0 && n == 0)
+}
+if (strcmp(name, "echo-back") == 0 && n == 0) {
   return muro__sess_echozdback_init();
+}
   return res;
 }
 

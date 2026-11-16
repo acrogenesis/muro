@@ -3339,38 +3339,54 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "pair-ping") == 0 && n == 0)
+  if (strcmp(name, "pair-ping") == 0 && n == 0) {
   return muro__sess_pairzdping_init();
-if (strcmp(name, "pair-pong") == 0 && n == 0)
+}
+if (strcmp(name, "pair-pong") == 0 && n == 0) {
   return muro__sess_pairzdpong_init();
-if (strcmp(name, "grant-ping") == 0 && n == 0)
+}
+if (strcmp(name, "grant-ping") == 0 && n == 0) {
   return muro__sess_grantzdping_init();
-if (strcmp(name, "grant-pong") == 0 && n == 0)
+}
+if (strcmp(name, "grant-pong") == 0 && n == 0) {
   return muro__sess_grantzdpong_init();
-if (strcmp(name, "rec-ping") == 0 && n == 0)
+}
+if (strcmp(name, "rec-ping") == 0 && n == 0) {
   return muro__sess_reczdping_init();
-if (strcmp(name, "rec-pong") == 0 && n == 0)
+}
+if (strcmp(name, "rec-pong") == 0 && n == 0) {
   return muro__sess_reczdpong_init();
-if (strcmp(name, "lin-ping") == 0 && n == 0)
+}
+if (strcmp(name, "lin-ping") == 0 && n == 0) {
   return muro__sess_linzdping_init();
-if (strcmp(name, "lin-pong") == 0 && n == 0)
+}
+if (strcmp(name, "lin-pong") == 0 && n == 0) {
   return muro__sess_linzdpong_init();
-if (strcmp(name, "shade") == 0 && n == 0)
+}
+if (strcmp(name, "shade") == 0 && n == 0) {
   return muro__sess_shade_init();
-if (strcmp(name, "shade-back") == 0 && n == 0)
+}
+if (strcmp(name, "shade-back") == 0 && n == 0) {
   return muro__sess_shadezdback_init();
-if (strcmp(name, "wrap") == 0 && n == 0)
+}
+if (strcmp(name, "wrap") == 0 && n == 0) {
   return muro__sess_wrap_init();
-if (strcmp(name, "wrap-back") == 0 && n == 0)
+}
+if (strcmp(name, "wrap-back") == 0 && n == 0) {
   return muro__sess_wrapzdback_init();
-if (strcmp(name, "box") == 0 && n == 0)
+}
+if (strcmp(name, "box") == 0 && n == 0) {
   return muro__sess_box_init();
-if (strcmp(name, "box-back") == 0 && n == 0)
+}
+if (strcmp(name, "box-back") == 0 && n == 0) {
   return muro__sess_boxzdback_init();
-if (strcmp(name, "loop-ping") == 0 && n == 0)
+}
+if (strcmp(name, "loop-ping") == 0 && n == 0) {
   return muro__sess_loopzdping_init();
-if (strcmp(name, "loop-pong") == 0 && n == 0)
+}
+if (strcmp(name, "loop-pong") == 0 && n == 0) {
   return muro__sess_loopzdpong_init();
+}
   return res;
 }
 

@@ -2268,30 +2268,42 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "ping") == 0 && n == 0)
+  if (strcmp(name, "ping") == 0 && n == 0) {
   return muro__sess_ping_init();
-if (strcmp(name, "back") == 0 && n == 0)
+}
+if (strcmp(name, "back") == 0 && n == 0) {
   return muro__sess_back_init();
-if (strcmp(name, "choice") == 0 && n == 0)
+}
+if (strcmp(name, "choice") == 0 && n == 0) {
   return muro__sess_choice_init();
-if (strcmp(name, "offered") == 0 && n == 0)
+}
+if (strcmp(name, "offered") == 0 && n == 0) {
   return muro__sess_offered_init();
-if (strcmp(name, "open") == 0 && n == 0)
+}
+if (strcmp(name, "open") == 0 && n == 0) {
   return muro__sess_open_k_init();
-if (strcmp(name, "closed") == 0 && n == 0)
+}
+if (strcmp(name, "closed") == 0 && n == 0) {
   return muro__sess_closed_init();
-if (strcmp(name, "box") == 0 && n == 0)
+}
+if (strcmp(name, "box") == 0 && n == 0) {
   return muro__sess_box_init();
-if (strcmp(name, "boxed") == 0 && n == 0)
+}
+if (strcmp(name, "boxed") == 0 && n == 0) {
   return muro__sess_boxed_init();
-if (strcmp(name, "sized") == 0 && n == 0)
+}
+if (strcmp(name, "sized") == 0 && n == 0) {
   return muro__sess_sizzed_init();
-if (strcmp(name, "sized-back") == 0 && n == 0)
+}
+if (strcmp(name, "sized-back") == 0 && n == 0) {
   return muro__sess_sizzedzdback_init();
-if (strcmp(name, "window") == 0 && n == 0)
+}
+if (strcmp(name, "window") == 0 && n == 0) {
   return muro__sess_window_init();
-if (strcmp(name, "grant-end") == 0 && n == 0)
+}
+if (strcmp(name, "grant-end") == 0 && n == 0) {
   return muro__sess_grantzdend_init();
+}
   return res;
 }
 

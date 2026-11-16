@@ -2301,28 +2301,39 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   (void)args;
   if (!name) return res;
-  if (strcmp(name, "answer") == 0 && n == 0)
+  if (strcmp(name, "answer") == 0 && n == 0) {
   return muro__sess_answer_init();
-if (strcmp(name, "answer-back") == 0 && n == 0)
+}
+if (strcmp(name, "answer-back") == 0 && n == 0) {
   return muro__sess_answerzdback_init();
-if (strcmp(name, "flags") == 0 && n == 0)
+}
+if (strcmp(name, "flags") == 0 && n == 0) {
   return muro__sess_flags_init();
-if (strcmp(name, "flags-back") == 0 && n == 0)
+}
+if (strcmp(name, "flags-back") == 0 && n == 0) {
   return muro__sess_flagszdback_init();
-if (strcmp(name, "choice") == 0 && n == 0)
+}
+if (strcmp(name, "choice") == 0 && n == 0) {
   return muro__sess_choice_init();
-if (strcmp(name, "offered") == 0 && n == 0)
+}
+if (strcmp(name, "offered") == 0 && n == 0) {
   return muro__sess_offered_init();
-if (strcmp(name, "flag") == 0 && n == 0)
+}
+if (strcmp(name, "flag") == 0 && n == 0) {
   return muro__sess_flag_init();
-if (strcmp(name, "flag-back") == 0 && n == 0)
+}
+if (strcmp(name, "flag-back") == 0 && n == 0) {
   return muro__sess_flagzdback_init();
-if (strcmp(name, "opt") == 0 && n == 0)
+}
+if (strcmp(name, "opt") == 0 && n == 0) {
   return muro__sess_opt_init();
-if (strcmp(name, "opt-back") == 0 && n == 0)
+}
+if (strcmp(name, "opt-back") == 0 && n == 0) {
   return muro__sess_optzdback_init();
-if (strcmp(name, "closed") == 0 && n == 0)
+}
+if (strcmp(name, "closed") == 0 && n == 0) {
   return muro__sess_closed_init();
+}
   return res;
 }
 
