@@ -358,14 +358,18 @@ defmodule Muro.FamilyTest do
   end
 
   test "a value binder is not a key" do
-    src =
-      @slots <>
-        """
-        temporal valued : slots := forall (c : Event). always (opened c signal)
-        """
+    # `Bit` is the value sort in Family.bind (`:bit`), not a declared kind.
+    # `Event` is a binder of the kind. Both are values, so `opened` refuses them.
+    for ty <- ["Bit", "Event"] do
+      src =
+        @slots <>
+          """
+          temporal valued : slots := forall (c : #{ty}). always (opened c signal)
+          """
 
-    assert {:error, msg} = check(src)
-    assert msg =~ ~r/\d+:\d+: valued: opened expects a key/
+      assert {:error, msg} = check(src)
+      assert msg =~ ~r/\d+:\d+: valued: opened expects a key/, ty
+    end
   end
 
   test "an instance atom on a meeting names a family" do
