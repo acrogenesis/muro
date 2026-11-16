@@ -2,7 +2,7 @@
 title: Temporal
 slug: temporal
 order: 24
-summary: always, eventually, and leads_to on one buffered meeting.
+summary: always, eventually, and leads_to on one buffered meeting, and a family per key of a closed kind.
 ---
 
 # Temporal
