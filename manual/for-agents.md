@@ -101,6 +101,7 @@ lib/muro/emit/exunit.ex closed equations → one ExUnit module (`--backend exuni
 lib/muro/emit/otp.ex    a conformance, and a reading, is a GenServer; a marked peer is monitored and a `:DOWN` that is not a halt takes the failure arm; a book with no mark emits the previous module (`--backend otp`)
 lib/muro/emit/fsm.ex    a session endpoint is a state machine; a marked book has `down/1` and `down/2` for a failure arm; a book with no mark emits no `down`; the transport stays with the host (`--backend fsm`)
 lib/muro/emit/node.ex   a cross, and a cross reading, is one call and one monitor (`--node`)
+lib/muro/emit/mbi.ex    exactly one exported run as an .mbi image (`--backend mbi`); muro-beam loads it; not a manifest target
 lib/muro/example.ex     same book as Agda
 lib/muro/mutate.ex      mutants of run definitions (`mix muro.mutate`)
 lib/muro/synth.ex       version-space search on an emitted step (`mix muro.synth`)
@@ -123,6 +124,7 @@ agda/Muro/Seated.agda   a party of a description sits at a place; `seat name : p
 agda/Muro/Held.agda     a meeting at the parties' places; the same place stays; two places cross once; a `.muro` file does not write it
 agda/Muro/Arrow.agda    %1 on a Π binder must be used; both marks are the affine quantity
 agda/Muro/Grade.agda    a grade pair `(c, t)` on a binder; `ungraded-fragment` is the affine check; not a Tm
+agda/Muro/Beam.agda     erase a core term to the grade judgment; `GTm` and `decide` are unchanged; not a Tm
 agda/Muro/Linear.agda   multiplicity on a session endpoint; λ¹ must be used once; ⊸ accepts or returns it; the protocol is `SExp`, so `rec` and a declared data payload are endpoints; `dualS` keeps both; `--safe --guardedness`; not a Tm
 agda/Muro/Place.agda    placement coeffect; ambient by default; one boundary; run has no seat
 agda/Muro/Located.agda  a session at a place; `endpoint` and `read` follow the sitting; `--node` follows a cross reading; `--backend otp` follows the process
@@ -177,6 +179,8 @@ A script run with `mix run --no-start` does not see the archive. Archives are on
 `mix muro.emit path.muro` prints the Elixir module. `mix muro.emit path.muro > path.ex` saves it. `mix muro.emit path.muro --backend exunit` prints one ExUnit module for the book's closed equations, including a library whose `param`s are not supplied. `--imports` with that backend also collects the files the book imports directly. The page is [Closed equations as tests](exunit.md).
 
 `--backend zig` writes `<name>.zig` next to the file. `zig` translates it. The proof stops at the run image.
+
+`--backend mbi` writes `<stem>.mbi` next to the file only when the book has exactly one exported run and that body erases, and the binder grades stay. Any refusal, including a book with no exported run and a book with more than one, writes nothing and leaves an image already at that path byte for byte. The file is the image muro-beam loads. It is not Erlang BEAM bytecode. A definition, data, a pair, a word, or a stream is refused. muro-beam checks the image again. Writing the file is not that check. The page is [MBI images](mbi.md).
 
 `--backend c` writes C. The Mix task builds a NIF when the working directory is the loaded Mix project. Add `{:elixir_make, "~> 0.10", runtime: false}` to the project deps, or run the task inside a project that depends on muro. Without `elixir_make`, that NIF stops and names the dependency. Outside the loaded project the task writes the `.h` and the `.c` only, and so does the executable. `nx` and `makeup` are optional. Checking and emitting Elixir do not load them.
 

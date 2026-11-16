@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Muro is an explicit affine dependent type theory built for agents to write. As the agent, you carry the formal verification: every type, motive and proof step is written out and nothing is inferred, so the checker either accepts your file or names each failing definition. A spec never becomes evidence. Evidence never becomes a run. Only `run` terms are emitted, as Elixir (BEAM), as C, as Rust, as Zig, as JavaScript, or as Cortex-M assembly, from the same source.
+Muro is an explicit affine dependent type theory built for agents to write. As the agent, you carry the formal verification: every type, motive and proof step is written out and nothing is inferred, so the checker either accepts your file or names each failing definition. A spec never becomes evidence. Evidence never becomes a run. Only `run` terms are emitted, as Elixir (BEAM), as C, as Rust, as Zig, as JavaScript, as an .mbi image for muro-beam with `mix muro.emit --backend mbi`, or as Cortex-M assembly, from the same source.
 
 The canonical contract is [`manual/for-agents.md`](manual/for-agents.md). If this file and that page ever disagree, that page wins.
 
@@ -72,6 +72,7 @@ mix muro.emit path.muro --backend zig       # <name>.zig
 mix muro.emit path.muro --backend asm       # <name>.s, Cortex-M0, Nat run
 mix muro.emit path.muro --backend js        # <name>.mjs and <name>.d.ts; node runs the module
 mix muro.emit path.muro --backend fsm       # one state machine per session, on stdout
+mix muro.emit path.muro --backend mbi       # <stem>.mbi, exactly one graded run for muro-beam
 ```
 
 ```elixir
@@ -81,6 +82,7 @@ mix muro.emit path.muro --backend fsm       # one state machine per session, on 
 {:ok, files} = Muro.emit_zig("examples/your_file.muro")       # .zig
 {:ok, files} = Muro.emit_asm("examples/your_file.muro")       # .s
 {:ok, files} = Muro.emit_js("examples/your_file.muro")        # .mjs and .d.ts
+{:ok, files} = Muro.emit_mbi("examples/your_file.muro")       # <stem>.mbi for muro-beam
 ```
 
 A `repr` makes `mix muro.emit` also write `decode_<type>/1`, `decode_<type>/2`, and `encode_<type>/2`. Decode returns `{:ok, value, table}`. Encode takes that table. See [Host representations](manual/repr.md).
@@ -104,6 +106,6 @@ The C backend refuses some terms that the Elixir backend accepts. `U8`, `U32`, `
 
 ## Manual
 
-[Start](manual/start.md) · [Marks](manual/marks.md) · [The wall](manual/wall.md) · [Terms](manual/language.md) · [Sessions](manual/sessions.md) · [Choreography](manual/choreography.md) · [Identity](manual/identity.md) · [Data](manual/data.md) · [Indexed data](manual/indexed.md) · [Streams](manual/streams.md) · [Either and Dec](manual/either.md) · [Machine numbers](manual/machine.md) · [Emit](manual/emit.md) · [State machines](manual/fsm.md) · [Mutation](manual/mutate.md) · [Synthesis](manual/synth.md) · [Closed equations as tests](manual/exunit.md) · [Committed modules](manual/gen.md) · [The executable](manual/binary.md) · [Host representations](manual/repr.md) · [Packages](manual/packages.md) · [Library](manual/library.md) · [Grammar](manual/grammar.md) · [Examples](manual/examples.md) · [CSHRL](manual/cshrl.md) · [For agents](manual/for-agents.md) · [Extending](manual/extending.md) · [Limits](manual/limits.md)
+[Start](manual/start.md) · [Marks](manual/marks.md) · [The wall](manual/wall.md) · [Terms](manual/language.md) · [Sessions](manual/sessions.md) · [Choreography](manual/choreography.md) · [Identity](manual/identity.md) · [Data](manual/data.md) · [Indexed data](manual/indexed.md) · [Streams](manual/streams.md) · [Either and Dec](manual/either.md) · [Machine numbers](manual/machine.md) · [Emit](manual/emit.md) · [MBI images](manual/mbi.md) · [State machines](manual/fsm.md) · [Mutation](manual/mutate.md) · [Synthesis](manual/synth.md) · [Closed equations as tests](manual/exunit.md) · [Committed modules](manual/gen.md) · [The executable](manual/binary.md) · [Host representations](manual/repr.md) · [Packages](manual/packages.md) · [Library](manual/library.md) · [Grammar](manual/grammar.md) · [Examples](manual/examples.md) · [CSHRL](manual/cshrl.md) · [For agents](manual/for-agents.md) · [Extending](manual/extending.md) · [Limits](manual/limits.md)
 
 Machine-readable index: [`manual/manifest.yml`](manual/manifest.yml). Canonical book: `examples/half_ok.muro`.

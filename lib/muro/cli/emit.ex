@@ -23,7 +23,8 @@ defmodule Muro.CLI.Emit do
           "asm     <stem>.s, Thumb for Cortex-M0",
           "otp     <stem>_otp.ex, a GenServer per process",
           "fsm     one state-machine module on standard output",
-          "exunit  one ExUnit module for the closed equations"
+          "exunit  one ExUnit module for the closed equations",
+          "mbi     <stem>.mbi beside the book, exactly one graded run"
         ]
       },
       %{
@@ -48,7 +49,7 @@ defmodule Muro.CLI.Emit do
   def help do
     Muro.CLI.Text.page([
       Muro.CLI.Text.prose("""
-      muro emit reads one .muro file, checks it, and emits run definitions. Spec and evidence are omitted. elixir, the default, prints one module on standard output and writes no file. c, rust, zig, and asm write a file beside the book and print that path. js writes <stem>.mjs and <stem>.d.ts beside the book and prints both paths. The executable does not load a Mix project, so c writes the .h and the .c only and does not build a NIF. otp writes a GenServer for each conforming process. fsm prints a state machine and leaves the transport with the host. exunit prints one ExUnit module for the book's closed equations. Nothing here is a proof that the host translation is the book. The proof stops at the run image.
+      muro emit reads one .muro file, checks it, and emits run definitions. Spec and evidence are omitted. elixir, the default, prints one module on standard output and writes no file. c, rust, zig, and asm write a file beside the book and print that path. js writes <stem>.mjs and <stem>.d.ts beside the book and prints both paths. The executable does not load a Mix project, so c writes the .h and the .c only and does not build a NIF. otp writes a GenServer for each conforming process. fsm prints a state machine and leaves the transport with the host. exunit prints one ExUnit module for the book's closed equations. mbi writes <stem>.mbi beside the book only when exactly one exported run erases, and prints that path. The binder grades stay. A refusal writes nothing and prints no path. An image already beside the book stays byte for byte, including when the book has no exported run and when it has more than one. muro-beam loads that file. It is not Erlang BEAM bytecode. A definition, data, a pair, a word, or a stream is refused. Zero exported runs, and more than one, are refused. muro-beam checks the image again. Writing the file is not that check. Nothing here is a proof that the host translation is the book. The proof stops at the run image.
       """),
       Muro.CLI.Text.section(
         "USAGE",
@@ -70,7 +71,8 @@ defmodule Muro.CLI.Emit do
             {"muro emit book.muro --backend zig", "Write book.zig beside the book."},
             {"muro emit book.muro --backend js", "Write book.mjs and book.d.ts."},
             {"muro emit book.muro --backend c", "Write book.h and book.c. No NIF."},
-            {"muro emit book.muro --backend exunit", "Print an ExUnit module."}
+            {"muro emit book.muro --backend exunit", "Print an ExUnit module."},
+            {"muro emit book.muro --backend mbi", "Write book.mbi beside the book."}
           ],
           "\n\n"
         )
@@ -78,9 +80,10 @@ defmodule Muro.CLI.Emit do
       Muro.CLI.Text.section(
         "EXIT CODES",
         Muro.CLI.Text.exits([
-          {"0", "The module or the files were emitted."},
+          {"0",
+           "The module was printed, or the files were written. mbi writes one .mbi and prints its path. Writing it is not acceptance."},
           {"1",
-           "The book does not check, the backend is unknown, the path is missing or not exactly one, or a flag does not apply."}
+           "The book does not check, an .mbi image refuses a run, the backend is unknown, the path is missing or not exactly one, or a flag does not apply."}
         ])
       ),
       Muro.CLI.Text.section(
@@ -113,6 +116,10 @@ defmodule Muro.CLI.Emit do
 
   defp emit(path, backend, node, imports?, nif) do
     cond do
+      backend == "beam" ->
+        {:raise, "",
+         "--backend beam is refused. Use --backend mbi. The file is the .mbi image muro-beam loads, not Erlang BEAM bytecode."}
+
       imports? and backend != "exunit" ->
         {:raise, "", "--imports is only valid with --backend exunit"}
 
@@ -190,6 +197,19 @@ defmodule Muro.CLI.Emit do
 
   defp dispatch(path, "otp", nil, _nif) do
     files(Muro.emit_otp(path))
+  end
+
+  # The image is written only when exactly one exported run erases.
+  # Exit 0 prints that path. A refusal writes nothing and leaves a file
+  # already beside the book byte for byte, so stdout stays empty.
+  defp dispatch(path, "mbi", nil, _nif) do
+    case Muro.emit_mbi(path) do
+      {:ok, paths} ->
+        {:ok, Muro.CLI.join_lines(paths), ""}
+
+      {:error, message} ->
+        {:raise, "", message}
+    end
   end
 
   defp dispatch(path, "fsm", nil, _nif) do
