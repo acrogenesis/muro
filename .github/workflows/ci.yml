@@ -188,9 +188,10 @@ jobs:
       - run: mix compile --warnings-as-errors
       - run: mix test
 
-      # The emit digest is raw bytes where Elixir 1.18 and 1.20 agree, and
-      # a parsed image, comments kept, for the state machine. This matrix
-      # is those two versions. The Elixir job runs the same test on 1.20.
+      # The emit digest is raw bytes where the bytes agree, and a parsed
+      # image, comments kept, for the state machine and the OTP image.
+      # This matrix is Elixir 1.18 and 1.20. The Elixir job runs the same
+      # test on 1.20.
       - name: Emit digest on this Elixir
         working-directory: ${{ github.workspace }}
         run: |

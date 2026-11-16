@@ -7,25 +7,28 @@
 #
 # `norm/1` strips the absolute working directory. Then:
 #
-# Raw bytes, comments included. Measured on Elixir 1.18.4 and 1.20.4,
-# over every example except the keyed family, and again on 1.20.4 after
-# several hundred atoms were created in the VM. The bytes match for
-# `:elixir`, `:c`, `:rust`, `:zig`, `:asm`, `:js`, `:otp`, `:node`,
-# `:mbi`, and `:exunit`. A change to the header comment in
-# `Muro.Emit.emit_module/2` changes `:elixir` and fails the digest.
-# `:otp`, `:node`, and ExUnit `:source` are these raw bytes too.
+# Raw bytes, comments included. Measured on Elixir 1.18.4 (OTP 28),
+# Elixir 1.20.4 (OTP 28), and Elixir 1.20.4 (OTP 29), over every example
+# except the keyed family. The bytes match for `:elixir`, `:c`, `:rust`,
+# `:zig`, `:asm`, `:js`, `:node`, `:mbi`, and `:exunit`. A change to the
+# header comment in `Muro.Emit.emit_module/2` changes `:elixir` and fails
+# the digest. `:node` and ExUnit `:source` are these raw bytes too.
 #
-# Parsed form, `:fsm` only. Elixir 1.18 breaks a line inside an inspected
-# tuple that 1.20 keeps on one line. `Code.string_to_quoted_with_comments/2`
-# (`columns: false`) drops that line break. Metadata is dropped, and map
+# Parsed form, `:fsm` and `:otp`. Elixir 1.18 breaks a line inside an
+# inspected tuple in the state machine that Elixir 1.20 on OTP 29 keeps
+# on one line. The OTP image is inspected terms (`Muro.Emit.Otp`). On
+# Elixir 1.20 those bytes differ between OTP 28 and OTP 29. Elixir 1.18
+# on OTP 28 prints the OTP 29 bytes. `Code.string_to_quoted_with_comments/2`
+# (`columns: false`) drops that difference. Metadata is dropped, and map
 # pairs are sorted by their external key. The comment texts are kept, in
 # source order, and the line number is not, so a line break does not move
 # the digest and a change to the generated comment does. A binary that
 # does not start with `defmodule`, or that does not parse, stays raw.
 # An error tuple stays raw.
 #
-# CI runs this digest on 1.18.4 and on 1.20.4. The visor matrix is those
-# two versions. The Elixir job runs it again on 1.20.4.
+# CI runs this digest on Elixir 1.18.4 (OTP 27.2) and Elixir 1.20.4
+# (OTP 28.1). The visor matrix is those two. The Elixir job runs it
+# again on Elixir 1.20.4 (OTP 29).
 defmodule Muro.EmitExamples do
   @exclude "keyed-slots.muro"
 
@@ -143,9 +146,10 @@ defmodule Muro.EmitExamples do
 
   defp sha(bin), do: Base.encode16(:crypto.hash(:sha256, bin), case: :lower)
 
-  # Only the state machine moves between Elixir 1.18 and 1.20. The file
-  # comment records the measurement.
-  @parsed [:fsm]
+  # The state machine moves between Elixir 1.18 and 1.20. The OTP image
+  # moves between OTP 28 and OTP 29 on Elixir 1.20. The file comment
+  # records the measurement.
+  @parsed [:fsm, :otp]
 
   @doc false
   def canon_picture(picture) when is_map(picture) do
