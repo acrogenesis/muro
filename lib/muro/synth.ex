@@ -100,6 +100,15 @@ defmodule Muro.Synth do
 
   @doc """
   Predicate constructors in `pred`. A feature name adds nothing.
+
+  A constant or a feature test is 1. A negation is 1 plus its body. A
+  conjunction or a disjunction is 1 plus both parts. `{:self, stem,
+  action, feature}`, rendered `selfp`, is 1: it reads that action's
+  column of the stem. `{:other, stem, action, features}`, rendered
+  `otherp`, is also 1: it is the disjunction of the stem at every other
+  action, and the list of those columns is not counted again, so the
+  size does not grow with the number of actions. An `other` with no
+  other column is false and still size 1.
   """
   def size(true), do: 1
   def size(false), do: 1
@@ -112,7 +121,9 @@ defmodule Muro.Synth do
 
   @doc """
   The Muro term for `pred`, using `truep`, `falsep`, `feat`, `andp`,
-  `orp`, and `notp`.
+  `orp`, `notp`, `selfp`, and `otherp`. `selfp stem a` and `otherp stem
+  a` name the stem and the action. The columns they read are not
+  written: the policy book's `stem-at` and `other-at` supply them.
   """
   def render(true), do: "truep"
   def render(false), do: "falsep"
@@ -524,8 +535,9 @@ defmodule Muro.Synth do
   defp bool_term({:self, _stem, _action, nil}, _spell), do: "false"
   defp bool_term({:self, _stem, _action, feature}, spell), do: "(#{spell.(feature)})"
 
+  # The first column is the outermost test, in the order of `features`.
   defp bool_term({:other, _stem, _action, features}, spell) do
-    Enum.reduce(features, "false", fn feature, acc ->
+    List.foldr(features, "false", fn feature, acc ->
       "(match #{bool_term({:self, nil, nil, feature}, spell)} motive (λ _ → Bool) | true => true | false => #{acc})"
     end)
   end
@@ -872,35 +884,54 @@ defmodule Muro.Synth do
   # `self` reads the action's own column. `other` is the pointwise
   # disjunction of the other actions in the family. The feature list is
   # the action set, not a nest of constructors, so both atoms have size 1.
+  # Every column of a family must have a signature. A column without one
+  # is not dropped: dropping it would change what `other` means at every
+  # sibling action, so the walk refuses the family instead.
   defp quantifier_atoms(families, sigs) do
     pairs =
       Enum.flat_map(families, fn family ->
         actions = family.actions
         by = family.by_action
+        columns = Enum.map(actions, &family_column!(family, by, &1))
+
+        case Enum.reject(columns, &Map.has_key?(sigs, {:feat, &1})) do
+          [] ->
+            :ok
+
+          missing ->
+            raise ArgumentError,
+                  "action family #{family.stem} has columns with no signature: " <>
+                    Enum.join(missing, ", ")
+        end
 
         Enum.flat_map(actions, fn action ->
           feature = Map.fetch!(by, action)
           others = for other <- actions, other != action, do: Map.fetch!(by, other)
+          self = {:self, family.stem, action, feature}
+          other = {:other, family.stem, action, others}
+          self_sig = Map.fetch!(sigs, {:feat, feature})
 
-          if Map.has_key?(sigs, {:feat, feature}) and
-               Enum.all?(others, &Map.has_key?(sigs, {:feat, &1})) do
-            self = {:self, family.stem, action, feature}
-            other = {:other, family.stem, action, others}
-            self_sig = Map.fetch!(sigs, {:feat, feature})
+          other_sig =
+            Enum.reduce(others, 0, fn name, acc ->
+              Bitwise.bor(acc, Map.fetch!(sigs, {:feat, name}))
+            end)
 
-            other_sig =
-              Enum.reduce(others, 0, fn name, acc ->
-                Bitwise.bor(acc, Map.fetch!(sigs, {:feat, name}))
-              end)
-
-            [{self, self_sig}, {other, other_sig}]
-          else
-            []
-          end
+          [{self, self_sig}, {other, other_sig}]
         end)
       end)
 
     {Enum.map(pairs, &elem(&1, 0)), Map.new(pairs)}
+  end
+
+  defp family_column!(family, by, action) do
+    case Map.fetch(by, action) do
+      {:ok, feature} ->
+        feature
+
+      :error ->
+        raise ArgumentError,
+              "action family #{family.stem} lists #{action} with no column"
+    end
   end
 
   defp atoms(features), do: [true, false | Enum.map(features, &{:feat, &1})]

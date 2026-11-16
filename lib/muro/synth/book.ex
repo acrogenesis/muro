@@ -643,10 +643,7 @@ defmodule Muro.Synth.Book do
     {stem_at, taken} = alloc("stem-at", taken)
     {other_at, taken} = alloc("other-at", taken)
 
-    families =
-      (host.feature_specs || [])
-      |> Muro.Synth.Feature.families(host.actions)
-      |> Enum.filter(&MapSet.member?(stems_used(arms), &1.stem))
+    families = quant_families(host, arms)
 
     {stem_spell, taken} =
       Enum.map_reduce(families, taken, fn family, taken ->
@@ -697,6 +694,31 @@ defmodule Muro.Synth.Book do
   end
 
   defp quantified?(arms), do: Enum.any?(arms, &quant_pred?(&1.pred))
+
+  # The families `stem-at` matches on. `feature_plan/3` declares every
+  # column of these families, and `quant_source/5` reads them, so the two
+  # agree on the action set.
+  defp quant_families(host, arms) do
+    if quantified?(arms) do
+      used = stems_used(arms)
+
+      (host.feature_specs || [])
+      |> Muro.Synth.Feature.families(host.actions)
+      |> Enum.filter(&MapSet.member?(used, &1.stem))
+    else
+      []
+    end
+  end
+
+  # Every column of a stem the survivors quantify over. `stem-at` reads
+  # the column at each action, including an action no survivor names, so
+  # the plan declares the whole family rather than the columns `reads`
+  # happens to see.
+  defp quant_columns(host, arms) do
+    Enum.flat_map(quant_families(host, arms), fn family ->
+      Enum.map(family.actions, &Map.fetch!(family.by_action, &1))
+    end)
+  end
 
   defp quant_pred?({:self, _, _, _}), do: true
   defp quant_pred?({:other, _, _, _}), do: true
@@ -798,15 +820,35 @@ defmodule Muro.Synth.Book do
     """
   end
 
-  # A feature the survivor does not read has no constructor. The clause
-  # is false, which is the reading of a missing column.
+  # An action the family has no column for is false: the cover filter
+  # dropped that test, and `Synth.eval` reads the same family, so `self`
+  # there is false and `other` leaves it out. An action the family has a
+  # column for always has a constructor, because `feature_plan/3`
+  # declares every column of a quantified stem. A column with no
+  # constructor is a plan that disagrees with `other-at`, and the book is
+  # refused rather than read as false.
   defp stem_body(family, action, spell, feature_eval, car) do
-    with {:ok, feature} <- Map.fetch(family.by_action, action),
-         ctor when is_binary(ctor) <- Map.get(spell, feature) do
-      "#{feature_eval} #{ctor} #{car}"
-    else
-      _ -> "false"
+    case family_column(family, action) do
+      :none ->
+        "false"
+
+      {:ok, feature} ->
+        case Map.fetch(spell, feature) do
+          {:ok, ctor} when is_binary(ctor) ->
+            "#{feature_eval} #{ctor} #{car}"
+
+          _ ->
+            raise ArgumentError,
+                  "stem #{family.stem} has a column at #{action}, #{feature}, " <>
+                    "that the feature plan did not declare"
+        end
     end
+  end
+
+  defp family_column(family, action) do
+    if action in family.actions,
+      do: {:ok, Map.fetch!(family.by_action, action)},
+      else: :none
   end
 
   defp action_ctors(book) do
@@ -957,6 +999,7 @@ defmodule Muro.Synth.Book do
     specs =
       arms
       |> Enum.flat_map(&Muro.Synth.reads(&1.pred))
+      |> Kernel.++(quant_columns(host, arms))
       |> Enum.uniq()
       |> Enum.map(&spec!(host, &1))
 
