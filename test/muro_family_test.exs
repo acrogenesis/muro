@@ -318,6 +318,8 @@ defmodule Muro.FamilyTest do
     assert msg =~ "expected never held or held while earlier unresolved"
   end
 
+  # `resolved k init` only. An earlier signal is not this formula: the
+  # atoms take a constructor name, not an instance. See manual/limits.md.
   test "a formula over the family is not yet decided" do
     src =
       @slots <>

@@ -1,6 +1,10 @@
 -- One buffered meeting, keyed by a closed kind. init opens when it
 -- arrives. signal waits until every earlier instance of its key is
--- resolved. The family is spec.
+-- resolved, an earlier init and an earlier signal. The formula
+-- (opened k signal) implies (resolved k init) names only init.
+-- opened, held, and resolved take a constructor name, not an instance,
+-- so that formula cannot name an earlier signal. Step 2 decides it.
+-- The family is spec.
 
 data Event : Type where
   init : Event
