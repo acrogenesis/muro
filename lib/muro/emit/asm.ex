@@ -3,9 +3,11 @@ defmodule Muro.Emit.Asm do
   Emit a closed Nat run as Cortex-M0 Thumb. Specs and evidence are omitted.
   Run bodies are the image from `Muro.IR`.
 
-  The text is what the assembler translates. A refusal is the elaboration's,
-  `c:string` when the image carries a string, or `asm:scope` when the image
-  is outside this Nat fragment. `asm:scope` leaves the image well formed.
+  The text is what the assembler translates. A closed numeral is the
+  successor chain this file already emits for `suc`. A refusal is the
+  elaboration's, `c:string` when the image carries a string, or `asm:scope`
+  when the image is outside this Nat fragment. `asm:scope` leaves the image
+  well formed.
   """
 
   alias Muro.{Emit, IR}
@@ -101,6 +103,10 @@ defmodule Muro.Emit.Asm do
   end
 
   defp emit_tm(:ze, st), do: {:ok, ["  ldr r0, =muro_zero_obj"], st}
+
+  defp emit_tm({:nat, n}, st) when is_integer(n) and n >= 0 do
+    emit_tm(nat_spine(n), st)
+  end
 
   defp emit_tm({:su, u}, st) do
     with {:ok, lines, st} <- emit_tm(u, st) do
@@ -268,6 +274,7 @@ defmodule Muro.Emit.Asm do
 
   defp nat_tm?({:var, name}) when is_binary(name), do: true
   defp nat_tm?(:ze), do: true
+  defp nat_tm?({:nat, n}) when is_integer(n) and n >= 0, do: true
   defp nat_tm?({:su, u}), do: nat_tm?(u)
 
   defp nat_tm?({:call, name, args}) when is_binary(name) and length(args) <= 4 do
@@ -436,4 +443,7 @@ defmodule Muro.Emit.Asm do
     """
     |> String.trim()
   end
+
+  defp nat_spine(0), do: :ze
+  defp nat_spine(n) when is_integer(n) and n > 0, do: {:su, nat_spine(n - 1)}
 end

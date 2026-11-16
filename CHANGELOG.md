@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.21.9
+
+`mix muro.synth` deploys the predicate the checker accepted. A closed numeral in a run is emitted by the C, Rust, Zig, JavaScript, and assembly backends.
+
+`examples/cshrl/envs/queens4.muro` is four rows and declares no feature. The cover has 18 states. No predicate at depth 0 or depth 1 matches the observations. The search then reads `reaches-pos`: an action pays a positive reward now, or some continuation within the horizon does. It enumerates predicates by size, up to 18 constructors. 94970 programs are considered, 1499 signatures are distinct, and each action keeps one program of size 8. The book checks `CoindHomo`, and `policy` is `eval` of that predicate. The reachability runs are a table on the cover. Each cell is evidence that the table agrees with one step of the recurrence, reading the table at the smaller horizon, down to horizon 0. Locally that check took 53 seconds. A search that stops at depth 0 does not add `reaches-pos`. `examples/cshrl/envs/queens8.muro` is eight rows. The cover has 2058 states and is closed. `mix muro.check` accepts it. The search reads 76 features, 40 of them a closed Nat in the board. A subset of six of those features is above the subset budget, so an eight-wide disjunction is not built. Enumeration stops when the number of programs considered reaches 1000000. The report names `considered budget`. No predicate is certified. That synthesis is not part of `mix test`. The paper's certificate for this MDP is a class-level homomorphism over the step. This search certifies a ranking predicate by a cover split. It does not build that homomorphism.
+
+0.21.8 is the entry below. It arrived with the merge of main, which carries pull request #245.
+
+### Manual
+
+- Synthesis. CSHRL. Examples.
+
+### Package
+
+- Version 0.21.9.
+
 ## 0.21.8
 
 A Nat in a decoded state is a host integer. The search sends that Nat to `step` and to `eval-feature` as Peano, so a match on `suc` runs.

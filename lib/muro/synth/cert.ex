@@ -663,6 +663,9 @@ defmodule Muro.Synth.Cert do
 
   defp spell_nat(0), do: "0"
   defp spell_nat({:suc, n}), do: spell_nat(nat_int({:suc, n}))
+  # A closed numeral, not a tower of successors. Small numerals stay
+  # written as successors so an existing certificate is unchanged.
+  defp spell_nat(n) when is_integer(n) and n >= 10, do: Integer.to_string(n)
 
   defp spell_nat(n) when is_integer(n) and n > 0 do
     rest = spell_nat(n - 1)

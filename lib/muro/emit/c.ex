@@ -351,6 +351,10 @@ defmodule Muro.Emit.C do
   defp emit_ir(:ze, _env, st, _expect), do: {:ok, {"", "#{g("zero")}()", :nat, st}}
   defp emit_ir(:tt, _env, st, _expect), do: {:ok, {"", "#{g("tt")}()", :unit, st}}
 
+  defp emit_ir({:nat, n}, env, st, expect) when is_integer(n) and n >= 0 do
+    emit_ir(nat_spine(n), env, st, expect)
+  end
+
   defp emit_ir({:su, u}, env, st, _expect) do
     with {:ok, {pre, ex, _lay, st}} <- emit_ir(u, env, st, nat_ptr()) do
       {:ok, {pre, "#{g("suc")}(#{ex})", :nat, st}}
@@ -1218,6 +1222,7 @@ defmodule Muro.Emit.C do
   defp lay_of({:con, d, _, _}, _env, _st), do: {:data, d}
   defp lay_of(:ze, _env, _st), do: :nat
   defp lay_of({:su, _}, _env, _st), do: :nat
+  defp lay_of({:nat, n}, _env, _st) when is_integer(n) and n >= 0, do: :nat
   defp lay_of(:tt, _env, _st), do: :unit
 
   defp lay_of({:pair, a, b}, env, st), do: {:pair, lay_of(a, env, st), lay_of(b, env, st)}
@@ -2816,4 +2821,7 @@ defmodule Muro.Emit.C do
       %{name: d.name, layout: {:data, d.name}, constructors: ctors}
     end)
   end
+
+  defp nat_spine(0), do: :ze
+  defp nat_spine(n) when is_integer(n) and n > 0, do: {:su, nat_spine(n - 1)}
 end

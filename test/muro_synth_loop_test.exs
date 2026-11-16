@@ -6,6 +6,7 @@ defmodule Muro.SynthLoopTest do
   @maze "examples/cshrl/envs/maze_auto.muro"
   @maze3 "examples/cshrl/envs/maze_auto_e2e.muro"
   @place "examples/cshrl/envs/placement.muro"
+  @queens4 "examples/cshrl/envs/queens4.muro"
   @nest "examples/cshrl/envs/nested_bit.muro"
   @cover "examples/cshrl/envs/list_cover.muro"
   @tree "examples/cshrl/envs/tree_cover.muro"
@@ -13,6 +14,8 @@ defmodule Muro.SynthLoopTest do
   @deep "examples/cshrl/envs/nested_bin.muro"
   @neg "test/fixtures/synth_neg.muro"
   @gap "test/fixtures/synth_gap.muro"
+  @horizon "test/fixtures/synth_horizon.muro"
+  @later "test/fixtures/synth_later.muro"
   @stay "test/fixtures/synth_false.muro"
   @chain "test/fixtures/synth_chain.muro"
   @retry "test/fixtures/synth_retry.muro"
@@ -239,7 +242,14 @@ defmodule Muro.SynthLoopTest do
     assert missed.book == nil
     missed_text = joined(missed)
     assert missed_text =~ "muro synth: features insufficient"
+    assert missed_text =~ "the feature language cannot separate"
     assert missed_text =~ "agrees with"
+    assert missed_text =~ "templates "
+    assert missed_text =~ "path depth "
+    assert is_list(missed.features)
+    assert is_list(missed.kinds)
+    assert is_integer(missed.path_depth)
+    assert missed.path_bound == Muro.Synth.Term.path_bound()
     refute missed_text =~ "homomorphism checked"
 
     assert {:ok, result} = Muro.Synth.cegis_loop(@place, depth: 0, max_depth: 0)
@@ -275,6 +285,171 @@ defmodule Muro.SynthLoopTest do
     assert text =~ "at (board r2 r0) the program prefers stay"
     assert text =~ "at (board r2 r2) the program prefers move"
     assert text =~ "certificate CoindHomo"
+  end
+
+  test "4-queens list templates enumerate 23, keep 18, and reduce to 6" do
+    assert {:ok, host} = Muro.Synth.Host.open(@queens4)
+    cover = Muro.Synth.Oracle.cover(host)
+    assert length(cover) == 18
+
+    lists = fn tag ->
+      Enum.flat_map(cover, fn state ->
+        case state.value do
+          {^tag, xs} -> [xs]
+          _ -> []
+        end
+      end)
+    end
+
+    open = lists.(:ongoing)
+    solved = lists.(:solved)
+    alive = open ++ solved
+    assert length(open) == 15
+    assert length(solved) == 2
+
+    {templates, _} = Muro.Synth.Term.templates({:list, :nat}, alive, MapSet.new(), 0)
+    assert length(templates) == 23
+    assert Enum.count(templates, &(&1.kind in [:vals_eq, :spread_eq, :pair_any])) == 18
+    assert Enum.count(templates, &(&1.kind == :len_is)) == 5
+
+    bit? = fn spec, config -> Muro.Synth.Term.eval_spec({:list, :nat}, spec, config) end
+    kept = Enum.filter(templates, fn spec -> not Enum.any?(alive, &bit?.(spec, &1)) end)
+    reduced = Muro.Synth.Feature.eliminate_redundant(kept)
+
+    goals =
+      Enum.filter(templates, fn spec ->
+        Enum.all?(solved, &bit?.(spec, &1)) and Enum.all?(open, &(not bit?.(spec, &1)))
+      end)
+
+    assert length(kept) == 18
+
+    assert Enum.map(reduced, & &1.name) == [
+             "pair-any-0-1",
+             "pair-any-0-2",
+             "pair-any-1-2",
+             "pair-any-0-3",
+             "pair-any-1-3",
+             "pair-any-2-3"
+           ]
+
+    assert Enum.map(goals, & &1.name) == ["len-is-4"]
+  end
+
+  # The certificate reduces the tabulated reachability runs.
+  # Locally that check took 53 seconds. Before the table it took 169 seconds.
+  # Default `mix test` excludes `:slow`. CI runs this with `mix test --only slow`.
+  @tag timeout: 720_000
+  @tag :slow
+  test "4-queens certifies positive-reward reachability" do
+    src = File.read!(@queens4)
+    refute src =~ "data Feature"
+    refute src =~ "eval-feature"
+
+    pred = %{
+      "c0" =>
+        "(orp (feat has-pos-reward-c0) (notp (orp (orp (feat has-pos-reward-c1) (feat reaches-pos-c2)) (feat reaches-pos-c3))))",
+      "c1" =>
+        "(orp (feat has-pos-reward-c0) (notp (orp (orp (feat has-pos-reward-c2) (feat reaches-pos-c0)) (feat reaches-pos-c3))))",
+      "c2" =>
+        "(orp (feat has-pos-reward-c0) (notp (orp (orp (feat has-pos-reward-c1) (feat reaches-pos-c0)) (feat reaches-pos-c3))))",
+      "c3" =>
+        "(orp (feat has-pos-reward-c0) (notp (orp (orp (feat has-pos-reward-c1) (feat reaches-pos-c0)) (feat reaches-pos-c2))))"
+    }
+
+    assert {:ok, result} = Muro.Synth.cegis_loop(@queens4)
+    assert result.status == :certified
+    assert result.certificate == "CoindHomo"
+
+    assert result.versions == [
+             16,
+             0,
+             1056,
+             0,
+             20,
+             0,
+             36,
+             0,
+             128,
+             0,
+             312,
+             0,
+             412,
+             0,
+             934,
+             0,
+             997,
+             0,
+             1499,
+             1,
+             1499,
+             1,
+             1499,
+             1,
+             1499,
+             1
+           ]
+
+    assert result.sizes == [
+             [1, 20],
+             [2, 16],
+             [3, 92],
+             [4, 184],
+             [5, 100],
+             [6, 522],
+             [7, 63],
+             [8, 502]
+           ]
+
+    assert result.considered == 94_970
+    assert result.distinct == 1_499
+    assert result.enum_ms < 120_000
+    assert Enum.map(result.program, &Muro.Synth.render/1) == Enum.map(~w(c0 c1 c2 c3), &pred[&1])
+
+    assert result.book =~ "def survivor-c0 : run PredProg := #{pred["c0"]}"
+    assert result.book =~ "def survivor-c3 : run PredProg := #{pred["c3"]}"
+    assert result.book =~ "def policy : run Π (+ s : State) → Action :="
+    assert result.book =~ "match eval survivor-c0 s"
+    assert result.book =~ "match eval survivor-c1 s"
+    assert result.book =~ "match eval survivor-c2 s"
+    assert result.book =~ "match eval survivor-c3 s"
+    assert result.book =~ "| reaches-pos-c0 => dyn-one c c0 horizon"
+    assert result.book =~ "| reaches-pos-c3 => dyn-one c c3 horizon"
+    assert result.book =~ "def dyn-best-pos "
+    assert result.book =~ "def dyn-one "
+    assert result.book =~ "def dyn-any "
+    assert result.book =~ "def dyn-known "
+    assert result.book =~ "def dyn-best-rec "
+    assert result.book =~ "def dyn-one-rec "
+    assert result.book =~ "def dyn-any-rec "
+    assert result.book =~ "| suc j => dyn-any-rec s j"
+    assert result.book =~ "def dyn-reach-agrees "
+    assert result.book =~ "def dyn-reach-holds "
+    assert result.book =~ "≡ true : Bool"
+    assert result.book =~ "evidence CoindHomo rank"
+    assert result.cert_ms < 180_000
+    refute result.book =~ "find-policy"
+    refute result.book =~ "placed-find-policy"
+
+    text = joined(result)
+    assert text =~ "muro synth: homomorphism checked"
+    assert text =~ "certificate CoindHomo"
+    assert text =~ "program: #{pred["c0"]}"
+    assert text =~ "enumeration"
+    assert text =~ "considered 94970"
+    assert text =~ "distinct 1499"
+    assert text =~ "predicate size bound 18"
+    assert text =~ "certificate check"
+    assert text =~ "at (ongoing nil) the program prefers c1"
+    assert text =~ "at (ongoing (cons (suc 0) nil)) the program prefers c3"
+    assert text =~ "at (ongoing (cons (suc (suc 0)) nil)) the program prefers c0"
+    assert text =~ "at dead the program prefers c0"
+    assert text =~ "version space 16"
+    assert text =~ "version space 1056"
+    assert text =~ "version space 1499"
+    refute text =~ "empty version space"
+    refute text =~ "features insufficient"
+    refute text =~ "homomorphism is not derivable"
+    refute text =~ "placed-find-policy"
   end
 
   @tag timeout: 180_000
@@ -570,6 +745,60 @@ defmodule Muro.SynthLoopTest do
     assert text =~ "at (wrap (inn off)) the program prefers stay"
     assert text =~ "at (wrap (inn on)) the program prefers move"
     assert text =~ "certificate CoindHomo"
+  end
+
+  test "a depth-1 survivor does not install reaches-pos" do
+    assert {:ok, result} = Muro.Synth.cegis_loop(@horizon)
+    assert result.status == :policy
+
+    assert result.program ==
+             {:and, {:feat, "is-self-loop-stay"}, {:not, {:feat, "has-pos-reward-go"}}}
+
+    assert result.versions == [4, 0, 72, 1]
+
+    assert result.book =~
+             "def survivor : run PredProg := (andp (feat is-self-loop-stay) (notp (feat has-pos-reward-go)))"
+
+    refute result.book =~ "reaches-pos"
+
+    text = joined(result)
+    assert text =~ "at a the program prefers stay"
+    assert text =~ "at b the program prefers go"
+    assert text =~ "at late the program prefers stay"
+    refute text =~ "reaches-pos"
+    refute text =~ "predicate size"
+  end
+
+  test "max depth 0 does not install reaches-pos when depth 1 was not searched" do
+    assert {:ok, result} = Muro.Synth.cegis_loop(@horizon, depth: 0, max_depth: 0)
+    assert result.status == :empty
+    assert result.book == nil
+    assert result.versions == [4, 0]
+    assert result.features == ["has-pos-reward-go", "is-self-loop-stay"]
+    refute "reaches-pos" in result.kinds
+
+    text = joined(result)
+    assert text =~ "predicate depth 0 exhausted"
+    assert text =~ "muro synth: empty version space"
+    refute text =~ "reaches-pos"
+    refute text =~ "predicate size"
+  end
+
+  @tag timeout: 180_000
+  test "a sooner reward of 1 is not certified over a later 100" do
+    assert {:ok, result} = Muro.Synth.cegis_loop(@later)
+    assert result.status == :residual
+    assert result.program == nil
+    assert result.book == nil
+    assert result.versions == [5, 1, 110, 28, 27, 26]
+    assert Map.get(result, :certificate) == nil
+
+    text = joined(result)
+    assert text =~ "homomorphism is not derivable"
+    assert text =~ "carrier start"
+    assert text =~ "pair later now"
+    refute text =~ "homomorphism checked"
+    refute text =~ "reaches-pos"
   end
 
   test "depth 0 on a reward gap is an empty space, not insufficient features" do

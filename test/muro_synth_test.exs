@@ -223,6 +223,58 @@ defmodule Muro.SynthTest do
     assert cex.oracle == true
   end
 
+  test "sized enumeration keeps the smallest program of a signature" do
+    features = ["a", "b", "c", "d"]
+    states = [:s0, :s1, :s2, :s3, :s4, :s5]
+
+    # s0 is only a, s1 only b, s2 only c, s3 only d, s4 none, s5 is a and b.
+    # a ∨ ¬(b ∨ c ∨ d) holds at s0, s4, and s5. ¬(b ∨ c ∨ d) misses s5.
+    feat = fn
+      "a", state when state in [:s0, :s5] -> true
+      "b", state when state in [:s1, :s5] -> true
+      "c", :s2 -> true
+      "d", :s3 -> true
+      _feature, _state -> false
+    end
+
+    {:ok, index, meta} =
+      Synth.enumerate_sized(
+        features,
+        Synth.pred_size_bound(),
+        &Synth.signature(&1, states, feat),
+        6
+      )
+
+    assert meta.truncated == false
+    assert meta.considered > meta.distinct
+    assert meta.enum_ms >= 0
+
+    any = {:or, {:or, {:feat, "b"}, {:feat, "c"}}, {:feat, "d"}}
+    target = {:or, {:feat, "a"}, {:not, any}}
+    sig = Synth.signature(target, states, feat)
+    assert Synth.pack_bits([true, false, false, false, true, true]) == sig
+
+    assert {prog, 8, _ord} = Map.fetch!(index, sig)
+    assert prog == target
+
+    assert Synth.render(prog) ==
+             "(orp (feat a) (notp (orp (orp (feat b) (feat c)) (feat d))))"
+
+    assert Synth.signature(prog, states, feat) == sig
+
+    smaller = {:not, any}
+    assert {^smaller, 6, _ord} = Map.fetch!(index, Synth.signature(smaller, states, feat))
+    assert {true, 1, _ord} = Map.fetch!(index, Synth.signature(true, states, feat))
+  end
+
+  test "the subset budget covers a nine-feature subset of thirty-six features" do
+    # Size 18 asks for a subset of nine. C(36, 9) is 94143280.
+    # C(40, 8) is 76904685. Both are built. C(40, 9) stays above the budget.
+    assert Synth.pred_size_bound() == 18
+    assert Synth.subset_budget() >= 94_143_280
+    assert Synth.subset_budget() >= 76_904_685
+  end
+
   test "the predicate evaluator is part of the compiler and does not import Bool" do
     src = Muro.Synth.Book.evaluator()
     assert src =~ "data PredProg"

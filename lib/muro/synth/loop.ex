@@ -16,6 +16,17 @@ defmodule Muro.Synth.Loop do
   because of either bound has not established `sufficient-cegis`.
   """
   def run(path, opts \\ []) when is_binary(path) and is_list(opts) do
+    # Search memo only. The checker does not read this key.
+    Process.delete(:muro_synth_reaches)
+
+    try do
+      run_checked(path, opts)
+    after
+      Process.delete(:muro_synth_reaches)
+    end
+  end
+
+  defp run_checked(path, opts) do
     oracle = Keyword.get(opts, :oracle, "trace")
     depth = Keyword.get(opts, :depth, default_depth())
     max_depth = Keyword.get(opts, :max_depth, depth + 1)
@@ -116,8 +127,23 @@ defmodule Muro.Synth.Loop do
 
       :ok ->
         case fit(host, spec.tasks, depth, max_depth, score, feat, [], %{}) do
+          {:empty, versions, at} when depth == 0 and at >= 1 ->
+            widen_reach(
+              host,
+              spec,
+              versions,
+              at,
+              depth,
+              max_depth,
+              rounds,
+              score,
+              anchor,
+              checker,
+              fuel
+            )
+
           {:empty, versions, at} ->
-            {:ok, empty(versions, at)}
+            {:ok, empty(host, versions, at)}
 
           {:ok, arms, versions, at} ->
             certify(
@@ -256,6 +282,214 @@ defmodule Muro.Synth.Loop do
     end
   end
 
+  # Depth 0 and a depth of at least 1 were both searched, and both were
+  # empty. `reaches-pos` is has-pos-reward read out to the horizon. The
+  # next search enumerates by size, including a disjunction of the
+  # feature tests. A search that never reached depth 1 does not install
+  # the test. The deployed term is still `eval` of the predicate that
+  # remains.
+  defp widen_reach(
+         host,
+         spec,
+         versions,
+         at,
+         _depth,
+         max_depth,
+         rounds,
+         score,
+         anchor,
+         checker,
+         fuel
+       ) do
+    case Muro.Synth.Feature.extend_reach(host) do
+      :same ->
+        {:ok, empty(host, versions, at)}
+
+      {:ok, specs} ->
+        host = Muro.Synth.Host.install_features(host, specs)
+        feat = fn feature, state -> host.eval_feature.(feature, state) end
+
+        case fit_sized(host, spec.tasks, score, feat, versions, %{}) do
+          {:empty, versions, at, search} ->
+            {:ok, empty(host, versions, at, search)}
+
+          {:ok, arms, versions, at, search} ->
+            certify(
+              host,
+              arms,
+              versions,
+              at,
+              max_depth,
+              rounds,
+              score,
+              feat,
+              anchor,
+              checker,
+              fuel,
+              %{},
+              %{},
+              spec.oracle,
+              search
+            )
+        end
+    end
+  end
+
+  # One signature keeps the smallest program. The version-space count at
+  # a size is the number of distinct signatures of that size or smaller.
+  # A size that adds none is not recorded. The walk stops at the first
+  # size that satisfies every task. A task with no program by the size
+  # bound is an empty space at that bound.
+  defp fit_sized(host, tasks, score, feat, versions, rejected) do
+    states =
+      case tasks do
+        [%{observations: observations} | _] -> Enum.map(observations, &elem(&1, 0))
+        [] -> []
+      end
+
+    task_sigs =
+      Enum.map(tasks, fn task ->
+        bits = Map.new(task.observations)
+
+        states
+        |> Enum.map(&Map.fetch!(bits, &1))
+        |> Synth.pack_bits()
+      end)
+
+    max_size = Synth.pred_size_bound()
+    trace_features(host)
+
+    case Synth.enumerate_sized(
+           host.features,
+           max_size,
+           &Synth.signature(&1, states, feat),
+           length(states),
+           MapSet.new(task_sigs)
+         ) do
+      {:empty, reason, meta} ->
+        record = search_record(meta, max_size, reason)
+        {:empty, versions ++ sized_space(meta), max_size, record}
+
+      {:ok, index, meta} ->
+        record = search_record(meta, max_size, nil)
+        rows = cumulative(meta.sizes)
+
+        case sized_versions(tasks, task_sigs, index, rows, versions, rejected, score) do
+          {versions, {arms, size}} ->
+            {:ok, arms, versions, size, record}
+
+          {versions, nil} ->
+            {:empty, versions, max_size, record}
+        end
+    end
+  end
+
+  defp sized_space(meta) do
+    Enum.flat_map(cumulative(meta.sizes), fn {_size, cum} -> [cum, 0] end)
+  end
+
+  defp search_record(meta, max_size, stop) do
+    lines =
+      [
+        "enumeration #{meta.enum_ms} ms",
+        "considered #{meta.considered}",
+        "distinct #{meta.distinct}",
+        "predicate size bound #{max_size}"
+      ] ++
+        Enum.map(meta.sizes, fn [size, count] -> "size #{size} #{count}" end) ++
+        if(meta.truncated, do: ["subset bound #{Synth.subset_budget()}"], else: [])
+
+    %{
+      sizes: meta.sizes,
+      enum_ms: meta.enum_ms,
+      considered: meta.considered,
+      distinct: meta.distinct,
+      lines: lines,
+      sized: true,
+      stop: stop
+    }
+  end
+
+  defp cumulative(sizes) do
+    {rows, _cum} =
+      Enum.map_reduce(sizes, 0, fn [size, count], cum ->
+        cum = cum + count
+        {{size, cum}, cum}
+      end)
+
+    rows
+  end
+
+  defp sized_versions(tasks, task_sigs, index, rows, versions, rejected, score) do
+    Enum.reduce_while(rows, {versions, nil}, fn {size, cum}, {versions, _found} ->
+      case sized_arms(tasks, task_sigs, index, size, rejected, score) do
+        {:ok, arms} ->
+          {:halt, {versions ++ Enum.flat_map(arms, fn _arm -> [cum, 1] end), {arms, size}}}
+
+        :miss ->
+          {:cont, {versions ++ [cum, 0], nil}}
+      end
+    end)
+  end
+
+  defp sized_arms(tasks, task_sigs, index, size, rejected, score) do
+    tasks
+    |> Enum.zip(task_sigs)
+    |> Enum.reduce_while({:ok, []}, fn {task, sig}, {:ok, arms} ->
+      name = arm_name(task, length(tasks), length(arms))
+
+      case Map.fetch(index, sig) do
+        {:ok, {prog, prog_size, _ord}} when prog_size <= size ->
+          if rejected?(rejected, name, prog) do
+            {:halt, :miss}
+          else
+            arm = %{
+              name: name,
+              pred: Synth.pick([prog], score),
+              kept: [prog],
+              action: task.action,
+              else: task.else,
+              observations: task.observations
+            }
+
+            {:cont, {:ok, arms ++ [arm]}}
+          end
+
+        _ ->
+          {:halt, :miss}
+      end
+    end)
+    |> case do
+      {:ok, arms} -> {:ok, arms}
+      :miss -> :miss
+    end
+  end
+
+  defp rejected?(rejected, name, prog) do
+    MapSet.member?(Map.get(rejected, name, MapSet.new()), prog)
+  end
+
+  defp trace_note(text) do
+    if System.get_env("MURO_SYNTH_TRACE") in ["1", "true"] do
+      IO.puts(:stderr, "muro synth: #{text}")
+    end
+  end
+
+  defp trace_features(host) do
+    if System.get_env("MURO_SYNTH_TRACE") in ["1", "true"] do
+      specs = host[:feature_specs] || []
+
+      kinds =
+        specs
+        |> Enum.map(& &1.kind)
+        |> Enum.frequencies()
+        |> Enum.map_join(" ", fn {kind, count} -> "#{kind} #{count}" end)
+
+      IO.puts(:stderr, "muro synth: feature kinds #{kinds}")
+      IO.puts(:stderr, "muro synth: feature names #{Enum.join(host.features, " ")}")
+    end
+  end
+
   defp fit_tasks(tasks, vs, score, feat, rejected) do
     initial = length(vs)
 
@@ -301,8 +535,11 @@ defmodule Muro.Synth.Loop do
          fuel,
          seen,
          rejected,
-         oracle
+         oracle,
+         search \\ nil
        ) do
+    trace_note("policy render start")
+
     case Book.render(host, arms, anchor, oracle) do
       {:error, _reason} ->
         advance(
@@ -320,13 +557,24 @@ defmodule Muro.Synth.Loop do
           seen,
           rejected,
           book_cex(),
-          oracle
+          oracle,
+          search
         )
 
       {:ok, source, meta} ->
+        started = System.monotonic_time(:millisecond)
+
+        trace_note(
+          "certificate start bytes #{byte_size(source)} " <>
+            Enum.map_join(arms, " | ", fn arm ->
+              "#{arm.name} #{Synth.render(arm.pred)}"
+            end)
+        )
+
         case Book.check(source, anchor, fn path -> checker.(path, fuel) end) do
           :ok ->
-            {:ok, checked(arms, source, versions, meta)}
+            cert_ms = System.monotonic_time(:millisecond) - started
+            {:ok, checked(arms, source, versions, Map.put(meta, :cert_ms, cert_ms), search)}
 
           {:error, :storage, diagnostic} ->
             {:error, :storage, diagnostic}
@@ -349,7 +597,8 @@ defmodule Muro.Synth.Loop do
               seen,
               rejected,
               cex,
-              oracle
+              oracle,
+              search
             )
         end
     end
@@ -375,7 +624,8 @@ defmodule Muro.Synth.Loop do
          seen,
          rejected,
          cex,
-         oracle
+         oracle,
+         search
        ) do
     fed = Map.get(seen, cex.carrier, 0) + 1
     cex = %{cex | fed: fed}
@@ -387,7 +637,7 @@ defmodule Muro.Synth.Loop do
 
     cond do
       not shrunk or rounds <= 1 ->
-        {:ok, residual(cex, versions)}
+        {:ok, residual(cex, versions, search)}
 
       next != [] ->
         pred = Synth.pick(next, score)
@@ -408,7 +658,8 @@ defmodule Muro.Synth.Loop do
           fuel,
           seen,
           rejected,
-          oracle
+          oracle,
+          search
         )
 
       depth < max_depth ->
@@ -417,7 +668,7 @@ defmodule Muro.Synth.Loop do
         # candidates stay out: enumeration there includes them.
         case fit(host, tasks_of(arms), depth + 1, max_depth, score, feat, versions, rejected) do
           {:empty, versions, _at} ->
-            {:ok, residual(cex, versions)}
+            {:ok, residual(cex, versions, search)}
 
           {:ok, arms, versions, at} ->
             certify(
@@ -434,12 +685,13 @@ defmodule Muro.Synth.Loop do
               fuel,
               seen,
               rejected,
-              oracle
+              oracle,
+              search
             )
         end
 
       true ->
-        {:ok, residual(cex, versions)}
+        {:ok, residual(cex, versions, search)}
     end
   end
 
@@ -528,9 +780,20 @@ defmodule Muro.Synth.Loop do
     end
   end
 
+  # Refinement has stopped. The two carriers still agree on every
+  # installed test, and a test at the subterm where the values differ
+  # did not separate them. The report names that pair, the templates,
+  # and the path depth that was reached. It does not deploy a predicate.
   defp insufficient(host, task, depth, feat, earlier, later, predicted, oracle) do
     vs = Synth.enumerate(host.features, depth)
     kept = Synth.refine_all(vs, task.observations, feat)
+    specs = List.wrap(host[:feature_specs])
+    names = Enum.map(specs, & &1.name)
+    kinds = specs |> Enum.map(&kind_word/1) |> Enum.uniq()
+    path_depth = Map.get(host, :path_depth, Term.first_path_depth())
+    path_bound = Term.path_bound()
+    left = Term.spell(earlier)
+    right = Term.spell(later)
 
     cex = %{
       carrier: later,
@@ -538,16 +801,21 @@ defmodule Muro.Synth.Loop do
       oracle: oracle,
       fed: 1,
       agrees: earlier,
-      pair: {task.action, task.else}
+      pair: {task.action, task.else},
+      reason: "the feature language cannot separate these carriers"
     }
 
     lines = [
       "muro synth: features insufficient",
-      "#{Term.spell(later)} agrees with #{Term.spell(earlier)} on every feature",
-      "carrier #{Term.spell(later)}",
+      "the feature language cannot separate #{left} and #{right}",
+      "#{right} agrees with #{left} on every feature",
+      "carrier #{right}",
       "predicted #{predicted}",
       "oracle #{oracle}",
       "fed back 1",
+      template_line(kinds),
+      feature_line(names),
+      depth_line(path_depth, path_bound),
       "version space #{length(vs)}",
       "version space #{length(kept)}"
     ]
@@ -558,16 +826,84 @@ defmodule Muro.Synth.Loop do
       book: nil,
       lines: lines,
       versions: [length(vs), length(kept)],
-      cex: [cex]
+      cex: [cex],
+      features: names,
+      kinds: kinds,
+      path_depth: path_depth,
+      path_bound: path_bound
     }
   end
 
-  defp empty(versions, depth) do
-    lines =
-      ["muro synth: empty version space", "depth #{depth}"] ++
-        Enum.map(versions, &"version space #{&1}")
+  defp exhausted_line(_depth, %{stop: stop}) when is_binary(stop), do: stop
+  defp exhausted_line(depth, %{sized: true}), do: "predicate size #{depth} exhausted"
+  defp exhausted_line(depth, _search), do: "predicate depth #{depth} exhausted"
 
-    %{status: :empty, program: nil, book: nil, lines: lines, versions: versions, cex: []}
+  defp depth_line_or_stop(_depth, %{stop: stop}) when is_binary(stop), do: []
+  defp depth_line_or_stop(depth, _search), do: ["depth #{depth}"]
+
+  defp template_line(kinds), do: "templates " <> Enum.join(kinds, " ")
+
+  defp feature_line([]), do: "features none"
+  defp feature_line(names), do: "features " <> Enum.join(names, " ")
+
+  defp depth_line(depth, bound) when depth >= bound,
+    do: "path depth #{depth} of #{bound} exhausted"
+
+  defp depth_line(depth, bound), do: "path depth #{depth} of #{bound}"
+
+  defp kind_word(%{kind: :ctor_is}), do: "ctor-is"
+  defp kind_word(%{kind: :vals_eq}), do: "vals-eq"
+  defp kind_word(%{kind: :spread_eq}), do: "spread-eq"
+  defp kind_word(%{kind: :pair_any}), do: "pair-any"
+  defp kind_word(%{kind: :len_is}), do: "len-is"
+  defp kind_word(%{kind: :nat_is}), do: "nat-is"
+  defp kind_word(%{kind: :has_pos_reward}), do: "has-pos-reward"
+  defp kind_word(%{kind: :is_self_loop}), do: "is-self-loop"
+  defp kind_word(%{kind: :leads_terminal}), do: "leads-terminal"
+  defp kind_word(%{kind: :reaches_pos}), do: "reaches-pos"
+  defp kind_word(%{kind: :hint}), do: "hint"
+  defp kind_word(%{kind: kind}), do: Atom.to_string(kind)
+
+  # The observations agree with the features: no two carriers share a
+  # vector and disagree. No predicate at the depths that were searched
+  # matches them. The report names those depths and the templates. It
+  # does not deploy a predicate.
+  defp empty(host, versions, depth, search \\ nil) do
+    specs = List.wrap(host[:feature_specs])
+    names = Enum.map(specs, & &1.name)
+    kinds = specs |> Enum.map(&kind_word/1) |> Enum.uniq()
+    path_depth = Map.get(host, :path_depth, Term.first_path_depth())
+    path_bound = Term.path_bound()
+
+    lines =
+      [
+        "muro synth: empty version space",
+        "no predicate matches the observations",
+        exhausted_line(depth, search)
+      ] ++
+        depth_line_or_stop(depth, search) ++
+        [
+          template_line(kinds),
+          feature_line(names),
+          depth_line(path_depth, path_bound)
+        ] ++ Enum.map(versions, &"version space #{&1}")
+
+    put_search(
+      %{
+        status: :empty,
+        program: nil,
+        book: nil,
+        lines: lines,
+        versions: versions,
+        cex: [],
+        certificate: nil,
+        features: names,
+        kinds: kinds,
+        path_depth: path_depth,
+        path_bound: path_bound
+      },
+      search
+    )
   end
 
   defp silent(cex) do
@@ -583,50 +919,68 @@ defmodule Muro.Synth.Loop do
     %{status: :silent, program: nil, book: nil, lines: lines, versions: [], cex: [cex]}
   end
 
-  defp checked(arms, source, versions, meta) do
+  defp checked(arms, source, versions, meta, search) do
     base =
       Enum.map(arms, &"program: #{Synth.render(&1.pred)}") ++
         preference(arms) ++
         Enum.map(versions, &"version space #{&1}")
 
-    case meta.kind do
-      :certified ->
-        also = if meta.also, do: ["also #{meta.also}"], else: []
+    cert_line = "certificate check #{meta.cert_ms} ms"
 
-        lines =
-          ["muro synth: homomorphism checked"] ++
-            base ++
-            ["certificate #{meta.certificate}"] ++
-            also
+    result =
+      case meta.kind do
+        :certified ->
+          also = if meta.also, do: ["also #{meta.also}"], else: []
 
-        %{
-          status: :certified,
-          program: program_of(arms),
-          book: source,
-          lines: lines,
-          versions: versions,
-          cex: [],
-          certificate: meta.certificate,
-          reason: nil
-        }
+          lines =
+            ["muro synth: homomorphism checked"] ++
+              base ++
+              ["certificate #{meta.certificate}", cert_line] ++
+              also
 
-      :policy ->
-        lines =
-          ["muro synth: policy checked"] ++
-            base ++
-            ["homomorphism is not derivable", meta.reason]
+          %{
+            status: :certified,
+            program: program_of(arms),
+            book: source,
+            lines: lines,
+            versions: versions,
+            cex: [],
+            certificate: meta.certificate,
+            reason: nil,
+            cert_ms: meta.cert_ms
+          }
 
-        %{
-          status: :policy,
-          program: program_of(arms),
-          book: source,
-          lines: lines,
-          versions: versions,
-          cex: [],
-          certificate: nil,
-          reason: meta.reason
-        }
-    end
+        :policy ->
+          lines =
+            ["muro synth: policy checked"] ++
+              base ++
+              ["homomorphism is not derivable", meta.reason, cert_line]
+
+          %{
+            status: :policy,
+            program: program_of(arms),
+            book: source,
+            lines: lines,
+            versions: versions,
+            cex: [],
+            certificate: nil,
+            reason: meta.reason,
+            cert_ms: meta.cert_ms
+          }
+      end
+
+    put_search(result, search)
+  end
+
+  defp put_search(result, nil), do: result
+
+  defp put_search(result, search) do
+    result
+    |> Map.put(:sizes, search.sizes)
+    |> Map.put(:enum_ms, search.enum_ms)
+    |> Map.put(:considered, search.considered)
+    |> Map.put(:distinct, search.distinct)
+    |> Map.update(:lines, search.lines, &(&1 ++ search.lines))
   end
 
   defp program_of([arm]), do: arm.pred
@@ -661,7 +1015,7 @@ defmodule Muro.Synth.Loop do
     end)
   end
 
-  defp residual(cex, versions) do
+  defp residual(cex, versions, search) do
     pair =
       case cex.pair do
         {action, other} -> ["pair #{action} #{other}"]
@@ -684,7 +1038,10 @@ defmodule Muro.Synth.Loop do
         "fed back #{cex.fed}"
       ] ++ pair ++ Enum.map(versions, &"version space #{&1}")
 
-    %{status: :residual, program: nil, book: nil, lines: lines, versions: versions, cex: [cex]}
+    put_search(
+      %{status: :residual, program: nil, book: nil, lines: lines, versions: versions, cex: [cex]},
+      search
+    )
   end
 
   defp show_bit(true), do: "true"

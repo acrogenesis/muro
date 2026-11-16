@@ -205,8 +205,11 @@ defmodule Muro.ReleaseTest do
     path
   end
 
+  # The smoke shim is a fresh `elixir` and does not see Mix. Load the
+  # beams this test compiled. `MIX_BUILD_PATH` replaces `_build/test`.
   defp ebin_args do
-    "_build/test/lib/*/ebin"
+    Mix.Project.build_path()
+    |> Path.join("lib/*/ebin")
     |> Path.wildcard()
     |> Enum.map_join(" ", fn ebin -> "-pa #{Path.expand(ebin)}" end)
   end

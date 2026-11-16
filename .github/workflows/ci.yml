@@ -53,6 +53,8 @@ jobs:
       - run: mix format --check-formatted
       - run: mix compile --warnings-as-errors
       - run: mix test
+      - name: Slow synthesis certificate
+        run: mix test --only slow
       - run: mix muro.check
       - run: bash scripts/archive-smoke.sh
 
