@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.21.13
+## 0.21.12
 
 A family names one buffered meeting and one closed kind, with one rule for each constructor. `c never held` opens that kind when the instance arrives. `c held while earlier unresolved` opens it once every earlier instance of its key is resolved. The declaration is spec, and every emitter skips it. `mix muro.check` prints `family <name>: <meeting> per key of <kind>`.
 
