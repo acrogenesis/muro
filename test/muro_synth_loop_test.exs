@@ -422,8 +422,11 @@ defmodule Muro.SynthLoopTest do
     assert result.book =~ "def dyn-one-rec "
     assert result.book =~ "def dyn-any-rec "
     assert result.book =~ "| suc j => dyn-any-rec s j"
-    assert result.book =~ "def dyn-reach-holds-"
-    assert result.book =~ "≡ true : Bool"
+    assert result.book =~ "def dyn-reach-holds-dead-0"
+    assert result.book =~ "dyn-best-pos dead 0 ≡ false : Bool"
+    assert result.book =~ "def dyn-reach-holds-dead-1"
+    assert result.book =~ "dyn-best-pos dead 1 ≡ dyn-any dead 0 : Bool"
+    refute result.book =~ "dyn-reach-agrees"
     assert result.book =~ "evidence CoindHomo rank"
     assert result.cert_ms < 180_000
     refute result.book =~ "find-policy"

@@ -50,7 +50,7 @@ defmodule Muro.CLI.Synth do
         type: :boolean,
         default: "false",
         doc:
-          "Print the report as one JSON object on standard error. The object is a log of the version space and the counterexamples. When a sized search stops at the considered budget or the memory budget, the object names that stop and the counts the walk had reached, including the size it had reached. It is not a certificate."
+          "Print the report as one JSON object on standard error. The object is a log of the version space and the counterexamples. A sized search records considered, distinct, truncated, sizes, and size whether it checks or stops. considered is the programs counted. distinct is the signatures. truncated is a subset skipped for the binomial budget. sizes lists each size that added a signature. size is the last size that counted a program, or 0 when none was counted. It is how far enumeration went, not the size of the survivor. A stop at the considered budget or the memory budget also names that stop. It is not a certificate."
       }
     ]
   end
@@ -231,6 +231,12 @@ defmodule Muro.CLI.Synth do
     end
   end
 
+  # Present on a sized search that checks and on a stop. `size` is the
+  # last size that counted a program, or 0 when none was counted. It is
+  # enumeration progress, not the survivor's size. `considered` is
+  # programs counted. `distinct` is signatures. `truncated` is whether
+  # a subset was skipped for the binomial budget. `sizes` is each size
+  # that added a signature, with that count.
   defp json(result) do
     payload =
       %{

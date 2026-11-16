@@ -28,15 +28,68 @@ defmodule Muro.SynthBudgetTest do
              )
 
     assert meta.considered == 0
-    assert meta.size == 1
+    assert meta.size == 0
+    assert meta.sizes == []
   end
 
-  test "a negative memory budget stops at the first program" do
+  test "a budget that ends a size names that size" do
+    # Size 1 is true, false, and one test per feature: four programs.
+    # The budget is that count, so size 2 is not enumerated.
+    assert {:empty, "considered budget", meta} =
+             Muro.Synth.enumerate_sized(["p", "q"], 4, fn _feature -> 1 end, 2, nil,
+               considered_budget: 4
+             )
+
+    assert meta.considered == 4
+    assert [size, count] = List.last(meta.sizes)
+    assert size == 1
+    assert count > 0
+    assert meta.size == size
+    refute Enum.any?(meta.sizes, fn [row, _] -> row > meta.size end)
+  end
+
+  test "a finished walk reports the last size that counted a program" do
+    assert {:ok, _index, meta} =
+             Muro.Synth.enumerate_sized(["p", "q"], 2, fn _feature -> 1 end, 2)
+
+    assert [size, count] = List.last(meta.sizes)
+    assert size == 2
+    assert count > 0
+    assert meta.size == size
+    assert meta.considered > 0
+    assert meta.distinct > 0
+    assert meta.truncated == false
+  end
+
+  test "a negative memory budget stops before any candidate" do
     assert {:empty, "memory budget", meta} =
              Muro.Synth.enumerate_sized(["p"], 2, fn _feature -> 0 end, 1, nil, memory_budget: -1)
 
     assert meta.considered == 0
-    assert meta.size == 1
+    assert meta.size == 0
+    assert meta.sizes == []
+  end
+
+  test "a non-integer budget is a usage error" do
+    assert {:error, :usage, considered} =
+             Muro.Synth.Loop.run("examples/cshrl/envs/two_state.muro", considered_budget: 1.5)
+
+    assert considered =~ "considered budget"
+
+    assert {:error, :usage, memory} =
+             Muro.Synth.Loop.run("examples/cshrl/envs/two_state.muro", memory_budget: "512")
+
+    assert memory =~ "memory budget"
+  end
+
+  test "enumerate_sized rejects a non-integer budget" do
+    assert_raise ArgumentError, ~r/considered_budget must be an integer/, fn ->
+      Muro.Synth.enumerate_sized(["p"], 2, fn _feature -> 0 end, 1, nil, considered_budget: :no)
+    end
+
+    assert_raise ArgumentError, ~r/memory_budget must be an integer/, fn ->
+      Muro.Synth.enumerate_sized(["p"], 2, fn _feature -> 0 end, 1, nil, memory_budget: 1.0)
+    end
   end
 
   @tag timeout: 180_000
@@ -67,8 +120,8 @@ defmodule Muro.SynthBudgetTest do
     assert decoded["considered"] == 5
     assert is_integer(decoded["distinct"])
     assert is_integer(decoded["size"])
-    assert decoded["size"] >= 1
-    assert is_list(decoded["sizes"])
+    assert [size, _count] = List.last(decoded["sizes"])
+    assert decoded["size"] == size
     assert is_integer(decoded["enum_ms"])
     assert is_boolean(decoded["truncated"])
     assert decoded["note"] == "no predicate matches the observations"
@@ -83,8 +136,8 @@ defmodule Muro.SynthBudgetTest do
     assert decoded["status"] == "empty"
     assert decoded["stop"] == "memory budget"
     assert decoded["considered"] == 0
-    assert decoded["size"] == 1
-    assert is_list(decoded["sizes"])
+    assert decoded["size"] == 0
+    assert decoded["sizes"] == []
     assert is_integer(decoded["enum_ms"])
   end
 

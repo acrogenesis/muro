@@ -2,11 +2,13 @@
 
 ## 0.21.11
 
-`mix muro.synth --json` names the stop when a sized search stops at the considered budget or the memory budget, and it includes the counts the walk had reached, including the size.
+`mix muro.synth --json` names the stop when a sized search stops at the considered budget or the memory budget, and it includes the counts the walk had reached. `size` is the last size that counted a program, or 0 when the walk stopped before any program. A search that checks records the same counts. `size` is how far enumeration went, not the size of the survivor.
 
 The memory bound is a soft bound on the current growth of the walk, sampled between candidates. It is not a cap on the peak.
 
-The considered budget and the memory bound are arguments of the search. The defaults stay 1000000 programs and 512 MiB.
+The considered budget and the memory bound are arguments of the search. The defaults stay 1000000 programs and 512 MiB. `Muro.Synth.Loop.run/2` takes `considered_budget:` and `memory_budget:`. The application environment no longer overrides those bounds. The old keys `:synth_considered_budget` and `:synth_memory_budget` are ignored.
+
+On a closed cover each reachability cell is one top-level `refl`, one definition per cover state and horizon. A large closed cover checks on the order of the cover times the horizon. The evidence is not a chunked `dyn-reach-agrees` tree of comparisons with `≡ true`.
 
 A horizon past the reachability table, and a state off the cover, fall back to the `*-rec` recurrence.
 

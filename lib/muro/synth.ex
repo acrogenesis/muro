@@ -18,7 +18,7 @@ defmodule Muro.Synth do
   remaining tie. A score does not put a program that missed an
   observation back into the space.
 
-  `enumerate_sized/4` is the search after `reaches-pos` is installed.
+  `enumerate_sized/6` is the search after `reaches-pos` is installed.
   It builds programs by size, up to `pred_size_bound/0`: the atoms, their
   negations, a conjunction or a disjunction of two atoms, the same with
   the right atom negated, and a left-associated conjunction or
@@ -134,7 +134,7 @@ defmodule Muro.Synth do
   @memory_budget 512 * 1_048_576
 
   @doc """
-  The size `enumerate_sized/4` searches up to.
+  The size `enumerate_sized/6` searches up to.
   """
   def pred_size_bound, do: @pred_size_bound
 
@@ -212,8 +212,14 @@ defmodule Muro.Synth do
 
   `{:ok, index, meta}` is a finished walk. `{:empty, reason, meta}` is
   a stop: `reason` is `considered budget` or `memory budget`. `meta`
-  counts only the programs considered before that stop, and `size` is
-  the size the walk had reached. A partial bank is not returned.
+  counts only the programs considered before that stop. `size` is the
+  last size at which a program was counted, and it is 0 when the walk
+  stops before counting one. It advances only after that count, so a
+  budget that lands on the last program of a size names that size.
+  `sizes` lists each size that added a new signature. When the last
+  counted size added one, it is the last row of `sizes`. `size` is
+  that enumeration progress on a finished walk and on a stop. It is
+  not the size of a survivor. A partial bank is not returned.
 
   `opts` may set `considered_budget:` and `memory_budget:`. Omitted, the
   bounds are `considered_budget/0` and `memory_budget/0`. The walk reads
@@ -266,10 +272,11 @@ defmodule Muro.Synth do
       base_mem: :erlang.memory(:total)
     }
 
+    # `size` advances in `insert_counted`, after a program at that
+    # size is counted. Assigning it here would name the next size when
+    # the budget lands on the last program of this one.
     st =
       Enum.reduce_while(1..max_size, st, fn size, st ->
-        st = %{st | size: size}
-
         if stopped?(st) do
           {:halt, st}
         else
@@ -731,12 +738,13 @@ defmodule Muro.Synth do
 
     case Map.fetch(st.seen, sig) do
       {:ok, old} when old <= size ->
-        %{st | considered: considered}
+        %{st | considered: considered, size: size}
 
       {:ok, old} ->
         %{
           st
           | considered: considered,
+            size: size,
             seen: Map.put(st.seen, sig, size),
             counts: move_count(st.counts, old, size),
             bank: replace_bank(st, sig, prog_fun, size)
@@ -753,6 +761,7 @@ defmodule Muro.Synth do
         %{
           st
           | considered: considered,
+            size: size,
             seen: Map.put(st.seen, sig, size),
             counts: Map.update(st.counts, size, 1, &(&1 + 1)),
             bank: bank,

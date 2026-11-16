@@ -1025,6 +1025,11 @@ defmodule Muro.Synth.Loop do
 
   defp put_search(result, nil), do: result
 
+  # Sized-search fields, on a search that checks and on a stop. `size`
+  # is how far enumeration counted, not the size of the survivor.
+  # `considered` is programs counted, `distinct` is signatures,
+  # `truncated` is a skipped subset, and `sizes` is each size that
+  # added a signature.
   defp put_search(result, search) do
     result
     |> Map.put(:sizes, search.sizes)
