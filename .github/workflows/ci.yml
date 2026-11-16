@@ -28,9 +28,53 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: mlugg/setup-zig@v2.2.1
-        with:
-          version: 0.15.2
+      # setup-zig is downloaded from codeload before any step runs, and
+      # that fetch times out. The compiler is still Zig 0.15.2. The
+      # checksum is the one published in the ziglang.org index.
+      - name: Install Zig 0.15.2
+        run: |
+          set -euo pipefail
+          if command -v zig >/dev/null 2>&1 && [ "$(zig version)" = "0.15.2" ]; then
+            zig version
+            exit 0
+          fi
+          case "$(uname -s)-$(uname -m)" in
+            Linux-x86_64)
+              target=x86_64-linux
+              sum=02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239
+              ;;
+            Linux-aarch64|Linux-arm64)
+              target=aarch64-linux
+              sum=958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f
+              ;;
+            Darwin-x86_64)
+              target=x86_64-macos
+              sum=375b6909fc1495d16fc2c7db9538f707456bfc3373b14ee83fdd3e22b3d43f7f
+              ;;
+            Darwin-arm64)
+              target=aarch64-macos
+              sum=3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b
+              ;;
+            *)
+              echo "no Zig 0.15.2 build for $(uname -s)-$(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+          dest="$HOME/.local/zig-0.15.2"
+          rm -rf "$dest"
+          mkdir -p "$dest"
+          curl -fL --retry 5 --retry-delay 2 \
+            -o "$dest/zig.tar.xz" \
+            "https://ziglang.org/download/0.15.2/zig-${target}-0.15.2.tar.xz"
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "$sum  $dest/zig.tar.xz" | sha256sum -c -
+          else
+            echo "$sum  $dest/zig.tar.xz" | shasum -a 256 -c -
+          fi
+          tar -xJf "$dest/zig.tar.xz" -C "$dest" --strip-components=1
+          rm -f "$dest/zig.tar.xz"
+          echo "$dest" >> "$GITHUB_PATH"
+          "$dest/zig" version
 
       - uses: jdx/mise-action@v4
 
@@ -176,6 +220,8 @@ jobs:
           path: |
             ui/deps
             ui/_build
+            deps
+            _build
           key: visor-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('ui/mix.lock', 'ui/mix.exs', 'ui/lib/**/*.ex', 'mix.lock', 'mix.exs', 'lib/**/*.ex', 'lib/**/*.muro') }}
 
       - name: Drop the cached path dependency
@@ -185,3 +231,13 @@ jobs:
       - run: mix format --check-formatted
       - run: mix compile --warnings-as-errors
       - run: mix test
+
+      # The emit digest is raw bytes where the bytes agree, and a parsed
+      # image, comments kept, for the state machine and the OTP image.
+      # This matrix is Elixir 1.18 and 1.20. The Elixir job runs the same
+      # test on 1.20.
+      - name: Emit digest on this Elixir
+        working-directory: ${{ github.workspace }}
+        run: |
+          mix deps.get
+          mix test test/muro_emit_examples_test.exs

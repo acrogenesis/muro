@@ -22,7 +22,7 @@ defmodule Muro.CLI.Check do
   def help do
     Muro.CLI.Text.page([
       Muro.CLI.Text.prose("""
-      muro check type-checks one .muro file, or the built-in book when no path is given. It reads that file and the prelude. It writes nothing. On success it prints the version, then one line per temporal declaration that holds, then one line per projected pair of each choreography, then "All terms check. Evidence never becomes a run." A book with no temporal declaration and no choreography prints the success sentence immediately after the version. A book that imports packages then prints one "conforms to" line per package. A refusal prints the version and every failing definition, in book order. out of fuel means the checker stopped reducing. It is not acceptance. Copy syntax from the examples rather than writing it from memory.
+      muro check type-checks one .muro file, or the built-in book when no path is given. It reads that file and the prelude. It writes nothing. On success it prints the version, then one line per keyed family and one line per temporal declaration that holds, in book order, then one line per projected pair of each choreography, then "All terms check. Evidence never becomes a run." A book with no keyed family, no temporal declaration, and no choreography prints the success sentence immediately after the version. A book that imports packages then prints one "conforms to" line per package. A refusal prints the version and every failing definition, in book order. out of fuel means the checker stopped reducing. It is not acceptance. Copy syntax from the examples rather than writing it from memory.
       """),
       Muro.CLI.Text.section(
         "USAGE",

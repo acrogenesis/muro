@@ -733,20 +733,55 @@ defmodule MuroVisor.Draw do
     |> Enum.uniq()
   end
 
-  defp disjoint_shift(_ys, prev) when prev == %MapSet{}, do: 0
-  defp disjoint_shift([], _prev), do: 0
+  @doc false
+  def min_track, do: @min_track
 
-  defp disjoint_shift(ys, prev) do
+  @doc false
+  def disjoint_shift(_ys, prev) when prev == %MapSet{}, do: 0
+  def disjoint_shift([], _prev), do: 0
+
+  # Same shift as scanning 0..limit for the first k that leaves every port
+  # at least @min_track from the previous rank. A port forbids a closed run
+  # of k, and the first gap is that k. A rank that never clears still takes
+  # the same bound the scan returned. The scan was the layout cost of the
+  # large term books.
+  def disjoint_shift(ys, prev) do
     limit =
       max(Enum.max(prev) - Enum.min(ys) + @min_track * max(MapSet.size(prev), 1), @min_track)
 
-    Enum.find(0..limit, limit, fn k ->
-      Enum.all?(ys, &clear?(&1 + k, prev))
-    end)
+    span = @min_track - 1
+
+    blocked =
+      for y <- ys,
+          p <- prev,
+          lo = p - y - span,
+          hi = p - y + span,
+          hi >= 0 and lo <= limit,
+          do: {max(lo, 0), min(hi, limit)}
+
+    case first_open(blocked, limit) do
+      k when is_integer(k) and k <= limit -> k
+      _ -> limit
+    end
   end
 
-  defp clear?(y, prev) do
-    not Enum.any?(prev, fn p -> abs(p - y) < @min_track end)
+  defp first_open(blocked, limit) do
+    blocked
+    |> Enum.sort()
+    |> Enum.reduce([], fn {lo, hi}, acc ->
+      case acc do
+        [{a, b} | rest] when lo <= b + 1 -> [{a, max(b, hi)} | rest]
+        _ -> [{lo, hi} | acc]
+      end
+    end)
+    |> Enum.reverse()
+    |> Enum.reduce_while(0, fn {lo, hi}, cursor ->
+      if cursor < lo, do: {:halt, cursor}, else: {:cont, hi + 1}
+    end)
+    |> case do
+      k when is_integer(k) and k <= limit -> k
+      _ -> nil
+    end
   end
 
   defp apply_rank_shifts(placed, shifts, order) do

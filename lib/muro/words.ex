@@ -27,11 +27,14 @@ defmodule Muro.Words do
   # and the parser share the spelling, the way `buffer` is.
   @may_fail ~w(may fail)
   @temporal ~w(forall always eventually leads_to implies or and not true false inbox is empty full stopped dead has first second third st nd rd th)
+  # Keywords of `family name :` and of the atoms `opened`/`held`/`resolved`.
+  # The parser reserves them only in those forms.
+  @family ~w(per key of never held while earlier unresolved opened resolved)
   @repr ~w(else boolean integer nil interned string list optional nullable tuple map_of map open)
 
   @types ~w(Atom String Bytes Slice Type Nat I64 U8 U32 U64 WBool Opt F32 Tensor Unit Empty Stream Always Bit Vec run spec evidence internal)
   @nu ["ν", "nu"]
-  @extra_decl ["temporal", "repr"]
+  @extra_decl ["temporal", "repr", "family"]
 
   @term ~w(matchEmpty rewrite unfold motive let in uncons packI toI64 toU8 toU32 toU64 toNat asU8 asU32 asU64 asI64 bisim addi subi muli addc subc mulc divi remi eqi lti lei andi ori xori noti shli shri addt head tail refl fst snd suc tt b0 b1 wsome wtrue wfalse wnone rep dual seen strCat strLen strEq bytesLen sliceLen bytesEq sliceEq bytesCat bytesGet sliceGet slice sliceUncons bytesFold sliceFold strBytes sliceUntil sliceAfter)
 
@@ -69,7 +72,7 @@ defmodule Muro.Words do
     "<"
   ]
 
-  @naming ~w(def data session conform meet place scheme talk choreography param endpoint seat link temporal repr) ++
+  @naming ~w(def data session conform meet place scheme talk choreography param endpoint seat link temporal repr family) ++
             @nu
 
   @keywords @pay_stop ++
@@ -79,6 +82,7 @@ defmodule Muro.Words do
               @place ++
               @may_fail ++
               @temporal ++
+              @family ++
               @repr ++
               @term
 
@@ -140,6 +144,7 @@ defmodule Muro.Words do
   def place_words, do: @place
   def may_fail_words, do: @may_fail
   def temporal_words, do: @temporal
+  def family_words, do: @family
   def repr_words, do: @repr
 
   def nu_words, do: @nu

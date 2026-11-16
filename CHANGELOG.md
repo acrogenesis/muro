@@ -12,6 +12,20 @@
 
 - Version 0.21.14.
 
+## 0.21.12
+
+A family names one buffered meeting and one closed kind, with one rule for each constructor. `c never held` opens that kind when the instance arrives. `c held while earlier unresolved` opens it once every earlier instance of its key is resolved. The declaration is spec, and every emitter skips it. `mix muro.check` prints `family <name>: <meeting> per key of <kind>`.
+
+A temporal formula over that family may quantify `forall (k : key)` and name `opened`, `held`, and `resolved`. The checker accepts a well-formed formula over a family that checks and answers `not yet decided`. A formula over a family that does not check is `skipped because <family> does not check`.
+
+### Manual
+
+- Temporal. Grammar. Limits. Examples.
+
+### Package
+
+- Version 0.21.13.
+
 ## 0.21.11
 
 `mix muro.synth --json` names the stop when a sized search stops at the considered budget or the memory budget, and it includes the counts the walk had reached. `size` is the last size that counted a program, or 0 when the walk stopped before any program. A search that checks records the same counts. `size` is how far enumeration went, not the size of the survivor.

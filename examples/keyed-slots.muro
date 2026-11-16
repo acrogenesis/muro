@@ -1,0 +1,30 @@
+-- One buffered meeting, keyed by a closed kind. init opens when it
+-- arrives. signal waits until every earlier instance of its key is
+-- resolved, an earlier init and an earlier signal included. The formula
+-- (opened k signal) implies (resolved k init) names only init.
+-- opened, held, and resolved take a constructor name, not an instance,
+-- so that formula cannot name an earlier signal. Step 2 decides it.
+-- The family is spec.
+
+data Event : Type where
+  init : Event
+  signal : Event
+
+data Report : Type where
+  ok : Report
+
+session task-work := send Report end
+session server-wait := recv Report end
+
+conform task : task-work := put ok done
+
+conform server : server-wait :=
+  get (r : Report) done
+  fail
+    done
+
+meet slot : server with task may fail buffer 1
+
+family slots : slot per key of Event
+  init never held
+  signal held while earlier unresolved
