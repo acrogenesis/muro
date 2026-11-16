@@ -100,6 +100,7 @@ lib/muro/repr.ex        a repr: check the host shape and emit decode/1, decode/2
 lib/muro/emit/exunit.ex closed equations → one ExUnit module (`--backend exunit`, `kind: :exunit`)
 lib/muro/emit/otp.ex    a conformance, and a reading, is a GenServer; a marked peer is monitored and a `:DOWN` that is not a halt takes the failure arm; a book with no mark emits the previous module (`--backend otp`)
 lib/muro/emit/fsm.ex    a session endpoint is a state machine; a marked book has `down/1` and `down/2` for a failure arm; a book with no mark emits no `down`; the transport stays with the host (`--backend fsm`)
+lib/muro/emit/c_session.ex a session endpoint is the same step, written as C (`--backend c`)
 lib/muro/emit/node.ex   a cross, and a cross reading, is one call and one monitor (`--node`)
 lib/muro/emit/mbi.ex    exactly one exported run as an .mbi image (`--backend mbi`); muro-beam loads it; not a manifest target
 lib/muro/example.ex     same book as Agda
@@ -182,7 +183,7 @@ A script run with `mix run --no-start` does not see the archive. Archives are on
 
 `--backend mbi` writes `<stem>.mbi` next to the file only when the book has exactly one exported run and that body erases, and the binder grades stay. Any refusal, including a book with no exported run and a book with more than one, writes nothing and leaves an image already at that path byte for byte. The file is the image muro-beam loads. It is not Erlang BEAM bytecode. A definition, data, a pair, a word, or a stream is refused. muro-beam checks the image again. Writing the file is not that check. The page is [MBI images](mbi.md).
 
-`--backend c` writes C. The Mix task builds a NIF when the working directory is the loaded Mix project. Add `{:elixir_make, "~> 0.10", runtime: false}` to the project deps, or run the task inside a project that depends on muro. Without `elixir_make`, that NIF stops and names the dependency. Outside the loaded project the task writes the `.h` and the `.c` only, and so does the executable. `nx` and `makeup` are optional. Checking and emitting Elixir do not load them.
+`--backend c` writes C. A session in the book is also a pure step, and the host keeps the transport. The Mix task builds a NIF when the working directory is the loaded Mix project. Add `{:elixir_make, "~> 0.10", runtime: false}` to the project deps, or run the task inside a project that depends on muro. Without `elixir_make`, that NIF stops and names the dependency. Outside the loaded project the task writes the `.h` and the `.c` only, and so does the executable. `nx` and `makeup` are optional. Checking and emitting Elixir do not load them.
 
 ## Committed modules
 

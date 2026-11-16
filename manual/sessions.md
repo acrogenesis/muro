@@ -49,6 +49,8 @@ The meeting is evidence. It is not a run term. A run definition has no seat. The
 
 `mix muro.emit path.muro --backend fsm` prints each end as a state machine the host steps itself. The transport stays with the host. See [State machines](fsm.md).
 
+`mix muro.emit path.muro --backend c` writes that same step next to the runs. The generated name is `muro__sess_` followed by the source spelling of the session, then `_init` or `_step`. A hyphen in the source name is `zd` in that spelling. Init starts one end. Step takes the state, a direction, and the event, and returns the next state and the action. An event the protocol does not allow is refused and the state stays. The host keeps the transport. The transitions are the ones the state machine takes. `down` is not part of that step.
+
 Places are where the parties sit. When the places are the same, the meeting stays. When the places differ, the meeting crosses once. The boundary is the seating. The payload stays on the session.
 
 ```mermaid

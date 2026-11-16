@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.21.14
+
+`--backend c` writes a session stepper beside the runs. Each session is a pure step: the host passes the state and an event, and the function returns the next state and the action, or refuses an event the protocol does not allow. The host keeps the transport. A meeting marked `may fail` is still refused. Rust and Zig are unchanged.
+
+### Manual
+
+- Emit. Sessions. For agents. Examples. Host representations.
+
+### Package
+
+- Version 0.21.14.
+
 ## 0.21.11
 
 `mix muro.synth --json` names the stop when a sized search stops at the considered budget or the memory budget, and it includes the counts the walk had reached. `size` is the last size that counted a program, or 0 when the walk stopped before any program. A search that checks records the same counts. `size` is how far enumeration went, not the size of the survivor.
