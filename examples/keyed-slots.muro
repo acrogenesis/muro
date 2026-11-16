@@ -1,6 +1,6 @@
 -- One buffered meeting, keyed by a closed kind. init opens when it
 -- arrives. signal waits until every earlier instance of its key is
--- resolved, an earlier init and an earlier signal. The formula
+-- resolved, an earlier init and an earlier signal included. The formula
 -- (opened k signal) implies (resolved k init) names only init.
 -- opened, held, and resolved take a constructor name, not an instance,
 -- so that formula cannot name an earlier signal. Step 2 decides it.
