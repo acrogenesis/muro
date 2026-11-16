@@ -733,6 +733,15 @@ defmodule MuroVisor.Draw do
     |> Enum.uniq()
   end
 
+  @doc false
+  def rank_shift(ys, prev) when is_list(ys) and is_struct(prev, MapSet) do
+    disjoint_shift(ys, prev)
+  end
+
+  # The smallest k in `0..limit` whose rows sit at least `@min_track`
+  # from every row of the previous rank. Blocked offsets are one
+  # interval per pair of rows. The first gap is that k. A gap past
+  # the limit stays the limit.
   defp disjoint_shift(_ys, prev) when prev == %MapSet{}, do: 0
   defp disjoint_shift([], _prev), do: 0
 
@@ -740,13 +749,30 @@ defmodule MuroVisor.Draw do
     limit =
       max(Enum.max(prev) - Enum.min(ys) + @min_track * max(MapSet.size(prev), 1), @min_track)
 
-    Enum.find(0..limit, limit, fn k ->
-      Enum.all?(ys, &clear?(&1 + k, prev))
-    end)
+    ys
+    |> blocked_shifts(prev, limit)
+    |> first_clear(0, limit)
   end
 
-  defp clear?(y, prev) do
-    not Enum.any?(prev, fn p -> abs(p - y) < @min_track end)
+  defp blocked_shifts(ys, prev, limit) do
+    span = @min_track - 1
+
+    for y <- ys, p <- prev do
+      {max(p - y - span, 0), min(p - y + span, limit)}
+    end
+    |> Enum.filter(fn {lo, hi} -> lo <= hi end)
+    |> Enum.sort()
+  end
+
+  defp first_clear(_intervals, k, limit) when k > limit, do: limit
+  defp first_clear([], k, _limit), do: k
+
+  defp first_clear([{lo, hi} | rest], k, limit) do
+    cond do
+      hi < k -> first_clear(rest, k, limit)
+      lo > k -> k
+      true -> first_clear(rest, hi + 1, limit)
+    end
   end
 
   defp apply_rank_shifts(placed, shifts, order) do
