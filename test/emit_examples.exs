@@ -1,10 +1,31 @@
 # The image of every example except the keyed family. `mix muro.emit`
 # skips a family, so these bytes are the bytes main emitted. The digest
-# is one sha256 per book. Keyed-slots is the book this change adds.
+# is one sha256 per book, of the picture below. Keyed-slots is the book
+# this change adds.
 #
-# An Elixir image is hashed as its parsed form. Elixir 1.20 prints a map
-# in iterator order and breaks a line where 1.18 does not, and that order
-# follows atoms already created in the VM. The parsed form is the image.
+# What is compared
+#
+# `norm/1` strips the absolute working directory. Then:
+#
+# Raw bytes, comments included. Measured on Elixir 1.18.4 and 1.20.4,
+# over every example except the keyed family, and again on 1.20.4 after
+# several hundred atoms were created in the VM. The bytes match for
+# `:elixir`, `:c`, `:rust`, `:zig`, `:asm`, `:js`, `:otp`, `:node`,
+# `:mbi`, and `:exunit`. A change to the header comment in
+# `Muro.Emit.emit_module/2` changes `:elixir` and fails the digest.
+# `:otp`, `:node`, and ExUnit `:source` are these raw bytes too.
+#
+# Parsed form, `:fsm` only. Elixir 1.18 breaks a line inside an inspected
+# tuple that 1.20 keeps on one line. `Code.string_to_quoted_with_comments/2`
+# (`columns: false`) drops that line break. Metadata is dropped, and map
+# pairs are sorted by their external key. The comment texts are kept, in
+# source order, and the line number is not, so a line break does not move
+# the digest and a change to the generated comment does. A binary that
+# does not start with `defmodule`, or that does not parse, stays raw.
+# An error tuple stays raw.
+#
+# CI runs this digest on 1.18.4 and on 1.20.4. The visor matrix is those
+# two versions. The Elixir job runs it again on 1.20.4.
 defmodule Muro.EmitExamples do
   @exclude "keyed-slots.muro"
 
@@ -17,7 +38,10 @@ defmodule Muro.EmitExamples do
     |> Enum.map(fn path ->
       rel = Path.relative_to(path, root)
       if System.get_env("MURO_EMIT_DIGEST") == "1", do: IO.puts(:stderr, rel)
-      hash = path |> picture() |> canon() |> :erlang.term_to_binary([:deterministic]) |> sha()
+
+      hash =
+        path |> picture() |> canon_picture() |> :erlang.term_to_binary([:deterministic]) |> sha()
+
       "#{hash}  #{rel}"
     end)
   end
@@ -119,10 +143,22 @@ defmodule Muro.EmitExamples do
 
   defp sha(bin), do: Base.encode16(:crypto.hash(:sha256, bin), case: :lower)
 
-  defp canon(x) when is_binary(x) do
+  # Only the state machine moves between Elixir 1.18 and 1.20. The file
+  # comment records the measurement.
+  @parsed [:fsm]
+
+  @doc false
+  def canon_picture(picture) when is_map(picture) do
+    Map.new(picture, fn {backend, value} ->
+      {backend, if(backend in @parsed, do: parsed(value), else: value)}
+    end)
+  end
+
+  @doc false
+  def parsed(x) when is_binary(x) do
     if String.starts_with?(String.trim_leading(x), "defmodule ") do
-      case Code.string_to_quoted(x, columns: false) do
-        {:ok, ast} -> {:elixir, strip(ast)}
+      case Code.string_to_quoted_with_comments(x, columns: false) do
+        {:ok, ast, comments} -> {:elixir, strip(ast), Enum.map(comments, & &1.text)}
         _ -> x
       end
     else
@@ -130,13 +166,13 @@ defmodule Muro.EmitExamples do
     end
   end
 
-  defp canon(x) when is_list(x), do: Enum.map(x, &canon/1)
-  defp canon(x) when is_map(x), do: Map.new(x, fn {k, v} -> {canon(k), canon(v)} end)
+  def parsed(x) when is_list(x), do: Enum.map(x, &parsed/1)
+  def parsed(x) when is_map(x), do: Map.new(x, fn {k, v} -> {parsed(k), parsed(v)} end)
 
-  defp canon(x) when is_tuple(x),
-    do: x |> Tuple.to_list() |> Enum.map(&canon/1) |> List.to_tuple()
+  def parsed(x) when is_tuple(x),
+    do: x |> Tuple.to_list() |> Enum.map(&parsed/1) |> List.to_tuple()
 
-  defp canon(x), do: x
+  def parsed(x), do: x
 
   # Drop parser metadata, and sort a map by its keys. Atom order in a VM
   # is not the order of the names, so the sort key is the external binary.
