@@ -643,6 +643,7 @@ defmodule Muro.Ast do
             :read,
             :meet,
             :temporal,
+            :family,
             :talk,
             :choreography,
             :repr,

@@ -41,6 +41,7 @@ Do not add a third representation. Do not use raw HOAS (`Tm → Tm`) as inductiv
 
 - A marked meeting is not in `agda/Muro/AsyncRec.agda` or `agda/Muro/Temporal.agda`. Those files stay the meeting that does not carry the mark.
 - Crash and drop steps stay Elixir-only (`lib/muro/fail.ex`, `lib/muro/temporal/graph.ex`), and so does the `dead` atom. Porting them must not weaken an Agda theorem.
+- A keyed family is spec (`lib/muro/family.ex`). It names a buffered meeting and a closed kind. It is not added to `Tm`. `agda/Muro/Temporal.agda` is unchanged. The family graph is not decided there.
 
 A string on that image is `{:str, utf8}`, `{:scat, a, b}`, `{:slen, a}`, `{:seq, a, b}`, or an open `{:sbytes, s}`. `strBytes` of a closed string is `{:byt, utf8}`. The Elixir emitter walks the named AST and prints a binary. The JavaScript emitter prints `{ string: "…" }` and leaves an atom as a string. The C emitter prints this IR as `muro__str`, a pointer and an octet length. The Rust emitter prints that layout. The Zig emitter prints it. The Cortex-M emitter prints the Nat fragment and refuses a string (`c:string`).
 
