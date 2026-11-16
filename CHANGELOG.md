@@ -2,15 +2,18 @@
 
 ## 0.21.12
 
-`mix muro.synth` searches action-quantified predicates. An action-indexed feature family (`reaches-pos`, `has-pos-reward`, `is-self-loop`, `leads-terminal`) adds two PredProg constructors per action: `selfp stem a` is that action's column, and `otherp stem a` is the disjunction of the same stem at every other action. A missing column is false. Each constructor has size 1, so the size does not grow with the number of actions. The sized walk adds them as atoms under the existing negation and pairing rules. The subset chains stay feature tests. The book defines `Stem`, `stem-at`, and `other-at`, `eval` calls them, and `policy` is `eval` of the programs the checker accepted.
+`mix muro.synth` searches action-quantified predicates. An action-indexed feature family (`reaches-pos`, `has-pos-reward`, `is-self-loop`, `leads-terminal`) adds two PredProg constructors per action: `selfp stem a` is that action's column, and `otherp stem a` is the disjunction of the same stem at every other action. An action whose test the cover filter dropped has no column, and that column is false. With one action, `otherp` is false. Each constructor has size 1, so the size does not grow with the number of actions. The sized walk adds them as atoms under the existing negation and pairing rules. The subset chains stay feature tests. The book defines `Stem`, `stem-at`, and `other-at`, `eval` calls them, and `policy` is `eval` of the programs the checker accepted. `selfp` and `otherp` are a muro extension of the grammar. The CSHRL paper does not have them.
+
+The book declares every column of a stem a survivor quantifies over, so `stem-at` reads an action no survivor names from its column, not as false. A column the plan did not declare refuses the book. A family column with no signature refuses the sized walk instead of dropping that action. A test checks the generated `stem-at`, `other-at`, and `eval` against `Muro.Synth.eval` at every state, including a one-action environment.
 
 Four queens: 8138 programs considered (was 94970), 454 distinct signatures, stops at size 4 (was size 8), enumeration 441 ms (was 5065 ms). The book checks `CoindHomo` in about 53 seconds. Peak resident set 387645440 bytes (was 999456768). The preferences are unchanged.
 
-Eight queens: the sized walk reaches every action at size 4, 71492 programs considered, in about 29 seconds. That certificate is not part of this release and is not claimed.
+Eight queens with these constructors is under investigation. No certificate has been obtained, and this release claims no eight-queens predicate.
 
 ### Manual
 
-- Action-quantified predicates in the synthesis and CSHRL chapters, with the new four-queens numbers.
+- Action-quantified predicates in the synthesis and CSHRL chapters, with the new four-queens numbers, their size, and the departure from the paper.
+- Eight queens is described as under investigation, with no certificate.
 
 ### Package
 
