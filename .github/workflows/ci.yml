@@ -28,9 +28,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: mlugg/setup-zig@v2.2.1
-        with:
-          version: 0.15.2
+      # Zig 0.15.2 from ziglang.org. The runner checks the published sha256.
+      - name: Install Zig 0.15.2
+        run: bash scripts/ci-zig.sh
 
       - uses: jdx/mise-action@v4
 
