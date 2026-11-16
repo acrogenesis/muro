@@ -15,31 +15,27 @@ defmodule Muro.Synth.Reach do
   Soundness inside the table is an inductive family of `refl`s.
   `dyn-best-pos s 0` agrees with `false`. `dyn-best-pos s (j + 1)`
   agrees with one step of `dyn-any s j`, and that step reads the
-  table at horizon `j`. The chain ends at the zero arm. A wrong cell
-  fails at the first horizon where it disagrees with that step. The
-  table is not shown to be sound by comparing it, in one shot, with
-  the recurrence unfolded out to the horizon.
+  table at horizon `j`. The chain ends at the zero arm. Each cell is
+  its own evidence, named `dyn-reach-holds` with the state and the
+  horizon. A wrong cell fails that evidence. The table is not shown
+  to be sound by comparing it, in one shot, with the recurrence
+  unfolded out to the horizon.
 
-  Horizons past the table, and a state the match does not hit, call
-  the same recurrence as a separate block: `dyn-best-rec`,
-  `dyn-one-rec`, and `dyn-any-rec`. That block is only the fallback.
-  It does not call the table. The table's fallback calls it, which
-  is legal because the call is not inside the block. Above the
-  horizon, and off the cover, the runs are the recurrence itself,
-  not a second table.
+  A horizon past the reachability table, and a state off the cover,
+  fall back to the `*-rec` recurrence. `dyn-known` calls
+  `dyn-any-rec` in both cases. That block is `dyn-best-rec`,
+  `dyn-one-rec`, and `dyn-any-rec`. It does not call the table. The
+  call is legal because it is not inside the block.
 
-  The agreement term is a balanced tree, in chunks of `@chunk`
-  cells, so the match depth stays inside the checker's fuel. A cover
-  that is not closed, that the match cannot split, or that is larger
-  than `@domain_cap` states, keeps the three recursive runs and
-  emits no table. The search's own memo of the same recursion is not
-  this table, and the checker never reads it.
+  A cover that is not closed, that the match cannot split, or that
+  is larger than `@domain_cap` states, keeps the three recursive
+  runs and emits no table. The search's own memo of the same
+  recursion is not this table, and the checker never reads it.
   """
 
   alias Muro.Synth.Book
   alias Muro.Synth.Term
 
-  @chunk 1024
   @domain_cap 100_000
 
   @doc """
@@ -198,71 +194,46 @@ defmodule Muro.Synth.Reach do
     """
   end
 
+  # One evidence per cell. The name carries the state and the horizon,
+  # so a wrong cell is that definition. Horizon 0 agrees with `false`.
+  # Horizon `j + 1` agrees with one step of `dyn-any` at `j`.
   defp evidence(host, states, best, any, taken) do
-    horizon = host.horizon
-
-    cells =
-      Enum.flat_map(states, fn state ->
-        spell = paren(Term.spell(state))
-        [eq_false(best, spell) | eq_steps(best, any, spell, horizon)]
-      end)
-
     {blocks, taken} =
-      cells
-      |> Enum.chunk_every(@chunk)
-      |> Enum.map_reduce(taken, fn chunk, taken ->
-        {agrees, taken} = Book.reserve("dyn-reach-agrees", taken)
-        {holds, taken} = Book.reserve("dyn-reach-holds", taken)
-        {agree_block(agrees, holds, band(chunk)), taken}
+      Enum.flat_map_reduce(states, taken, fn state, taken ->
+        spell = Term.spell(state)
+        shown = paren(spell)
+
+        Enum.map_reduce(cell_equations(best, any, shown, host.horizon), taken, fn
+          {horizon, equation}, taken ->
+            {name, taken} = Book.reserve(cell_name(spell, horizon), taken)
+            {"def #{name} : evidence {#{equation}} := refl\n", taken}
+        end)
       end)
 
     {Enum.join(blocks, "\n"), taken}
   end
 
-  defp eq_steps(_best, _any, _spell, horizon) when horizon <= 0, do: []
+  defp cell_equations(best, any, spell, horizon) do
+    steps =
+      if horizon <= 0 do
+        []
+      else
+        Enum.map(0..(horizon - 1), fn j ->
+          {j + 1, "#{best} #{spell} #{j + 1} ≡ #{any} #{spell} #{j} : Bool"}
+        end)
+      end
 
-  defp eq_steps(best, any, spell, horizon) do
-    Enum.map(0..(horizon - 1), &eq_at(best, any, spell, &1))
+    [{0, "#{best} #{spell} 0 ≡ false : Bool"} | steps]
   end
 
-  defp eq_false(best, spell) do
-    """
-    (match (#{best} #{spell} 0) motive (λ _ → Bool)
-      | true => false
-      | false => true)
-    """
-  end
+  defp cell_name(spell, horizon) do
+    tag =
+      spell
+      |> String.replace(~r/[^A-Za-z0-9]+/u, "-")
+      |> String.trim("-")
 
-  defp eq_at(best, any, spell, j) do
-    """
-    (match (#{best} #{spell} #{j + 1}) motive (λ _ → Bool)
-      | true => #{any} #{spell} #{j}
-      | false =>
-          (match (#{any} #{spell} #{j}) motive (λ _ → Bool)
-            | true => false
-            | false => true))
-    """
-  end
-
-  defp band([one]), do: one
-
-  defp band(cells) do
-    mid = div(length(cells), 2)
-    {left, right} = Enum.split(cells, mid)
-
-    """
-    (match (#{band(left)}) motive (λ _ → Bool)
-      | true => #{band(right)}
-      | false => false)
-    """
-  end
-
-  defp agree_block(agrees, holds, body) do
-    """
-    def #{agrees} : run Bool :=
-      #{body}
-    def #{holds} : evidence {#{agrees} ≡ true : Bool} := refl
-    """
+    tag = if tag == "", do: "cell", else: tag
+    "dyn-reach-holds-#{tag}-#{horizon}"
   end
 
   defp prepare(host, states) do

@@ -26,8 +26,14 @@ defmodule Muro.SynthReachTest do
     flipped = flip_known!(text)
     refute flipped == text
 
-    assert {:error, diagnostic} = Muro.check_file(write!(base_book(flipped)))
-    assert diagnostic =~ "dyn-reach-holds"
+    path = write!(base_book(flipped))
+    assert {:error, diagnostic} = Muro.check_file(path)
+    assert diagnostic =~ "dyn-reach-holds-at-0-1"
+    assert diagnostic =~ "cannot convert false ≁ true"
+
+    cited = cited_line(path, diagnostic)
+    assert cited =~ "def dyn-reach-holds-at-0-1"
+    assert cited =~ "dyn-best-pos (at 0) 1 ≡ dyn-any (at 0) 0"
   end
 
   test "an open cover is the recurrence and does not consult dyn-known" do
@@ -225,6 +231,16 @@ defmodule Muro.SynthReachTest do
     head <>
       "def dyn-known" <>
       String.replace(known, "| 0 => true", "| 0 => false", global: false) <> "def dyn-one" <> tail
+  end
+
+  defp cited_line(path, diagnostic) do
+    [_, line, _] = Regex.run(~r/#{Regex.escape(path)}:(\d+):(\d+):/, diagnostic)
+    diagnostic_line = String.to_integer(line)
+
+    path
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.at(diagnostic_line - 1)
   end
 
   defp write!(src) do

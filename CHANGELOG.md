@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.21.11
+
+`mix muro.synth --json` names the stop when a sized search stops at the considered budget or the memory budget, and it includes the counts the walk had reached. `size` is the last size that counted a program, or 0 when the walk stopped before any program. A search that checks records the same counts. `size` is how far enumeration went, not the size of the survivor.
+
+The memory bound is a soft bound on the current growth of the walk, sampled between candidates. It is not a cap on the peak.
+
+The considered budget and the memory bound are arguments of the search. The defaults stay 1000000 programs and 512 MiB. `Muro.Synth.Loop.run/2` takes `considered_budget:` and `memory_budget:`. The application environment no longer overrides those bounds. The old keys `:synth_considered_budget` and `:synth_memory_budget` are ignored.
+
+On a closed cover each reachability cell is one top-level `refl`, one definition per cover state and horizon. A large closed cover checks on the order of the cover times the horizon. The evidence is not a chunked `dyn-reach-agrees` tree of comparisons with `≡ true`.
+
+A horizon past the reachability table, and a state off the cover, fall back to the `*-rec` recurrence.
+
+The eight-queens stop rests on an earlier size walk that had considered 3766542 programs by the end of size 7. That walk was not re-run under the budget.
+
+### Manual
+
+- Synthesis. CSHRL. Examples.
+
+### Package
+
+- Version 0.21.11.
+
 ## 0.21.10
 
 `--backend mbi` writes `<stem>.mbi` beside the book only when the book has exactly one exported run and that body erases. Any refusal writes nothing, including a book with no exported run (`mbi:entry`) and a book with more than one exported run, and an image already at that path stays byte for byte. The file is the image muro-beam loads. It is not Erlang BEAM bytecode. The flag was `--backend beam`, and that flag is refused.
@@ -18,7 +40,7 @@ The file is a function, an application, zero, successor, or a match on Nat. A Π
 
 `mix muro.synth` deploys the predicate the checker accepted. A closed numeral in a run is emitted by the C, Rust, Zig, JavaScript, and assembly backends.
 
-`examples/cshrl/envs/queens4.muro` is four rows and declares no feature. The cover has 18 states. No predicate at depth 0 or depth 1 matches the observations. The search then reads `reaches-pos`: an action pays a positive reward now, or some continuation within the horizon does. It enumerates predicates by size, up to 18 constructors. 94970 programs are considered, 1499 signatures are distinct, and each action keeps one program of size 8. The book checks `CoindHomo`, and `policy` is `eval` of that predicate. The reachability runs are a table on the cover. Each cell is evidence that the table agrees with one step of the recurrence, reading the table at the smaller horizon, down to horizon 0. Locally that check took 53 seconds. A search that stops at depth 0 does not add `reaches-pos`. `examples/cshrl/envs/queens8.muro` is eight rows. The cover has 2058 states and is closed. `mix muro.check` accepts it. The search reads 76 features, 40 of them a closed Nat in the board. A subset of six of those features is above the subset budget, so an eight-wide disjunction is not built. Enumeration stops when the number of programs considered reaches 1000000. The report names `considered budget`. No predicate is certified. That synthesis is not part of `mix test`. The paper's certificate for this MDP is a class-level homomorphism over the step. This search certifies a ranking predicate by a cover split. It does not build that homomorphism.
+`examples/cshrl/envs/queens4.muro` is four rows and declares no feature. The cover has 18 states. No predicate at depth 0 or depth 1 matches the observations. The search then reads `reaches-pos`: an action pays a positive reward now, or some continuation within the horizon does. It enumerates predicates by size, up to 18 constructors. 94970 programs are considered, 1499 signatures are distinct, and each action keeps one program of size 8. The book checks `CoindHomo`, and `policy` is `eval` of that predicate. The reachability runs are a table on the cover. Each cell is evidence that the table agrees with one step of the recurrence, reading the table at the smaller horizon, down to horizon 0. Locally that check took 53 seconds. A search that stops at depth 0 does not add `reaches-pos`. `examples/cshrl/envs/queens8.muro` is eight rows. The cover has 2058 states and is closed. `mix muro.check` accepts it. The search reads 76 features, 40 of them a closed Nat in the board. A subset of six of those features is above the subset budget, so an eight-wide disjunction is not built. An earlier size walk had considered 3766542 programs by the end of size 7. That count is above 1000000, so the walk stops at the considered budget. The stopped walk was not re-run. No predicate is certified. That synthesis is not part of `mix test`. The paper's certificate for this MDP is a class-level homomorphism over the step. This search certifies a ranking predicate by a cover split. It does not build that homomorphism.
 
 0.21.8 is the entry below. It arrived with the merge of main, which carries pull request #245.
 
