@@ -32,12 +32,22 @@ defmodule Muro.Synth.Book do
   environment for a later search.
   """
   def render(host, arms, anchor, oracle) when is_list(arms) and is_binary(oracle) do
-    case bind(host, arms) do
-      :error ->
-        {:error, "state equality is not a run"}
+    # Set before `bind`: the reach text is built there, and a large
+    # placement cover must not tabulate before the class proof is chosen.
+    if Muro.Synth.ClassCert.recur_only?(host, arms, oracle) do
+      Process.put(:muro_synth_class_recur, true)
+    end
 
-      {:ok, bound} ->
-        render_bound(host, arms, anchor, oracle, bound)
+    try do
+      case bind(host, arms) do
+        :error ->
+          {:error, "state equality is not a run"}
+
+        {:ok, bound} ->
+          render_bound(host, arms, anchor, oracle, bound)
+      end
+    after
+      Process.delete(:muro_synth_class_recur)
     end
   end
 
@@ -58,13 +68,19 @@ defmodule Muro.Synth.Book do
 
     case Muro.Synth.Cert.render(host, arms, oracle, bound) do
       {:ok, cert} ->
-        {:ok, header(:certified) <> body <> cert.text,
+        imported =
+          Enum.map_join(Map.get(cert, :imports, []), "", fn path ->
+            "import \"#{rel(anchor, path)}\"\n"
+          end)
+
+        {:ok, header(:certified) <> body <> imported <> cert.text,
          %{
            kind: :certified,
            certificate: cert.certificate,
            also: cert.also,
            reason: nil,
-           obligations: cert.obligations
+           obligations: cert.obligations,
+           class_proof: Map.get(cert, :class_proof, false)
          }}
 
       {:skip, reason} ->
@@ -383,7 +399,8 @@ defmodule Muro.Synth.Book do
       hold: hold,
       placeholder: placeholder,
       feature_text: feature_text(plan, placeholder),
-      taken: taken
+      taken: taken,
+      dyn: Map.get(plan, :dyn)
     }
   end
 
@@ -957,6 +974,14 @@ defmodule Muro.Synth.Book do
   end
 
   defp holds(arms, bound) do
+    if Process.get(:muro_synth_class_recur) == true do
+      ""
+    else
+      hold_lines(arms, bound)
+    end
+  end
+
+  defp hold_lines(arms, bound) do
     Enum.map_join(arms, "\n", fn arm ->
       decl = Map.fetch!(bound.decl, arm.name)
 
@@ -1041,7 +1066,7 @@ defmodule Muro.Synth.Book do
       :error ->
         :error
 
-      {:ok, text, taken, spell} ->
+      {:ok, text, taken, spell, dyn} ->
         {:ok,
          %{
            mode: :declared,
@@ -1049,7 +1074,8 @@ defmodule Muro.Synth.Book do
            spell: spell,
            feature_type: "Feature",
            feature_eval: "eval-feature",
-           taken: taken
+           taken: taken,
+           dyn: dyn
          }}
     end
   end
@@ -1062,7 +1088,7 @@ defmodule Muro.Synth.Book do
       :error ->
         :error
 
-      {:ok, text, taken, spell} ->
+      {:ok, text, taken, spell, dyn} ->
         {:ok,
          %{
            mode: :extend,
@@ -1070,7 +1096,8 @@ defmodule Muro.Synth.Book do
            spell: spell,
            feature_type: type_name,
            feature_eval: eval_name,
-           taken: taken
+           taken: taken,
+           dyn: dyn
          }}
     end
   end
@@ -1101,7 +1128,7 @@ defmodule Muro.Synth.Book do
     #{Enum.map_join(rows, "\n", &eval_clause(&1, helpers))}
     """
 
-    {:ok, text, taken, spell}
+    {:ok, text, taken, spell, helpers.dyn}
   end
 
   defp helper_block(host, specs, taken) do
@@ -1169,15 +1196,27 @@ defmodule Muro.Synth.Book do
         {nil, taken, ""}
       end
 
-    # A closed cover gets a table the checker re-checks. Anything else
-    # keeps the recurrence.
-    {one, taken, reach_text} =
+    # A closed cover gets a table the checker re-checks. `dyn-one`
+    # stays the recurrence either way, so a class proof can induct.
+    # The table, when there is one, is what `dyn-any` reads.
+    {dyn, taken, reach_text} =
       if need_reach do
         {best, taken} = alloc("dyn-best-pos", taken)
         {one, taken} = alloc("dyn-one", taken)
         {any, taken} = alloc("dyn-any", taken)
-        {text, taken} = Muro.Synth.Reach.sources(host, best, one, any, pos, taken)
-        {one, taken, text}
+        {best_rec, taken} = alloc("dyn-best-rec", taken)
+        {one_rec, taken} = alloc("dyn-one-rec", taken)
+        {any_rec, taken} = alloc("dyn-any-rec", taken)
+        rec = %{best: best_rec, one: one_rec, any: any_rec}
+        {text, taken} = Muro.Synth.Reach.sources(host, best, one, any, pos, taken, rec)
+        tabulated = String.contains?(text, "def #{best_rec} ")
+
+        {%{
+           pos: pos,
+           one: one,
+           best: if(tabulated, do: best_rec, else: best),
+           any: if(tabulated, do: any_rec, else: any)
+         }, taken, text}
       else
         {nil, taken, ""}
       end
@@ -1193,9 +1232,10 @@ defmodule Muro.Synth.Book do
     {:ok,
      %{
        pos: pos,
-       one: one,
+       one: if(dyn, do: dyn.one),
        same: same,
        terminal: terminal,
+       dyn: dyn,
        text: text,
        struct: struct_helpers,
        schema: host.schema

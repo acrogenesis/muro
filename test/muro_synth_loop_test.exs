@@ -335,8 +335,8 @@ defmodule Muro.SynthLoopTest do
     assert Enum.map(goals, & &1.name) == ["len-is-4"]
   end
 
-  # The certificate reduces the tabulated reachability runs.
-  # Locally that check took 53 seconds. Before the table it took 169 seconds.
+  # The certificate is the placement class lemma. The 18-state table stays.
+  # Locally that check took 9860 ms.
   # The survivor is size 4. Enumeration of that size took under a second.
   # Default `mix test` excludes `:slow`. CI runs this with `mix test --only slow`.
   @tag timeout: 720_000
@@ -416,8 +416,12 @@ defmodule Muro.SynthLoopTest do
     assert result.book =~ "def dyn-reach-holds "
     assert result.book =~ "≡ true : Bool"
     assert result.book =~ "evidence CoindHomo rank"
+    assert result.book =~ "import \"../lib/placement.muro\""
+    assert result.book =~ "rec-is-hit"
     assert result.cert_ms < 180_000
+    refute result.book =~ "cert-cover-miss"
     refute result.book =~ "find-policy"
+    refute result.book =~ "find-ranking"
     refute result.book =~ "placed-find-policy"
 
     text = joined(result)

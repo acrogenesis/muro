@@ -1,0 +1,83 @@
+-- Supplies the placement hypotheses for four queens, and checks that
+-- step is the class step. The class lemmas grow in placement.muro.
+import "queens4.muro"
+import "../lib/placement.muro"
+
+def Config : spec Type := List Nat
+def solved-reward : run Reward := 100
+def class-dead : run State := dead
+def class-ongoing : run Π (c : Config) → State :=
+  λ (c : Config) → ongoing c
+def class-solved : run Π (c : Config) → State :=
+  λ (c : Config) → solved c
+def class-blocked : run Π (+ c : Config) → Bool := board-blocked
+def class-full : run Π (c : Config) → Bool := board-full
+def class-place : run Π (+ c : Config) → Π (+ a : Action) → Config := board-extend
+def class-length : run Π (c : Config) → Nat := board-length
+
+def state-view : evidence Π (s : State) → StateView s :=
+  λ (s : State) →
+    match s motive (λ (t : State) → StateView t)
+      | ongoing c => view-ongoing c
+      | dead => view-dead
+      | solved c => view-solved c
+
+def zero-lt-R : evidence le (suc bottom) solved-reward := tt
+
+-- board-same and nat-eq are the same recursion. The equation is proved,
+-- not left to conversion of the two definitions.
+def board-same-nat : evidence Π (m : Nat) → Π (n : Nat) →
+                              {board-same m n ≡ nat-eq m n : Bool} :=
+  λ (m : Nat) →
+    match m motive (λ (x : Nat) → Π (n : Nat) → {board-same x n ≡ nat-eq x n : Bool})
+      | 0 => λ (n : Nat) →
+          match n motive (λ (y : Nat) → {board-same 0 y ≡ nat-eq 0 y : Bool})
+            | 0 => refl
+            | suc _ => refl
+      | suc m1 => λ (n : Nat) →
+          match n motive (λ (y : Nat) → {board-same (suc m1) y ≡ nat-eq (suc m1) y : Bool})
+            | 0 => refl
+            | suc n1 => board-same-nat m1 n1
+
+def full-is-length : evidence Π (c : Config) →
+                              {class-full c ≡ nat-eq (class-length c) horizon : Bool} :=
+  λ (c : Config) → board-same-nat (class-length c) horizon
+
+def step-dead : evidence Π (a : Action) →
+                         {step class-dead a ≡ (class-dead, bottom) : State × Reward} :=
+  λ (a : Action) → refl
+
+def step-solved : evidence Π (c : Config) → Π (a : Action) →
+                           {step (class-solved c) a ≡ (class-solved c, solved-reward) : State × Reward} :=
+  λ (c : Config) → λ (a : Action) → refl
+
+def step-ongoing : evidence Π (c : Config) → Π (a : Action) →
+                            {step (class-ongoing c) a ≡ class-judge (class-place c a) : State × Reward} :=
+  λ (c : Config) → λ (a : Action) → refl
+
+def length-snoc : evidence Π (xs : List Nat) → Π (x : Nat) →
+                           {board-length (board-snoc xs x) ≡ suc (board-length xs) : Nat} :=
+  λ (xs : List Nat) → λ (x : Nat) →
+    match xs motive (λ (ys : List Nat) → {board-length (board-snoc ys x) ≡ suc (board-length ys) : Nat})
+      | nil => refl
+      | cons y ys =>
+          rewrite length-snoc ys x motive (λ z → {suc z ≡ suc (suc (board-length ys)) : Nat}) in
+          refl
+
+def length-place : evidence Π (c : Config) → Π (a : Action) →
+                            {class-length (class-place c a) ≡ suc (class-length c) : Nat} :=
+  λ (c : Config) → λ (a : Action) → length-snoc c (board-column a)
+
+def in-actions : evidence Π (a : Action) → Elem a all-actions :=
+  λ (a : Action) →
+    match a motive (λ (x : Action) → Elem x all-actions)
+      | c0 => elem-here c0 (cons c1 (cons c2 (cons c3 nil)))
+      | c1 => elem-there c1 c0 (cons c1 (cons c2 (cons c3 nil)))
+               (elem-here c1 (cons c2 (cons c3 nil)))
+      | c2 => elem-there c2 c0 (cons c1 (cons c2 (cons c3 nil)))
+               (elem-there c2 c1 (cons c2 (cons c3 nil))
+                 (elem-here c2 (cons c3 nil)))
+      | c3 => elem-there c3 c0 (cons c1 (cons c2 (cons c3 nil)))
+               (elem-there c3 c1 (cons c2 (cons c3 nil))
+                 (elem-there c3 c2 (cons c3 nil)
+                   (elem-here c3 nil)))

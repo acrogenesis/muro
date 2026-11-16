@@ -6,14 +6,16 @@
 
 The book declares every column of a stem a survivor quantifies over, so `stem-at` reads an action no survivor names from its column, not as false. A column the plan did not declare refuses the book. A family column with no signature refuses the sized walk instead of dropping that action. A test checks the generated `stem-at`, `other-at`, and `eval` against `Muro.Synth.eval` at every state, including a one-action environment.
 
-Four queens: 8138 programs considered (was 94970), 454 distinct signatures, stops at size 4 (was size 8), enumeration 441 ms (was 5065 ms). The book checks `CoindHomo` in about 53 seconds. Peak resident set 387645440 bytes (was 999456768). The preferences are unchanged.
+Four queens: 8138 programs considered (was 94970), 454 distinct signatures, stops at size 4 (was size 8), enumeration 448 ms (was 5065 ms). The book checks `CoindHomo` in 9860 ms (was about 53 seconds). The book is 167389 bytes. Peak resident set 388349952 bytes (was 999456768). The preferences are unchanged. The certificate is the placement class lemma. It does not use the Finder.
 
-Eight queens with these constructors is under investigation. No certificate has been obtained, and this release claims no eight-queens predicate.
+Eight queens keeps that search. Each action's survivor is `(orp (feat reaches-pos-cN) (notp (otherp reaches-pos cN)))`. The book checks `CoindHomo` by the same lemma, not by a split over the 2058 states. The proof does not use the Finder. 71492 programs considered, 20958 distinct signatures. The certificate check took 7717 ms. The book is 244700 bytes. Opening the book took 232 s, the reachability table 501 s, enumeration 29 s, and the whole run 2114 s. Peak resident set 719929344 bytes. The search is not part of `mix test`. `nice mix muro.synth examples/cshrl/envs/queens8.muro` repeats it.
+
+A source location in a large book is a line and a column. The report does not scan the whole prefix for every token.
 
 ### Manual
 
 - Action-quantified predicates in the synthesis and CSHRL chapters, with the new four-queens numbers, their size, and the departure from the paper.
-- Eight queens is described as under investigation, with no certificate.
+- Eight queens is certified by the placement class lemma. The proof does not use the Finder.
 
 ### Package
 

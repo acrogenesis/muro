@@ -607,7 +607,10 @@ defmodule Muro.Synth.Loop do
             end)
         )
 
-        case Book.check(source, anchor, fn path -> checker.(path, fuel) end) do
+        # The placement library checks at 8000. The search keeps its fuel.
+        cert_fuel = if Map.get(meta, :class_proof), do: max(fuel, 8_000), else: fuel
+
+        case Book.check(source, anchor, fn path -> checker.(path, cert_fuel) end) do
           :ok ->
             cert_ms = System.monotonic_time(:millisecond) - started
             {:ok, checked(arms, source, versions, Map.put(meta, :cert_ms, cert_ms), search)}
@@ -616,28 +619,68 @@ defmodule Muro.Synth.Loop do
             {:error, :storage, diagnostic}
 
           {:error, text} ->
-            cex = Book.cex_from(text, meta.obligations ++ Book.obligations(host, arms))
+            if Map.get(meta, :class_proof) do
+              refuse_class(host, arms, versions, anchor, oracle, search, text, started)
+            else
+              cex = Book.cex_from(text, meta.obligations ++ Book.obligations(host, arms))
 
-            advance(
-              host,
-              arms,
-              versions,
-              depth,
-              max_depth,
-              rounds,
-              score,
-              feat,
-              anchor,
-              checker,
-              fuel,
-              seen,
-              rejected,
-              cex,
-              oracle,
-              search
-            )
+              advance(
+                host,
+                arms,
+                versions,
+                depth,
+                max_depth,
+                rounds,
+                score,
+                feat,
+                anchor,
+                checker,
+                fuel,
+                seen,
+                rejected,
+                cex,
+                oracle,
+                search
+              )
+            end
         end
     end
+  end
+
+  # A class proof that does not check is a refusal. It is not a
+  # counterexample, and it is not a reason to split the cover.
+  defp refuse_class(host, arms, versions, anchor, oracle, search, text, started) do
+    reason = class_reason(text)
+    Process.put(:muro_synth_class_refusal, reason)
+
+    try do
+      case Book.render(host, arms, anchor, oracle) do
+        {:ok, source, meta} ->
+          cert_ms = System.monotonic_time(:millisecond) - started
+
+          {:ok, checked(arms, source, versions, Map.put(meta, :cert_ms, cert_ms), search)}
+
+        {:error, render_reason} ->
+          {:error, render_reason}
+      end
+    after
+      Process.delete(:muro_synth_class_refusal)
+    end
+  end
+
+  defp class_reason(text) do
+    line =
+      text
+      |> String.split("\n")
+      |> Enum.map(&String.trim/1)
+      |> Enum.find(fn line ->
+        String.match?(line, ~r/^\d+:\d+/) or String.contains?(line, "cannot") or
+          String.contains?(line, "expected") or String.contains?(line, "affine") or
+          String.contains?(line, "out of fuel")
+      end)
+
+    detail = if line in [nil, ""], do: "the checker rejected it", else: line
+    "the class proof did not check: #{String.slice(detail, 0, 400)}"
   end
 
   # The generated book named no obligation. The candidate is not evidence.
