@@ -326,6 +326,12 @@ defmodule Muro.Parser do
           err -> err
         end
 
+      family_start?(s) ->
+        case parse_family(s) do
+          {:ok, d, rest} -> noted(s, d, rest, acc)
+          err -> err
+        end
+
       talk_start?(s) ->
         case parse_talk(s) do
           {:ok, d, rest} -> noted(s, d, rest, acc)
@@ -931,6 +937,9 @@ defmodule Muro.Parser do
   # `temporal name :` is an entry. `def temporal` and `temporal : Box` are not.
   defp temporal_start?(s), do: temporal_entry?(s)
 
+  # `family name :` is an entry. `def family` and `family : Box` are not.
+  defp family_start?(s), do: family_entry?(s)
+
   # meet wire : pong with peer
   # meet wire : server with task may fail buffer 1
   # `meet` and `with` are keywords only in this form. `may fail` is a
@@ -1035,6 +1044,95 @@ defmodule Muro.Parser do
        }, rest}
     end
   end
+
+  # family slots : slot per key of Event
+  #   init never held
+  #   signal held while earlier unresolved
+  # `family` is a keyword only as `family name :`. A constructor
+  # `family : Box` is not one, and neither is `def family`.
+  defp parse_family(s) do
+    loc = here(s)
+
+    with {:ok, rest} <- kw(s, "family"),
+         {:ok, name, rest} <- ident(skip(rest)),
+         {:ok, rest} <- tok(skip(rest), ":"),
+         {:ok, meeting, rest} <- ident(skip(rest)),
+         {:ok, rest} <- kw(skip(rest), "per"),
+         {:ok, rest} <- kw(skip(rest), "key"),
+         {:ok, rest} <- kw(skip(rest), "of"),
+         {:ok, key, rest} <- ident(skip(rest)),
+         {:ok, rules, rest} <- parse_family_rules(skip(rest)) do
+      {:ok,
+       %{
+         kind: :family,
+         name: name,
+         mode: :spec,
+         meeting: meeting,
+         key: key,
+         rules: rules,
+         loc: loc
+       }, rest}
+    end
+  end
+
+  defp parse_family_rules(s) do
+    s = skip(s)
+
+    if s == "" or family_rule_stop?(s) do
+      {:ok, [], s}
+    else
+      with {:ok, rule, rest} <- parse_family_rule(s),
+           {:ok, rules, rest} <- parse_family_rules(rest) do
+        {:ok, [rule | rules], rest}
+      end
+    end
+  end
+
+  # The next book entry ends the rule list. The same boundary ends a
+  # constructor list and a choreography.
+  defp family_rule_stop?(s), do: choreo_boundary?(s)
+
+  defp parse_family_rule(s) do
+    case ident(skip(s)) do
+      {:ok, ctor, rest} ->
+        rest = skip(rest)
+
+        cond do
+          word_kw?(rest, "never") ->
+            rest = rest |> after_kw("never") |> skip()
+
+            if word_kw?(rest, "held") do
+              {:ok, %{ctor: ctor, hold: :never}, after_kw(rest, "held")}
+            else
+              {:error, err(rest, hold_rule())}
+            end
+
+          word_kw?(rest, "held") ->
+            case hold_while(skip(after_kw(rest, "held"))) do
+              {:ok, rest} -> {:ok, %{ctor: ctor, hold: :earlier}, rest}
+              :error -> {:error, err(rest, hold_rule())}
+            end
+
+          true ->
+            {:error, err(rest, hold_rule())}
+        end
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  defp hold_while(s) do
+    with {:ok, rest} <- kw(s, "while"),
+         {:ok, rest} <- kw(skip(rest), "earlier"),
+         {:ok, rest} <- kw(skip(rest), "unresolved") do
+      {:ok, rest}
+    else
+      _ -> :error
+    end
+  end
+
+  defp hold_rule, do: "expected never held or held while earlier unresolved"
 
   defp parse_formula(s) do
     s = skip(s)
@@ -1230,6 +1328,14 @@ defmodule Muro.Parser do
       has_prefix?(s, "(") ->
         parse_paren(s, &parse_prop/1)
 
+      # `opened done` stays a role atom. `opened k signal` is an instance.
+      word_kw?(s, "opened") or word_kw?(s, "held") or word_kw?(s, "resolved") ->
+        if role_verb?(skip(after_atom_word(s))) do
+          parse_role_atom(s)
+        else
+          parse_family_atom(s)
+        end
+
       ident_start?(s) ->
         parse_role_atom(s)
 
@@ -1268,6 +1374,49 @@ defmodule Muro.Parser do
       end
     end
   end
+
+  defp after_atom_word(s) do
+    cond do
+      word_kw?(s, "opened") -> after_kw(s, "opened")
+      word_kw?(s, "held") -> after_kw(s, "held")
+      word_kw?(s, "resolved") -> after_kw(s, "resolved")
+    end
+  end
+
+  defp role_verb?(s) do
+    word_kw?(s, "done") or word_kw?(s, "stopped") or word_kw?(s, "dead") or word_kw?(s, "at") or
+      word_kw?(s, "has")
+  end
+
+  # Two names: the key, then the constructor. One name is refused here,
+  # so a role atom (`opened done`) never reaches this clause.
+  defp parse_family_atom(s) do
+    word =
+      cond do
+        word_kw?(s, "opened") -> "opened"
+        word_kw?(s, "held") -> "held"
+        word_kw?(s, "resolved") -> "resolved"
+      end
+
+    rest = s |> after_kw(word) |> skip()
+
+    case ident(rest) do
+      {:ok, key, rest} ->
+        rest = skip(rest)
+
+        case ident(rest) do
+          {:ok, kind, rest} -> {:ok, {family_atom(word), key, kind}, rest}
+          _ -> {:error, err(rest, "expected a key and a kind")}
+        end
+
+      _ ->
+        {:error, err(rest, "expected a key and a kind")}
+    end
+  end
+
+  defp family_atom("opened"), do: :opened
+  defp family_atom("held"), do: :held
+  defp family_atom("resolved"), do: :resolved
 
   defp parse_role_atom(s) do
     with {:ok, role, rest} <- ident(s) do
@@ -1796,8 +1945,8 @@ defmodule Muro.Parser do
       word_kw?(s, "import") or word_kw?(s, "session") or word_kw?(s, "conform") or
       nu_start?(s) or place_entry?(s) or scheme_entry?(s) or move_entry?(s) or
       endpoint_entry?(s) or read_entry?(s) or meet_entry?(s) or temporal_entry?(s) or
-      talk_start?(s) or choreography_start?(s) or seat_start?(s) or link_start?(s) or
-      repr_start?(s)
+      family_entry?(s) or talk_start?(s) or choreography_start?(s) or seat_start?(s) or
+      link_start?(s) or repr_start?(s)
   end
 
   defp parse_talk(s) do
@@ -2023,8 +2172,8 @@ defmodule Muro.Parser do
     unboxed_data?(s) or Enum.any?(Words.book_words(), &word_kw?(s, &1)) or nu_start?(s) or
       place_entry?(s) or
       scheme_entry?(s) or move_entry?(s) or endpoint_entry?(s) or read_entry?(s) or
-      meet_entry?(s) or temporal_entry?(s) or talk_start?(s) or choreography_start?(s) or
-      seat_start?(s) or link_start?(s) or repr_start?(s)
+      meet_entry?(s) or temporal_entry?(s) or family_entry?(s) or talk_start?(s) or
+      choreography_start?(s) or seat_start?(s) or link_start?(s) or repr_start?(s)
   end
 
   defp parse_talk_term(s) do
@@ -2179,6 +2328,9 @@ defmodule Muro.Parser do
 
   # A temporal declaration is `temporal name :`. A constructor `temporal : Box` is not one.
   defp temporal_entry?(s), do: colon_entry?(s, "temporal")
+
+  # A family is `family name :`. A constructor `family : Box` is not one.
+  defp family_entry?(s), do: colon_entry?(s, "family")
 
   # A meeting is `meet name :`. A constructor `meet : Box` is not one.
   defp meet_entry?(s) do

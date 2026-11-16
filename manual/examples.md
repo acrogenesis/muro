@@ -447,6 +447,18 @@ The failure arm is `done`, so the slot is released on the report and on the run 
 
 OTP monitors the marked task. Killing that task before it reports runs the failure arm and releases the slot. The report path still finishes. The state machine takes the same arm with `down`, and `recv` of the report takes the report arm. C, Rust, Zig, JavaScript, assembly, `--node`, and the ExUnit backend still refuse the book with `c:mayfail`. See [Sessions](sessions.md#a-party-may-stop) and [Temporal](temporal.md#a-party-may-stop).
 
+## keyed-slots.muro
+
+A family names the meeting `slot` and the kind `Event`. `init` opens when it arrives. `signal` is held while an earlier instance of its key is unresolved. The declaration is spec. `mix muro.check` prints `family slots: slot per key of Event`.
+
+```
+family slots : slot per key of Event
+  init never held
+  signal held while earlier unresolved
+```
+
+The meeting may fail, so Elixir, C, Rust, Zig, JavaScript, assembly, and ExUnit refuse the book with `c:mayfail`, with or without the family. OTP and the state machine omit the family and emit the meeting. See [Temporal](temporal.md#a-keyed-family).
+
 ## place.muro
 
 A named place stays or crosses once. The place and the scheme are spec. The move is evidence. The Elixir, C, Rust, Zig, and assembly emitters omit all three. `--node` writes one call for each cross.

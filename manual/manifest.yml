@@ -33,7 +33,7 @@ pages:
   - file: temporal.md
     slug: temporal
     title: Temporal
-    summary: always, eventually, and leads_to on one buffered meeting.
+    summary: always, eventually, and leads_to on one buffered meeting, and a family per key of a closed kind.
   - file: choreography.md
     slug: choreography
     title: Choreography

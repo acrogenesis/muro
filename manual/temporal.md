@@ -2,7 +2,7 @@
 title: Temporal
 slug: temporal
 order: 24
-summary: always, eventually, and leads_to on one buffered meeting.
+summary: always, eventually, and leads_to on one buffered meeting, and a family per key of a closed kind.
 ---
 
 # Temporal
@@ -104,6 +104,55 @@ A meeting that marks a party `may fail` adds a step on which that party stops, a
 
 A meeting that does not mark a party keeps the graph this page has described so far. `examples/temporal.muro` keeps its counts. The development in `agda/Muro/Temporal.agda` is that graph. The crash step, the drop step, and `role dead` are decided by the Elixir checker. They are not in `agda/Muro/Temporal.agda` or `agda/Muro/AsyncRec.agda`, and this half does not port them there.
 
+## A keyed family
+
+A family is spec. It names one buffered meeting and one closed kind, and one rule for each constructor of that kind. The emitters skip it. It adds nothing to a term.
+
+```
+family slots : slot per key of Event
+  init never held
+  signal held while earlier unresolved
+```
+
+`slots` is the family. `slot` is the meeting. `Event` is the kind. `init never held` opens that kind when the instance arrives. `signal held while earlier unresolved` opens it once every earlier instance of its key is resolved. A constructor with no rule is refused. There is no default rule.
+
+The kind is a declared data type whose constructors are all nullary, the same restriction `forall` uses. `Bit` is refused as `unknown data type Bit`. A constructor with a field is `family over <name> is not a closed kind`.
+
+The meeting is buffered, and it checks. An unknown meeting is `unknown meeting <name>`. A meeting that does not check is `skipped because <name> does not check`. A rendezvous is `family needs a buffered meeting`.
+
+`family`, `per`, `key`, and `of` are keywords only in `family name :`. `never`, `while`, `earlier`, and `unresolved` are keywords only on a rule. `held` is a keyword on a rule and in the atom below. Outside that form they are identifiers, so `def family : run Nat := 0` and `def held : run Nat := 0` are definitions, and a constructor may be named `family`.
+
+A retry is the same instance, run again, and it is still unresolved. One bound is enough, because the rule only asks whether an earlier instance is unresolved. An `init` that gives up is resolved. A later `signal` then opens and finds nothing. `resolved` is not delivered: the meeting does not place that outcome on a queue.
+
+A second `init` of a key is never held. It opens at once, and the meeting reports that the key was already started. A `signal` is held behind every earlier unresolved instance of its key. An unresolved `init` is one of those instances, and so is an earlier unresolved `signal` of that key.
+
+A `signal` with no earlier instance opens at once, and the meeting reports a skip. There is no third outcome.
+
+`arrive` takes the creation index. Instances of one key need not arrive in that order. A property about overtaking is about the instances the family already knows. An instance created later can still permit an overtake.
+
+The key is the workflow, unless both instances name a different run. Keying by workflow is the conservative reading. It holds at least every instance the server holds. A dispatcher that keys the same way holds slightly more, across runs.
+
+A temporal declaration may name the family:
+
+```
+temporal no-overtake : slots :=
+  forall (k : key). always ((opened k signal) implies (resolved k init))
+temporal no-starve : slots :=
+  forall (k : key). (held k signal) leads_to (opened k signal)
+```
+
+`no-overtake` says that an opened `signal` has a resolved `init` of the same key. It does not say that every earlier instance is resolved. `opened`, `held`, and `resolved` each take two names: a key, then a constructor. The constructor is a name written in the formula, not a bound variable, and there is no binder for one instance. `resolved k signal` is one atom for every `signal` of that key, including the `signal` that has just opened, and that `signal` is not resolved on the step it opens. The stronger rule is the one on the family line: a `signal` stays held while any earlier instance of its key is unresolved, and an earlier `signal` is one of those instances. The formula that states that rule is step 2, when the checker builds the family graph and decides `always` over the instances. This page does not decide it.
+
+`forall (k : key)` binds `k` as a key. That sort is `key` even when a data type of the same name is in the book. `opened`, `held`, and `resolved` are written as the key, then the constructor. The checker accepts a well-formed formula over a family that checks and answers `not yet decided`. A formula over a family that does not check is `skipped because <family> does not check`, and the formula is not walked. It does not build the family graph.
+
+`opened`, `held`, and `resolved` written on a meeting are `<atom> names an instance of a family`. `forall (k : key)` on a meeting is `forall over key ranges over an open type` when no data type is named `key`. A key that is not bound is `unbound key <name>`. A binder of the kind, or of `Bit`, is a value, and `opened` of it is `opened expects a key`. A constructor the kind does not have is `<name> is not a constructor of <kind>`. A proposition other than these atoms is `a family formula names opened, held, or resolved`.
+
+`opened done` stays the role atom. The next word is `done`, `stopped`, `dead`, `at`, or `has`.
+
+The worked book is `examples/keyed-slots.muro`. `mix muro.check` prints `family slots: slot per key of Event`.
+
+The checker will explore one fixed script. Key `a` is `init`, then `signal`, then `signal`. Key `b` is `init`. The rule holds a `signal` behind an earlier `signal` of that key, and behind an earlier unresolved `init`. Keys are interchangeable, and a rule reads only whether two instances have the same key. That this script stands for any number of keys and any number of events is a hypothesis, stated in [Limits](limits.md#a-keyed-family). It is not a theorem. The script is not in the book.
+
 ## Fairness
 
 There is no fairness filter and no `under fair` clause. `Satisfies` quantifies over every infinite run, including a run that finishes and then stutters. A stretch of consecutive steps of one side has length at most `Φ` of that side, where `Φ` of the left at `c` is `(cap ∸ |l2r|) + |r2l|` and `Φ` of the right swaps the queues (`solo-bounded`). On a run that never finishes, the left side moves infinitely often and the right side moves infinitely often (`every-run-fair`). Those lemmas describe this graph. They are not a premise the formula may assume. The statements are in [Limits](limits.md#what-is-proved-and-what-is-not). A fairness clause would be a parse error.
@@ -126,13 +175,14 @@ A meeting that reaches `done` and then stutters refuses `eventually false` with 
 
 ## What the checker prints
 
-After `Muro v…`, and before `All terms check. Evidence never becomes a run.`, one line per temporal declaration, in book order:
+After `Muro v…`, and before `All terms check. Evidence never becomes a run.`, one line per keyed family and one line per temporal declaration, in book order:
 
 ```
+family slots: slot per key of Event
 temporal echo-answered: holds in 8 reachable states, 8 transitions
 ```
 
-The first count is the number of distinct configurations reachable from the start of that meeting. The second is the number of entries in the successor table of that same graph: a left step, a right step, and the finish self-loop at a finished configuration. It is not the number of breadth-first parent links. Declarations of one meeting print the same pair, because the graph is built once. A refusal replaces that line. A book with no temporal declaration prints the lines it printed before this page existed. A `conforms to` line from an imported package stays after the success sentence. `--fuel` does not change a temporal verdict. The refusals listed in [Limits](limits.md) are unchanged.
+The family line names the meeting and the kind. It is not a count of states. A temporal line's first count is the number of distinct configurations reachable from the start of that meeting. The second is the number of entries in the successor table of that same graph: a left step, a right step, and the finish self-loop at a finished configuration. It is not the number of breadth-first parent links. Declarations of one meeting print the same pair, because the graph is built once. A refusal replaces that line. A formula over a family that is `not yet decided` refuses the book, and the family line is not printed. A book with no family and no temporal declaration prints the lines it printed before this page existed. A `conforms to` line from an imported package stays after the success sentence. `--fuel` does not change a temporal verdict. The meeting refusals listed in [Limits](limits.md) are unchanged. A family has its own list there.
 
 Emit of a book is unchanged by appending a declaration whose meeting checks. Elixir, the state-machine backend, C, Rust, and assembly print the same programs. The ExUnit backend embeds the book hash in `@muro_book`, so that one line changes with the book bytes and the suite body does not. A committed module's header records the same hash, and `mix muro.gen --check` reports the target stale until `mix muro.gen` rewrites the header. That is the rule for any edit of a book.
 

@@ -12,10 +12,15 @@ Eight queens keeps that search. Each action's survivor is `(orp (feat reaches-po
 
 A source location in a large book is a line and a column. The report does not scan the whole prefix for every token.
 
+A family names one buffered meeting and one closed kind, with one rule for each constructor. `c never held` opens that kind when the instance arrives. `c held while earlier unresolved` opens it once every earlier instance of its key is resolved. The declaration is spec, and every emitter skips it. `mix muro.check` prints `family <name>: <meeting> per key of <kind>`.
+
+A temporal formula over that family may quantify `forall (k : key)` and name `opened`, `held`, and `resolved`. The checker accepts a well-formed formula over a family that checks and answers `not yet decided`. A formula over a family that does not check is `skipped because <family> does not check`.
+
 ### Manual
 
 - Action-quantified predicates in the synthesis and CSHRL chapters, with the new four-queens numbers, their size, and the departure from the paper.
 - Eight queens is certified by the placement class lemma. The proof does not use the Finder.
+- Temporal. Grammar. Limits. Examples.
 
 ### Package
 

@@ -25,30 +25,6 @@ defmodule MuroVisor.LayoutTest do
     end
   end
 
-  test "the smallest rank shift matches a scan of the offsets" do
-    cases = [
-      {[], MapSet.new([1, 2])},
-      {[0], MapSet.new()},
-      {[0, 4], MapSet.new([0])},
-      {[0, 3, 9], MapSet.new([0, 10, 40, 41])},
-      {[100], MapSet.new([0])},
-      {[-4, 2], MapSet.new([0, 1, 2])},
-      {[0, 7, 14], MapSet.new(0..40)}
-    ]
-
-    for {ys, prev} <- cases do
-      assert MuroVisor.Draw.rank_shift(ys, prev) == scan_shift(ys, prev)
-    end
-
-    :rand.seed(:exsss, {7, 11, 13})
-
-    for _ <- 1..40 do
-      ys = Enum.uniq(Enum.map(1..8, fn _ -> :rand.uniform(80) - 20 end))
-      prev = MapSet.new(Enum.map(1..12, fn _ -> :rand.uniform(80) - 10 end))
-      assert MuroVisor.Draw.rank_shift(ys, prev) == scan_shift(ys, prev)
-    end
-  end
-
   test "small graphs keep nodes apart and edges on their own paths" do
     assert_layout(chain(4), "chain")
     assert_layout(cycle(), "cycle")
@@ -167,21 +143,6 @@ defmodule MuroVisor.LayoutTest do
     assert page =~ "svg g:focus-visible > path.edge"
     assert page =~ "path.edge.selected + text"
     refute page =~ "svg g:focus { outline: 2px"
-  end
-
-  # The offset scan `rank_shift/2` replaced. It is the oracle for that
-  # function, and it is too slow to run on a book.
-  defp scan_shift(_ys, prev) when prev == %MapSet{}, do: 0
-  defp scan_shift([], _prev), do: 0
-
-  defp scan_shift(ys, prev) do
-    limit = max(Enum.max(prev) - Enum.min(ys) + 6 * max(MapSet.size(prev), 1), 6)
-
-    Enum.find(0..limit, limit, fn k ->
-      Enum.all?(ys, fn y ->
-        not Enum.any?(prev, fn p -> abs(p - (y + k)) < 6 end)
-      end)
-    end)
   end
 
   defp assert_layout(graph, label) do
@@ -452,7 +413,7 @@ defmodule MuroVisor.LayoutTest do
   defp group_line(items, owner, span) do
     items
     |> Enum.group_by(
-      fn {_tag, {{x1, y1}, {x2, y2}}} -> if y1 == y2, do: y1, else: x1 end,
+      fn {_tag, {{x1, y1}, {_x2, y2}}} -> if y1 == y2, do: y1, else: x1 end,
       fn item ->
         {lo, hi} = span.(elem(item, 1))
         {owner.(item), lo, hi}

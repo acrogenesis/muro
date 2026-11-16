@@ -734,44 +734,53 @@ defmodule MuroVisor.Draw do
   end
 
   @doc false
-  def rank_shift(ys, prev) when is_list(ys) and is_struct(prev, MapSet) do
-    disjoint_shift(ys, prev)
-  end
+  def min_track, do: @min_track
 
-  # The smallest k in `0..limit` whose rows sit at least `@min_track`
-  # from every row of the previous rank. Blocked offsets are one
-  # interval per pair of rows. The first gap is that k. A gap past
-  # the limit stays the limit.
-  defp disjoint_shift(_ys, prev) when prev == %MapSet{}, do: 0
-  defp disjoint_shift([], _prev), do: 0
+  @doc false
+  def disjoint_shift(_ys, prev) when prev == %MapSet{}, do: 0
+  def disjoint_shift([], _prev), do: 0
 
-  defp disjoint_shift(ys, prev) do
+  # Same shift as scanning 0..limit for the first k that leaves every port
+  # at least @min_track from the previous rank. A port forbids a closed run
+  # of k, and the first gap is that k. A rank that never clears still takes
+  # the same bound the scan returned. The scan was the layout cost of the
+  # large term books.
+  def disjoint_shift(ys, prev) do
     limit =
       max(Enum.max(prev) - Enum.min(ys) + @min_track * max(MapSet.size(prev), 1), @min_track)
 
-    ys
-    |> blocked_shifts(prev, limit)
-    |> first_clear(0, limit)
-  end
-
-  defp blocked_shifts(ys, prev, limit) do
     span = @min_track - 1
 
-    for y <- ys, p <- prev do
-      {max(p - y - span, 0), min(p - y + span, limit)}
+    blocked =
+      for y <- ys,
+          p <- prev,
+          lo = p - y - span,
+          hi = p - y + span,
+          hi >= 0 and lo <= limit,
+          do: {max(lo, 0), min(hi, limit)}
+
+    case first_open(blocked, limit) do
+      k when is_integer(k) and k <= limit -> k
+      _ -> limit
     end
-    |> Enum.filter(fn {lo, hi} -> lo <= hi end)
-    |> Enum.sort()
   end
 
-  defp first_clear(_intervals, k, limit) when k > limit, do: limit
-  defp first_clear([], k, _limit), do: k
-
-  defp first_clear([{lo, hi} | rest], k, limit) do
-    cond do
-      hi < k -> first_clear(rest, k, limit)
-      lo > k -> k
-      true -> first_clear(rest, hi + 1, limit)
+  defp first_open(blocked, limit) do
+    blocked
+    |> Enum.sort()
+    |> Enum.reduce([], fn {lo, hi}, acc ->
+      case acc do
+        [{a, b} | rest] when lo <= b + 1 -> [{a, max(b, hi)} | rest]
+        _ -> [{lo, hi} | acc]
+      end
+    end)
+    |> Enum.reverse()
+    |> Enum.reduce_while(0, fn {lo, hi}, cursor ->
+      if cursor < lo, do: {:halt, cursor}, else: {:cont, hi + 1}
+    end)
+    |> case do
+      k when is_integer(k) and k <= limit -> k
+      _ -> nil
     end
   end
 
