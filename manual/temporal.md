@@ -141,7 +141,7 @@ temporal no-starve : slots :=
   forall (k : key). (held k signal) leads_to (opened k signal)
 ```
 
-`forall (k : key)` binds `k` as a key. That sort is `key` even when a data type of the same name is in the book. `opened`, `held`, and `resolved` name an instance: the key, then the constructor. The checker accepts a well-formed formula and answers `not yet decided`. It does not build the family graph.
+`forall (k : key)` binds `k` as a key. That sort is `key` even when a data type of the same name is in the book. `opened`, `held`, and `resolved` name an instance: the key, then the constructor. The checker accepts a well-formed formula over a family that checks and answers `not yet decided`. A formula over a family that does not check is `skipped because <family> does not check`, and the formula is not walked. It does not build the family graph.
 
 `opened`, `held`, and `resolved` written on a meeting are `<atom> names an instance of a family`. `forall (k : key)` on a meeting is `forall over key ranges over an open type` when no data type is named `key`. A key that is not bound is `unbound key <name>`. A binder of the kind, or of `Bit`, is a value, and `opened` of it is `opened expects a key`. A constructor the kind does not have is `<name> is not a constructor of <kind>`. A proposition other than these atoms is `a family formula names opened, held, or resolved`.
 

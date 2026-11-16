@@ -4,8 +4,10 @@ defmodule Muro.Family do
 
   The declaration is spec. It names one buffered meeting and a closed
   kind, and one rule for each constructor. This module does not build
-  the family graph. A formula over the family that is well formed is
-  `not yet decided`.
+  the family graph. A formula over a family that checks and is well
+  formed is `not yet decided`. A formula over a family that does not
+  check is `skipped because <family> does not check`, and the formula
+  is not walked.
   """
 
   @run_msg "temporal formulas do not mention run definitions"
@@ -39,15 +41,28 @@ defmodule Muro.Family do
   end
 
   @doc """
-  `{:error, "not yet decided"}` when the formula is well formed.
+  `{:error, "not yet decided"}` when the family checks and the formula
+  is well formed. `{:error, "skipped because <family> does not check"}`
+  when `status` is the family's refusal: the formula is not walked.
   `{:error, message}` when a binder or an atom is not. The message has
   no location and no declaration name. This does not build the graph.
+
+  `status` is `check/3` or `check_decl/3`. The three-argument form
+  checks the declaration, including its meeting.
   """
-  def judge_formula(book, %{key: key}, formula) when is_list(book) do
+  def judge_formula(book, family, formula) when is_list(book) do
+    judge_formula(book, family, formula, check_decl(book, family, nil))
+  end
+
+  def judge_formula(book, %{key: key}, formula, :ok) when is_list(book) do
     with {:ok, data} <- closed_kind(book, key),
          :ok <- walk_formula(book, data, %{}, formula) do
       {:error, "not yet decided"}
     end
+  end
+
+  def judge_formula(_book, %{name: name}, _formula, {:error, _}) do
+    {:error, "skipped because #{name} does not check"}
   end
 
   defp meeting_ok(name, :absent), do: {:error, "unknown meeting #{name}"}

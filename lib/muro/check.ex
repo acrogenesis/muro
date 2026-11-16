@@ -4933,7 +4933,10 @@ defmodule Muro.Check do
   compiled configuration graph is explored once and shared by every
   declaration of that meeting. A meeting that does not check is
   skipped, and its compiled graph is not explored. A family reads that
-  same recorded outcome and does not walk the meeting again.
+  same recorded outcome and does not walk the meeting again. A temporal
+  declaration over a family reads that same check. When the family does
+  not check, the formula is `skipped because <family> does not check`
+  and is not walked.
   """
   def check_sig(named_book, opts \\ []) do
     note_check()
@@ -5034,7 +5037,11 @@ defmodule Muro.Check do
     family_slots =
       Enum.map(over_family, fn {d, i} ->
         family = find_family(book, d.meeting)
-        {i, temporal_report(d, Muro.Family.judge_formula(book, family, d.formula))}
+
+        status =
+          Muro.Family.check(book, family, recorded_status(meetings, family.meeting))
+
+        {i, temporal_report(d, Muro.Family.judge_formula(book, family, d.formula, status))}
       end)
 
     meet_slots ++ family_slots

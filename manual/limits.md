@@ -92,9 +92,9 @@ The search has no fuel and no budget. `--fuel` does not change the verdict. Term
 
 ## A keyed family
 
-The surface is [Temporal](temporal.md#a-keyed-family). The declaration is spec. It names one buffered meeting and a closed kind, and one rule for each constructor. The checker does not build the family graph, and it does not decide `always`, `eventually`, or `leads_to` over that family. A formula that names the family and is well formed is `not yet decided`.
+The surface is [Temporal](temporal.md#a-keyed-family). The declaration is spec. It names one buffered meeting and a closed kind, and one rule for each constructor. The checker does not build the family graph, and it does not decide `always`, `eventually`, or `leads_to` over that family. A formula that names a family that checks and is well formed is `not yet decided`. A formula over a family that does not check is `skipped because <family> does not check`, and the formula is not walked.
 
-- An unknown meeting: `unknown meeting <name>`. A meeting that does not check: `skipped because <name> does not check`. A rendezvous: `family needs a buffered meeting`.
+- An unknown meeting: `unknown meeting <name>`. A meeting that does not check: `skipped because <name> does not check`. A rendezvous: `family needs a buffered meeting`. A temporal declaration over that family: `skipped because <family> does not check`.
 - A name that is not a declared data type: `unknown data type <name>`. A constructor with a field, or an empty declaration: `family over <name> is not a closed kind`. `Bit` is that unknown name. The closed-kind test is the one `forall` uses: every constructor is nullary once the parameters are peeled.
 - A rule whose constructor the kind does not have: `<name> is not a constructor of <kind>`. A second rule for one constructor: `duplicate rule for <name>`. A constructor with no rule: `no rule for <name>`, in declaration order. The first of these is the refusal.
 - A key that is not bound: `unbound key <name>`. A binder of the kind, or of `Bit`, used as a key: `<atom> expects a key`. A constructor the kind does not have, named from an atom: `<name> is not a constructor of <kind>`. A proposition other than `opened`, `held`, or `resolved`: `a family formula names opened, held, or resolved`.

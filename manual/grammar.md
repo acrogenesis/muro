@@ -10,7 +10,7 @@ summary: The surface grammar lib/muro/parser.ex implements.
 In brief: this is the grammar `lib/muro/parser.ex` implements. ASCII aliases are in parentheses. If this page and the parser disagree, the parser is the implementation and this page is wrong.
 
 ```
-book       ::= (import | param | nu | data | repr | talk | choreography | session | conform | place | scheme | move | endpoint | read | meet | family | seat | link | def)*
+book       ::= (import | param | nu | data | repr | talk | choreography | session | conform | place | scheme | move | endpoint | read | meet | temporal | family | seat | link | def)*
 import     ::= "import" string             -- relative, "pkg:…", or "std:…"
 param      ::= "param" ident ":" tag term  -- supplied by an importing file
 nu         ::= ("ν" | "nu") ident binder+ ":" "Type" "where" "uncons" ":" term

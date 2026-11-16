@@ -124,6 +124,101 @@ defmodule Muro.FamilyTest do
     assert msg =~ ~r/\d+:\d+: slots: skipped because slot does not check/
   end
 
+  test "a temporal over a family that does not check is skipped" do
+    assert {:error, msg} =
+             check("""
+             data Event : Type where
+               init : Event
+             session ping := send Nat end
+             conform a : ping := put 0 done
+             conform b : ping := put 1 done
+             meet slot : a with b buffer 1
+             family slots : slot per key of Event
+               init never held
+             temporal later : slots := always (opened z signal)
+             """)
+
+    assert msg =~ ~r/\d+:\d+: slots: skipped because slot does not check/
+    assert msg =~ ~r/\d+:\d+: later: skipped because slots does not check/
+    refute msg =~ "not yet decided"
+    refute msg =~ "unbound key"
+  end
+
+  test "a temporal over a family that is not a closed kind is skipped" do
+    assert {:error, msg} =
+             check("""
+             data Event : Type where
+               wrap : Nat -> Event
+             session ping := send Nat end
+             session pong := recv Nat end
+             conform a : ping := put 0 done
+             conform b : pong := get (n : Nat) done
+             meet wire : a with b buffer 1
+             family slots : wire per key of Event
+               wrap never held
+             temporal named : slots :=
+               forall (k : key). always ((opened k wrap) implies (resolved k wrap))
+             """)
+
+    assert msg =~ ~r/\d+:\d+: slots: family over Event is not a closed kind/
+    assert msg =~ ~r/\d+:\d+: named: skipped because slots does not check/
+    refute msg =~ "not yet decided"
+  end
+
+  test "an empty kind is not closed" do
+    assert {:error, msg} =
+             check("""
+             data Event : Type where
+             session ping := send Nat end
+             session pong := recv Nat end
+             conform a : ping := put 0 done
+             conform b : pong := get (n : Nat) done
+             meet wire : a with b buffer 1
+             family slots : wire per key of Event
+             """)
+
+    assert msg =~ ~r/\d+:\d+: slots: family over Event is not a closed kind/
+  end
+
+  test "Bit is not a kind" do
+    assert {:error, msg} =
+             check("""
+             session ping := send Nat end
+             session pong := recv Nat end
+             conform a : ping := put 0 done
+             conform b : pong := get (n : Nat) done
+             meet wire : a with b buffer 1
+             family slots : wire per key of Bit
+             """)
+
+    assert msg =~ ~r/\d+:\d+: slots: unknown data type Bit/
+  end
+
+  test "forall over key stays the key sort when a data type is named key" do
+    assert {:error, msg} =
+             check("""
+             data key : Type where
+               wrap : Nat -> key
+             data Event : Type where
+               init : Event
+               signal : Event
+             session ping := send Nat end
+             session pong := recv Nat end
+             conform a : ping := put 0 done
+             conform b : pong := get (n : Nat) done
+             meet wire : a with b buffer 1
+             family slots : wire per key of Event
+               init never held
+               signal held while earlier unresolved
+             temporal named : slots :=
+               forall (k : key). always ((opened k signal) implies (resolved k init))
+             """)
+
+    assert msg =~ ~r/\d+:\d+: named: not yet decided/
+    refute msg =~ "ranges over an open type"
+    refute msg =~ "expects a key"
+  end
+
   test "a constructor with no rule is refused" do
     assert {:error, msg} =
              check("""
