@@ -19,9 +19,48 @@ defmodule Muro.Print do
         do: n - 1,
         else: n
 
-    prefix = binary_part(src, 0, n)
-    parts = String.split(prefix, "\n")
-    {length(parts), byte_size(List.last(parts)) + 1}
+    # The parser asks for a location at every token. Index the line
+    # starts once; splitting the prefix on every call is quadratic.
+    starts = line_starts(src)
+    idx = line_index(starts, n)
+    {idx + 1, n - :erlang.element(idx + 1, starts) + 1}
+  end
+
+  defp line_starts(src) do
+    case Process.get({__MODULE__, :line_starts}) do
+      {^src, starts} ->
+        starts
+
+      _ ->
+        starts = build_line_starts(src)
+        Process.put({__MODULE__, :line_starts}, {src, starts})
+        starts
+    end
+  end
+
+  defp build_line_starts(src) do
+    {starts, _off} =
+      Enum.map_reduce(String.split(src, "\n"), 0, fn part, off ->
+        {off, off + byte_size(part) + 1}
+      end)
+
+    List.to_tuple(starts)
+  end
+
+  # Rightmost line whose start is at or before `n`. Line starts are
+  # 1-based tuple indexes; the first line starts at byte 0.
+  defp line_index(starts, n), do: line_index(starts, n, 0, tuple_size(starts) - 1)
+
+  defp line_index(_starts, _n, lo, hi) when lo >= hi, do: lo
+
+  defp line_index(starts, n, lo, hi) do
+    mid = div(lo + hi + 1, 2)
+
+    if :erlang.element(mid + 1, starts) <= n do
+      line_index(starts, n, mid, hi)
+    else
+      line_index(starts, n, lo, mid - 1)
+    end
   end
 
   def loc_prefix({line, col}) when is_integer(line) and is_integer(col), do: "#{line}:#{col}: "
