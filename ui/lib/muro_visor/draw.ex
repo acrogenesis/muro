@@ -734,6 +734,9 @@ defmodule MuroVisor.Draw do
   end
 
   @doc false
+  def min_track, do: @min_track
+
+  @doc false
   def disjoint_shift(_ys, prev) when prev == %MapSet{}, do: 0
   def disjoint_shift([], _prev), do: 0
 

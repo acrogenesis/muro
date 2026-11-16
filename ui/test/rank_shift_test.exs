@@ -1,11 +1,10 @@
 defmodule MuroVisor.RankShiftTest do
   use ExUnit.Case, async: true
 
-  # `@min_track` in `MuroVisor.Draw`. The reference is the scan
+  # `MuroVisor.Draw.min_track/0`. The reference is the scan
   # `disjoint_shift` replaced: the first `k` in `0..limit` that leaves
   # every port at least this far from the previous rank. A rank that
   # never clears returns `limit`, which is what `Enum.find` returned.
-  @min_track 6
 
   test "the first open gap equals the old 0..limit scan" do
     prev0 = MapSet.new([0])
@@ -51,7 +50,7 @@ defmodule MuroVisor.RankShiftTest do
 
   defp scan(ys, prev) do
     limit =
-      max(Enum.max(prev) - Enum.min(ys) + @min_track * max(MapSet.size(prev), 1), @min_track)
+      max(Enum.max(prev) - Enum.min(ys) + gap() * max(MapSet.size(prev), 1), gap())
 
     Enum.find(0..limit, limit, fn k ->
       Enum.all?(ys, &clear?(&1 + k, prev))
@@ -59,6 +58,8 @@ defmodule MuroVisor.RankShiftTest do
   end
 
   defp clear?(y, prev) do
-    not Enum.any?(prev, fn p -> abs(p - y) < @min_track end)
+    not Enum.any?(prev, fn p -> abs(p - y) < gap() end)
   end
+
+  defp gap, do: MuroVisor.Draw.min_track()
 end
