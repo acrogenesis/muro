@@ -23,7 +23,7 @@ defmodule Muro.SynthBudgetTest do
 
     assert Muro.Synth.considered_budget() == 1_000_000
     assert Muro.Synth.memory_budget() == 512 * 1_048_576
-    assert Muro.Synth.considered_budget() > 94_970
+    assert Muro.Synth.considered_budget() > 8_138
   end
 
   test "a considered budget stops before the next program and names the reason" do

@@ -1,0 +1,126 @@
+-- Action-quantified PredProg. self reads one column. other is the
+-- disjunction of the other columns. d has no column, so self at d is
+-- false and other ignores it.
+import "std:bool.muro"
+
+data Action : Type where
+  a : Action
+  b : Action
+  c : Action
+  d : Action
+
+data Carrier : Type where
+  none : Carrier
+  only-a : Carrier
+  only-b : Carrier
+  both-ab : Carrier
+  only-c : Carrier
+
+data Feature : Type where
+  reaches-pos-a : Feature
+  reaches-pos-b : Feature
+  reaches-pos-c : Feature
+
+def eval-feature : run Π (+ f : Feature) → Π (+ car : Carrier) → Bool :=
+  λ (+ f : Feature) → λ (+ car : Carrier) →
+    match f motive (λ _ → Bool)
+      | reaches-pos-a =>
+          (match car motive (λ _ → Bool)
+            | none => false
+            | only-a => true
+            | only-b => false
+            | both-ab => true
+            | only-c => false)
+      | reaches-pos-b =>
+          (match car motive (λ _ → Bool)
+            | none => false
+            | only-a => false
+            | only-b => true
+            | both-ab => true
+            | only-c => false)
+      | reaches-pos-c =>
+          (match car motive (λ _ → Bool)
+            | none => false
+            | only-a => false
+            | only-b => false
+            | both-ab => false
+            | only-c => true)
+
+def andb : run Π (p : Bool) → Π (q : Bool) → Bool :=
+  λ (p : Bool) → λ (q : Bool) →
+    match p motive (λ _ → Bool)
+      | true => q
+      | false => false
+
+def orb : run Π (p : Bool) → Π (q : Bool) → Bool :=
+  λ (p : Bool) → λ (q : Bool) →
+    match p motive (λ _ → Bool)
+      | true => true
+      | false => q
+
+def notb : run Π (p : Bool) → Bool :=
+  λ (p : Bool) →
+    match p motive (λ _ → Bool)
+      | true => false
+      | false => true
+
+data Stem : Type where
+  reaches-pos : Stem
+
+def stem-at : run Π (+ stem-k : Stem) → Π (+ act : Action) → Π (+ car : Carrier) → Bool :=
+  λ (+ stem-k : Stem) → λ (+ act : Action) → λ (+ car : Carrier) →
+    match stem-k motive (λ _ → Bool)
+      | reaches-pos =>
+          (match act motive (λ _ → Bool)
+            | a => eval-feature reaches-pos-a car
+            | b => eval-feature reaches-pos-b car
+            | c => eval-feature reaches-pos-c car
+            | d => false
+          )
+
+def other-at : run Π (+ stem-k : Stem) → Π (+ act : Action) → Π (+ car : Carrier) → Bool :=
+  λ (+ stem-k : Stem) → λ (+ act : Action) → λ (+ car : Carrier) →
+    match act motive (λ _ → Bool)
+      | a => (orb (stem-at stem-k b car) (orb (stem-at stem-k c car) (stem-at stem-k d car)))
+      | b => (orb (stem-at stem-k a car) (orb (stem-at stem-k c car) (stem-at stem-k d car)))
+      | c => (orb (stem-at stem-k a car) (orb (stem-at stem-k b car) (stem-at stem-k d car)))
+      | d => (orb (stem-at stem-k a car) (orb (stem-at stem-k b car) (stem-at stem-k c car)))
+
+data PredProg : Type where
+  feat : Π (+ f : Feature) → PredProg
+  andp : PredProg → PredProg → PredProg
+  orp : PredProg → PredProg → PredProg
+  notp : PredProg → PredProg
+  truep : PredProg
+  falsep : PredProg
+  selfp : Π (+ k : Stem) → Π (+ a : Action) → PredProg
+  otherp : Π (+ k : Stem) → Π (+ a : Action) → PredProg
+
+def eval : run Π (p : PredProg) → Π (+ car : Carrier) → Bool :=
+  λ (p : PredProg) → λ (+ car : Carrier) →
+    match p motive (λ _ → Bool)
+      | feat f => eval-feature f car
+      | andp q r => andb (eval q car) (eval r car)
+      | orp q r => orb (eval q car) (eval r car)
+      | notp q => notb (eval q car)
+      | truep => true
+      | falsep => false
+      | selfp stem-k act => stem-at stem-k act car
+      | otherp stem-k act => other-at stem-k act car
+
+def survivor-a : run PredProg := (orp (selfp reaches-pos a) (notp (otherp reaches-pos a)))
+def survivor-d : run PredProg := (orp (selfp reaches-pos d) (notp (otherp reaches-pos d)))
+
+def hold-self-a-only-a : evidence {eval (selfp reaches-pos a) only-a ≡ true : Bool} := refl
+def hold-self-d-none : evidence {eval (selfp reaches-pos d) none ≡ false : Bool} := refl
+def hold-other-a-none : evidence {eval (otherp reaches-pos a) none ≡ false : Bool} := refl
+def hold-other-a-only-b : evidence {eval (otherp reaches-pos a) only-b ≡ true : Bool} := refl
+def hold-other-a-only-c : evidence {eval (otherp reaches-pos a) only-c ≡ true : Bool} := refl
+def hold-a-none : evidence {eval survivor-a none ≡ true : Bool} := refl
+def hold-a-only-a : evidence {eval survivor-a only-a ≡ true : Bool} := refl
+def hold-a-only-b : evidence {eval survivor-a only-b ≡ false : Bool} := refl
+def hold-a-both : evidence {eval survivor-a both-ab ≡ true : Bool} := refl
+def hold-a-only-c : evidence {eval survivor-a only-c ≡ false : Bool} := refl
+def hold-d-none : evidence {eval survivor-d none ≡ true : Bool} := refl
+def hold-d-only-a : evidence {eval survivor-d only-a ≡ false : Bool} := refl
+def hold-d-only-c : evidence {eval survivor-d only-c ≡ false : Bool} := refl

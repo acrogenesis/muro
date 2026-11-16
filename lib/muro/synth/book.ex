@@ -351,7 +351,11 @@ defmodule Muro.Synth.Book do
       end
 
     {evaluator, names, taken} =
-      evaluator(host.book, taken, plan.feature_type, plan.feature_eval)
+      if quantified?(arms) do
+        evaluator_quant(host, arms, plan, taken)
+      else
+        evaluator(host.book, taken, plan.feature_type, plan.feature_eval)
+      end
 
     names = Map.put(names, :spell, plan.spell)
 
@@ -616,6 +620,214 @@ defmodule Muro.Synth.Book do
     """
   end
 
+  # `selfp` and `otherp` close over the action this arm ranks. `eval`
+  # stays a predicate at a carrier: the action is an argument of the
+  # constructor, not a third argument of `eval`. `stem-at` and `other-at`
+  # are the runs the checker reduces.
+  defp evaluator_quant(host, arms, plan, taken) do
+    book = host.book
+    feature_type = plan.feature_type
+    feature_eval = plan.feature_eval
+    {andb, taken, andb_text} = bool_helper(book, taken, "andb", 2, &andb_source/1)
+    {orb, taken, orb_text} = bool_helper(book, taken, "orb", 2, &orb_source/1)
+    {notb, taken, notb_text} = bool_helper(book, taken, "notb", 1, &notb_source/1)
+    {pred, taken} = alloc("PredProg", taken)
+
+    {ctors, taken} =
+      Enum.map_reduce(@pred_ctors, taken, fn name, taken -> alloc(name, taken) end)
+
+    [feat, andp, orp, notp, truep, falsep] = ctors
+    {selfp, taken} = alloc("selfp", taken)
+    {otherp, taken} = alloc("otherp", taken)
+    {stem, taken} = alloc("Stem", taken)
+    {stem_at, taken} = alloc("stem-at", taken)
+    {other_at, taken} = alloc("other-at", taken)
+
+    families =
+      (host.feature_specs || [])
+      |> Muro.Synth.Feature.families(host.actions)
+      |> Enum.filter(&MapSet.member?(stems_used(arms), &1.stem))
+
+    {stem_spell, taken} =
+      Enum.map_reduce(families, taken, fn family, taken ->
+        {ctor, taken} = alloc(family.stem, taken)
+        {{family.stem, ctor}, taken}
+      end)
+
+    names = %{
+      pred: pred,
+      feat: feat,
+      andp: andp,
+      orp: orp,
+      notp: notp,
+      truep: truep,
+      falsep: falsep,
+      selfp: selfp,
+      otherp: otherp,
+      andb: andb,
+      orb: orb,
+      notb: notb,
+      stem: stem,
+      stem_at: stem_at,
+      other_at: other_at,
+      stem_spell: Map.new(stem_spell)
+    }
+
+    {eval, taken} = alloc("eval", taken)
+    # The scrutinee must not be an action constructor. `match` would
+    # then bind that constructor instead of the value.
+    {stem_k, taken} = alloc("stem-k", taken)
+    {act, taken} = alloc("act", taken)
+    {car, taken} = alloc("car", taken)
+    names = Map.merge(names, %{eval: eval, stem_k: stem_k, act: act, car: car})
+
+    text =
+      IO.iodata_to_binary([
+        andb_text,
+        orb_text,
+        notb_text,
+        quant_source(host, families, names, plan.spell, feature_eval),
+        pred_quant_source(names, feature_type),
+        "\n",
+        eval_quant_source(names, feature_eval),
+        "\n"
+      ])
+
+    {text, names, take(taken, Map.values(names) |> Enum.filter(&is_binary/1))}
+  end
+
+  defp quantified?(arms), do: Enum.any?(arms, &quant_pred?(&1.pred))
+
+  defp quant_pred?({:self, _, _, _}), do: true
+  defp quant_pred?({:other, _, _, _}), do: true
+  defp quant_pred?({:not, pred}), do: quant_pred?(pred)
+  defp quant_pred?({:and, left, right}), do: quant_pred?(left) or quant_pred?(right)
+  defp quant_pred?({:or, left, right}), do: quant_pred?(left) or quant_pred?(right)
+  defp quant_pred?(_pred), do: false
+
+  defp stems_used(arms) do
+    Enum.reduce(arms, MapSet.new(), fn arm, acc -> stem_set(arm.pred, acc) end)
+  end
+
+  defp stem_set({:self, stem, _, _}, acc), do: MapSet.put(acc, stem)
+  defp stem_set({:other, stem, _, _}, acc), do: MapSet.put(acc, stem)
+  defp stem_set({:not, pred}, acc), do: stem_set(pred, acc)
+  defp stem_set({:and, left, right}, acc), do: stem_set(right, stem_set(left, acc))
+  defp stem_set({:or, left, right}, acc), do: stem_set(right, stem_set(left, acc))
+  defp stem_set(_pred, acc), do: acc
+
+  defp pred_quant_source(n, feature_type) do
+    """
+    data #{n.pred} : Type where
+      #{n.feat} : Π (+ f : #{feature_type}) → #{n.pred}
+      #{n.andp} : #{n.pred} → #{n.pred} → #{n.pred}
+      #{n.orp} : #{n.pred} → #{n.pred} → #{n.pred}
+      #{n.notp} : #{n.pred} → #{n.pred}
+      #{n.truep} : #{n.pred}
+      #{n.falsep} : #{n.pred}
+      #{n.selfp} : Π (+ k : #{n.stem}) → Π (+ a : Action) → #{n.pred}
+      #{n.otherp} : Π (+ k : #{n.stem}) → Π (+ a : Action) → #{n.pred}
+    """
+  end
+
+  defp eval_quant_source(n, feature_eval) do
+    """
+    def #{n.eval} : run Π (p : #{n.pred}) → Π (+ c : Carrier) → Bool :=
+      λ (p : #{n.pred}) → λ (+ #{n.car} : Carrier) →
+        match p motive (λ _ → Bool)
+          | #{n.feat} f => #{feature_eval} f #{n.car}
+          | #{n.andp} q r => #{n.andb} (#{n.eval} q #{n.car}) (#{n.eval} r #{n.car})
+          | #{n.orp} q r => #{n.orb} (#{n.eval} q #{n.car}) (#{n.eval} r #{n.car})
+          | #{n.notp} q => #{n.notb} (#{n.eval} q #{n.car})
+          | #{n.truep} => true
+          | #{n.falsep} => false
+          | #{n.selfp} #{n.stem_k} #{n.act} => #{n.stem_at} #{n.stem_k} #{n.act} #{n.car}
+          | #{n.otherp} #{n.stem_k} #{n.act} => #{n.other_at} #{n.stem_k} #{n.act} #{n.car}
+    """
+  end
+
+  defp quant_source(host, families, names, spell, feature_eval) do
+    actions = action_ctors(host.book)
+    k = names.stem_k
+    act = names.act
+    car = names.car
+
+    ctors =
+      Enum.map_join(families, "\n", fn family ->
+        "  #{stem_ctor(names, family.stem)} : #{names.stem}"
+      end)
+
+    stem_arms =
+      Enum.map_join(families, "\n", fn family ->
+        inner =
+          Enum.map_join(actions, "\n", fn action ->
+            body = stem_body(family, action, spell, feature_eval, car)
+            "            | #{action} => #{body}"
+          end)
+
+        """
+          | #{stem_ctor(names, family.stem)} =>
+              (match #{act} motive (λ _ → Bool)
+        #{inner}
+              )
+        """
+      end)
+
+    other_arms =
+      Enum.map_join(actions, "\n", fn action ->
+        calls =
+          actions
+          |> Enum.reject(&(&1 == action))
+          |> Enum.map(&"#{names.stem_at} #{k} #{&1} #{car}")
+
+        "      | #{action} => #{or_chain(names.orb, calls)}"
+      end)
+
+    """
+    data #{names.stem} : Type where
+    #{ctors}
+
+    def #{names.stem_at} : run Π (+ #{k} : #{names.stem}) → Π (+ #{act} : Action) → Π (+ #{car} : Carrier) → Bool :=
+      λ (+ #{k} : #{names.stem}) → λ (+ #{act} : Action) → λ (+ #{car} : Carrier) →
+        match #{k} motive (λ _ → Bool)
+    #{stem_arms}
+    def #{names.other_at} : run Π (+ #{k} : #{names.stem}) → Π (+ #{act} : Action) → Π (+ #{car} : Carrier) → Bool :=
+      λ (+ #{k} : #{names.stem}) → λ (+ #{act} : Action) → λ (+ #{car} : Carrier) →
+        match #{act} motive (λ _ → Bool)
+    #{other_arms}
+    """
+  end
+
+  # A feature the survivor does not read has no constructor. The clause
+  # is false, which is the reading of a missing column.
+  defp stem_body(family, action, spell, feature_eval, car) do
+    with {:ok, feature} <- Map.fetch(family.by_action, action),
+         ctor when is_binary(ctor) <- Map.get(spell, feature) do
+      "#{feature_eval} #{ctor} #{car}"
+    else
+      _ -> "false"
+    end
+  end
+
+  defp action_ctors(book) do
+    case Enum.find(book, &(Map.get(&1, :kind) == :data and &1.name == "Action")) do
+      %{ctors: ctors} -> Enum.map(ctors, & &1.name)
+      _ -> []
+    end
+  end
+
+  # An application argument is parenthesized. `orb stem-at k a c`
+  # passes the function, and the body then has a function type.
+  defp or_chain(_orb, []), do: "false"
+  defp or_chain(_orb, [one]), do: paren_call(one)
+  defp or_chain(orb, [one | rest]), do: "(#{orb} #{paren_call(one)} #{or_chain(orb, rest)})"
+
+  defp paren_call(term) do
+    if String.starts_with?(term, "(") or not String.contains?(term, " "),
+      do: term,
+      else: "(#{term})"
+  end
+
   defp taken_names(book) do
     Enum.reduce(book, MapSet.new(), fn d, acc -> take(acc, entry_names(d)) end)
   end
@@ -677,6 +889,18 @@ defmodule Muro.Synth.Book do
   defp spell({:not, pred}, names), do: "(#{names.notp} #{spell(pred, names)})"
   defp spell({:and, p, q}, names), do: "(#{names.andp} #{spell(p, names)} #{spell(q, names)})"
   defp spell({:or, p, q}, names), do: "(#{names.orp} #{spell(p, names)} #{spell(q, names)})"
+
+  defp spell({:self, stem, action, _feature}, names) do
+    "(#{names.selfp} #{stem_ctor(names, stem)} #{action})"
+  end
+
+  defp spell({:other, stem, action, _features}, names) do
+    "(#{names.otherp} #{stem_ctor(names, stem)} #{action})"
+  end
+
+  defp stem_ctor(names, stem) do
+    Map.get(Map.get(names, :stem_spell, %{}), stem, stem)
+  end
 
   defp policy_term([arm], bound) do
     decl = Map.fetch!(bound.decl, arm.name)

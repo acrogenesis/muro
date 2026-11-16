@@ -267,6 +267,103 @@ defmodule Muro.SynthTest do
     assert {true, 1, _ord} = Map.fetch!(index, Synth.signature(true, states, feat))
   end
 
+  test "self reads one column and other reads the rest" do
+    feat = fn
+      "fa", :s -> true
+      "fb", :s -> false
+      _, _ -> false
+    end
+
+    assert Synth.eval({:self, "reaches-pos", "a", "fa"}, feat, :s)
+    refute Synth.eval({:self, "reaches-pos", "a", nil}, feat, :s)
+    assert Synth.eval({:other, "reaches-pos", "a", ["fb", "fa"]}, feat, :s)
+    refute Synth.eval({:other, "reaches-pos", "a", ["fb"]}, feat, :s)
+    assert Synth.size({:self, "reaches-pos", "a", "fa"}) == 1
+    assert Synth.size({:other, "reaches-pos", "a", ["fb", "fa"]}) == 1
+    assert Synth.size({:or, {:feat, "fa"}, {:not, {:other, "reaches-pos", "a", ["fb"]}}}) == 4
+
+    assert Synth.render({:self, "reaches-pos", "a", "fa"}) == "(selfp reaches-pos a)"
+
+    assert Synth.render({:or, {:feat, "fa"}, {:not, {:other, "reaches-pos", "a", ["fb"]}}}) ==
+             "(orp (feat fa) (notp (otherp reaches-pos a)))"
+  end
+
+  test "an action family groups the columns that survived" do
+    specs = [
+      %{name: "reaches-pos-a", kind: :reaches_pos, action: "a"},
+      %{name: "reaches-pos-b", kind: :reaches_pos, action: "b"},
+      %{name: "has-pos-reward-a", kind: :has_pos_reward, action: "a"},
+      %{name: "len-is-0", kind: :len_is, action: nil}
+    ]
+
+    [reward, reach] = Muro.Synth.Feature.families(specs, ["b", "a"])
+    assert reward.stem == "has-pos-reward"
+    assert reward.actions == ["a"]
+    assert reach.stem == "reaches-pos"
+    assert reach.actions == ["b", "a"]
+    assert reach.by_action["b"] == "reaches-pos-b"
+  end
+
+  test "sized enumeration finds the action quantifier by size 4" do
+    features = ["reaches-pos-a", "reaches-pos-b", "reaches-pos-c", "reaches-pos-d"]
+    states = [:none, :only_b, :only_a, :a_and_b, :only_c]
+
+    feat = fn
+      "reaches-pos-a", state when state in [:only_a, :a_and_b] -> true
+      "reaches-pos-b", state when state in [:only_b, :a_and_b] -> true
+      "reaches-pos-c", :only_c -> true
+      _, _ -> false
+    end
+
+    family = %{
+      stem: "reaches-pos",
+      kind: :reaches_pos,
+      actions: ["a", "b", "c", "d"],
+      by_action: %{
+        "a" => "reaches-pos-a",
+        "b" => "reaches-pos-b",
+        "c" => "reaches-pos-c",
+        "d" => "reaches-pos-d"
+      }
+    }
+
+    target =
+      {:or, {:feat, "reaches-pos-a"},
+       {:not, {:other, "reaches-pos", "a", ["reaches-pos-b", "reaches-pos-c", "reaches-pos-d"]}}}
+
+    sig = Synth.signature(target, states, feat)
+    assert Synth.pack_bits([true, false, true, true, false]) == sig
+    assert Synth.size(target) == 4
+
+    {:ok, plain, _} =
+      Synth.enumerate_sized(features, 4, &Synth.signature(&1, states, feat), 5)
+
+    refute Map.has_key?(plain, sig)
+
+    {:ok, index, meta} =
+      Synth.enumerate_sized(
+        features,
+        4,
+        &Synth.signature(&1, states, feat),
+        5,
+        MapSet.new([sig]),
+        [family]
+      )
+
+    assert {prog, 4, _ord} = Map.fetch!(index, sig)
+    assert prog == target
+    assert Synth.eval(prog, feat, :none)
+    refute Synth.eval(prog, feat, :only_b)
+    assert Synth.eval(prog, feat, :only_a)
+    assert Synth.eval(prog, feat, :a_and_b)
+    refute Synth.eval(prog, feat, :only_c)
+    assert [[1, _], [2, _], [3, _], [4, _]] = meta.sizes
+  end
+
+  test "the checker reduces self and other" do
+    assert Muro.check_file("test/fixtures/synth_quant.muro") == :ok
+  end
+
   test "the subset budget covers a nine-feature subset of thirty-six features" do
     # Size 18 asks for a subset of nine. C(36, 9) is 94143280.
     # C(40, 8) is 76904685. Both are built. C(40, 9) stays above the budget.
