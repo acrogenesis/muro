@@ -733,15 +733,16 @@ defmodule MuroVisor.Draw do
     |> Enum.uniq()
   end
 
-  defp disjoint_shift(_ys, prev) when prev == %MapSet{}, do: 0
-  defp disjoint_shift([], _prev), do: 0
+  @doc false
+  def disjoint_shift(_ys, prev) when prev == %MapSet{}, do: 0
+  def disjoint_shift([], _prev), do: 0
 
   # Same shift as scanning 0..limit for the first k that leaves every port
   # at least @min_track from the previous rank. A port forbids a closed run
   # of k, and the first gap is that k. A rank that never clears still takes
   # the same bound the scan returned. The scan was the layout cost of the
   # large term books.
-  defp disjoint_shift(ys, prev) do
+  def disjoint_shift(ys, prev) do
     limit =
       max(Enum.max(prev) - Enum.min(ys) + @min_track * max(MapSet.size(prev), 1), @min_track)
 
