@@ -412,9 +412,11 @@ defmodule Muro.SynthLoopTest do
     assert result.book =~ "def dyn-one-rec "
     assert result.book =~ "def dyn-any-rec "
     assert result.book =~ "| suc j => dyn-any-rec s j"
-    assert result.book =~ "def dyn-reach-agrees "
-    assert result.book =~ "def dyn-reach-holds "
-    assert result.book =~ "≡ true : Bool"
+    assert result.book =~ "def dyn-reach-holds-dead-0"
+    assert result.book =~ "dyn-best-pos dead 0 ≡ false : Bool"
+    assert result.book =~ "def dyn-reach-holds-dead-1"
+    assert result.book =~ "dyn-best-pos dead 1 ≡ dyn-any dead 0 : Bool"
+    refute result.book =~ "dyn-reach-agrees"
     assert result.book =~ "evidence CoindHomo rank"
     assert result.book =~ "import \"../lib/placement.muro\""
     assert result.book =~ "rec-is-hit"
@@ -630,9 +632,14 @@ defmodule Muro.SynthLoopTest do
     assert result.program == {:feat, "ctor-is-p0-0-nest-tip-on"}
     refute result.status == :insufficient
 
-    search = for {:search, left} <- calls, do: left
-    invent = for {:invent, left} <- calls, do: left
-    assert search == [2, 2]
+    limits = %{
+      considered_budget: Muro.Synth.considered_budget(),
+      memory_budget: Muro.Synth.memory_budget()
+    }
+
+    search = for {:search, left, got} <- calls, do: {left, got}
+    invent = for {:invent, left, _got} <- calls, do: left
+    assert search == [{2, limits}, {2, limits}]
     assert invent == []
   end
 
@@ -2622,8 +2629,9 @@ defmodule Muro.SynthLoopTest do
     """
   end
 
-  # The invent budget is an argument of the private search. The trace
-  # records it. A deepen that returns a separator does not change it.
+  # The invent budget is an argument of the private search, and the
+  # search limits follow it. The trace records both. A deepen that
+  # returns a separator does not change either.
   defp with_budget_trace(fun) do
     parent = self()
 
@@ -2637,15 +2645,17 @@ defmodule Muro.SynthLoopTest do
       :budget_ready -> :ok
     end
 
+    # A trace pattern matches only a module the code server has loaded.
+    Code.ensure_loaded!(Muro.Synth.Loop)
     :erlang.trace(self(), true, [:call, {:tracer, tracer}])
-    :erlang.trace_pattern({Muro.Synth.Loop, :search, 10}, true, [:local])
+    :erlang.trace_pattern({Muro.Synth.Loop, :search, 11}, true, [:local])
     :erlang.trace_pattern({Muro.Synth.Loop, :invent_at, 16}, true, [:local])
 
     try do
       result = fun.()
       {result, stop_budget_trace(tracer)}
     after
-      :erlang.trace_pattern({Muro.Synth.Loop, :search, 10}, false, [:local])
+      :erlang.trace_pattern({Muro.Synth.Loop, :search, 11}, false, [:local])
       :erlang.trace_pattern({Muro.Synth.Loop, :invent_at, 16}, false, [:local])
       :erlang.trace(self(), false, [:call])
 
@@ -2668,10 +2678,10 @@ defmodule Muro.SynthLoopTest do
   defp budget_trace(acc) do
     receive do
       {:trace, _pid, :call, {Muro.Synth.Loop, :search, args}} ->
-        budget_trace([{:search, List.last(args)} | acc])
+        budget_trace([{:search, Enum.at(args, 9), List.last(args)} | acc])
 
       {:trace, _pid, :call, {Muro.Synth.Loop, :invent_at, args}} ->
-        budget_trace([{:invent, Enum.at(args, 9)} | acc])
+        budget_trace([{:invent, Enum.at(args, 9), List.last(args)} | acc])
 
       {:done, from} ->
         send(from, {:budget, Enum.reverse(acc)})

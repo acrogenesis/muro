@@ -18,7 +18,7 @@ defmodule Muro.Synth do
   remaining tie. A score does not put a program that missed an
   observation back into the space.
 
-  `enumerate_sized/4` is the search after `reaches-pos` is installed.
+  `enumerate_sized/6` is the search after `reaches-pos` is installed.
   It builds programs by size, up to `pred_size_bound/0`: the atoms, their
   negations, a conjunction or a disjunction of two atoms, the same with
   the right atom negated, and a left-associated conjunction or
@@ -153,15 +153,19 @@ defmodule Muro.Synth do
   @subset_budget 100_000_000
   # Four queens considers 8138 programs and stops at size 4. One
   # million remains the stop for a walk that has not met every
-  # signature. The eight-queens walk without these atoms had already
-  # considered 3766542 programs by the end of size 7.
+  # signature. An earlier eight-queens size walk, made before these
+  # atoms, had considered 3766542 programs by the end of size 7.
   @considered_budget 1_000_000
-  # Growth of this enumeration, not the size of the VM. 512 MiB stops
-  # a walk that is still under the considered budget.
+  # Soft bound on current growth, sampled in `sized_insert` before each
+  # candidate is inserted. `:erlang.memory(:total)` minus the total at
+  # the start of the walk. Not a hard cap on the peak: the candidate
+  # just inserted can pass the bound before the next sample, and a
+  # later sample reads the total after collection, not the high-water
+  # mark. 512 MiB.
   @memory_budget 512 * 1_048_576
 
   @doc """
-  The size `enumerate_sized/4` searches up to.
+  The size `enumerate_sized/6` searches up to.
   """
   def pred_size_bound, do: @pred_size_bound
 
@@ -177,30 +181,31 @@ defmodule Muro.Synth do
   def subset_budget, do: @subset_budget
 
   @doc """
-  Programs `enumerate_sized/4` considers before it stops.
+  Programs `enumerate_sized/6` considers before it stops, unless a call
+  passes `considered_budget:`.
 
   The walk stops once it has considered this many programs. The report
-  names `considered budget` and does not deploy a predicate. A test
-  overrides the bound with
-  `Application.put_env(:muro, :synth_considered_budget, n)` before the
-  walk starts. The walk reads the bound once, at the start.
+  names `considered budget` and does not deploy a predicate. The walk
+  reads the bound once, at the start. `Muro.Synth.Loop.run/2` takes the
+  same option.
   """
-  def considered_budget do
-    Application.get_env(:muro, :synth_considered_budget, @considered_budget)
-  end
+  def considered_budget, do: @considered_budget
 
   @doc """
-  Bytes of growth `enumerate_sized/4` may add before it stops.
+  Bytes of current growth `enumerate_sized/6` may observe before it
+  stops, unless a call passes `memory_budget:`.
 
-  The bound is the growth of `:erlang.memory(:total)` during that walk,
-  not the size of the VM. The report names `memory budget`. A test
-  overrides it with
-  `Application.put_env(:muro, :synth_memory_budget, n)` before the walk
-  starts. A negative override stops at the first program.
+  The bound is a soft sample of current growth, not a hard cap on the
+  peak and not the size of the VM. Before each candidate is inserted,
+  the walk reads `:erlang.memory(:total)` minus the total recorded when
+  the walk started. The candidate just inserted can take that total
+  past the bound; the next sample is what stops the walk. A later
+  sample reads the total after collection, not the high-water mark.
+  The report names `memory budget`. A negative bound stops before the
+  first candidate. `Muro.Synth.Loop.run/2` takes the same option, and
+  the walk reads it once, at the start.
   """
-  def memory_budget do
-    Application.get_env(:muro, :synth_memory_budget, @memory_budget)
-  end
+  def memory_budget, do: @memory_budget
 
   @doc """
   Pack `pred` on `states` into an integer. The first state is the high bit.
@@ -236,36 +241,36 @@ defmodule Muro.Synth do
   a later smaller program of a wanted signature replaces the one kept,
   and a repeated signature is not counted twice.
 
-  `families` are action-indexed stems from `Muro.Synth.Feature.families/2`.
-  An empty list is the feature-test grammar alone. A family contributes
-  `self` and `other` atoms. Their signatures are the feature column and
-  the pointwise disjunction of the other actions. The subset walk does
-  not take those atoms: a quantifier is already the whole action set.
+  `opts` may set `families:`, the action-indexed stems from
+  `Muro.Synth.Feature.families/2`. Omitted, the grammar is the feature
+  tests alone. A family contributes `self` and `other` atoms. Their
+  signatures are the feature column and the pointwise disjunction of
+  the other actions. The subset walk does not take those atoms: a
+  quantifier is already the whole action set.
 
   `{:ok, index, meta}` is a finished walk. `{:empty, reason, meta}` is
   a stop: `reason` is `considered budget` or `memory budget`. `meta`
-  counts only the programs considered before that stop. A partial bank
-  is not returned. The bounds are `considered_budget/0` and
-  `memory_budget/0`, read once at the start.
+  counts only the programs considered before that stop. `size` is the
+  last size at which a program was counted, and it is 0 when the walk
+  stops before counting one. It advances only after that count, so a
+  budget that lands on the last program of a size names that size.
+  `sizes` lists each size that added a new signature. When the last
+  counted size added one, it is the last row of `sizes`. `size` is
+  that enumeration progress on a finished walk and on a stop. It is
+  not the size of a survivor. A partial bank is not returned.
+
+  `opts` may set `considered_budget:` and `memory_budget:`. Omitted, the
+  bounds are `considered_budget/0` and `memory_budget/0`. The walk reads
+  them once, at the start. Each bound must be an integer.
   """
-  def enumerate_sized(features, max_size, sig_fun, width)
-      when is_list(features) and is_integer(max_size) and max_size >= 1 and
-             is_function(sig_fun, 1) and is_integer(width) and width >= 0 do
-    enumerate_sized(features, max_size, sig_fun, width, nil)
-  end
-
-  def enumerate_sized(features, max_size, sig_fun, width, wanted)
+  def enumerate_sized(features, max_size, sig_fun, width, wanted \\ nil, opts \\ [])
       when is_list(features) and is_integer(max_size) and max_size >= 1 and
              is_function(sig_fun, 1) and is_integer(width) and width >= 0 and
-             (is_nil(wanted) or is_struct(wanted, MapSet)) do
-    enumerate_sized(features, max_size, sig_fun, width, wanted, [])
-  end
-
-  def enumerate_sized(features, max_size, sig_fun, width, wanted, families)
-      when is_list(features) and is_integer(max_size) and max_size >= 1 and
-             is_function(sig_fun, 1) and is_integer(width) and width >= 0 and
-             (is_nil(wanted) or is_struct(wanted, MapSet)) and is_list(families) do
+             (is_nil(wanted) or is_struct(wanted, MapSet)) and is_list(opts) do
     started = System.monotonic_time(:millisecond)
+    considered_budget = budget_opt!(opts, :considered_budget, @considered_budget)
+    memory_budget = budget_opt!(opts, :memory_budget, @memory_budget)
+    families = Keyword.get(opts, :families, [])
     mask = Bitwise.bsl(1, width) - 1
     feat_atoms = Enum.map(features, &{:feat, &1})
     atoms = [true, false | feat_atoms]
@@ -304,11 +309,15 @@ defmodule Muro.Synth do
       trace: trace?(),
       started: started,
       stop: nil,
-      considered_budget: considered_budget(),
-      memory_budget: memory_budget(),
+      size: 0,
+      considered_budget: considered_budget,
+      memory_budget: memory_budget,
       base_mem: :erlang.memory(:total)
     }
 
+    # `size` advances in `insert_counted`, after a program at that
+    # size is counted. Assigning it here would name the next size when
+    # the budget lands on the last program of this one.
     st =
       Enum.reduce_while(1..max_size, st, fn size, st ->
         if stopped?(st) do
@@ -352,8 +361,19 @@ defmodule Muro.Synth do
       distinct: st.distinct,
       truncated: k_ideal >= 2 and k_cap < k_ideal,
       sizes: sizes,
+      size: st.size,
       enum_ms: System.monotonic_time(:millisecond) - started
     }
+  end
+
+  defp budget_opt!(opts, key, default) do
+    case Keyword.get(opts, key, default) do
+      n when is_integer(n) ->
+        n
+
+      other ->
+        raise ArgumentError, "#{key} must be an integer, got: #{inspect(other)}"
+    end
   end
 
   defp stopped?(%{stop: stop}) when is_binary(stop), do: true
@@ -735,6 +755,10 @@ defmodule Muro.Synth do
   # One choke point for both bounds. A program past either bound is not
   # inserted. `seen` still records every signature that was inserted, so
   # the counts stay the counts of the programs actually considered.
+  #
+  # The memory sample is the current total, not a peak. It runs before
+  # this candidate is inserted, so the previous candidate can already
+  # have taken the total past the bound.
   defp sized_insert(%{stop: stop} = st, _prog_fun, _size, _sig) when is_binary(stop), do: st
 
   defp sized_insert(st, _prog_fun, _size, _sig) when st.considered >= st.considered_budget do
@@ -754,6 +778,8 @@ defmodule Muro.Synth do
     end
   end
 
+  # Current growth since `base_mem`, not the high-water mark. Collection
+  # between samples lowers the total the next candidate sees.
   defp over_memory?(st) do
     :erlang.memory(:total) - st.base_mem > st.memory_budget
   end
@@ -765,12 +791,13 @@ defmodule Muro.Synth do
 
     case Map.fetch(st.seen, sig) do
       {:ok, old} when old <= size ->
-        %{st | considered: considered}
+        %{st | considered: considered, size: size}
 
       {:ok, old} ->
         %{
           st
           | considered: considered,
+            size: size,
             seen: Map.put(st.seen, sig, size),
             counts: move_count(st.counts, old, size),
             bank: replace_bank(st, sig, prog_fun, size)
@@ -787,6 +814,7 @@ defmodule Muro.Synth do
         %{
           st
           | considered: considered,
+            size: size,
             seen: Map.put(st.seen, sig, size),
             counts: Map.update(st.counts, size, 1, &(&1 + 1)),
             bank: bank,

@@ -347,7 +347,7 @@ defmodule Muro.SynthTest do
         &Synth.signature(&1, states, feat),
         5,
         MapSet.new([sig]),
-        [family]
+        families: [family]
       )
 
     assert {prog, 4, _ord} = Map.fetch!(index, sig)
@@ -383,7 +383,7 @@ defmodule Muro.SynthTest do
                      &Synth.signature(&1, [:on, :off], feat),
                      2,
                      nil,
-                     [family]
+                     families: [family]
                    )
                  end
 
@@ -396,7 +396,7 @@ defmodule Muro.SynthTest do
         &Synth.signature(&1, [:on, :off], feat),
         2,
         nil,
-        [listed]
+        families: [listed]
       )
     end
   end
@@ -433,7 +433,7 @@ defmodule Muro.SynthTest do
         &Synth.signature(&1, states, feat),
         length(states),
         nil,
-        [family]
+        families: [family]
       )
 
     assert {false, 1, _} = Map.fetch!(index, Synth.signature(other, states, feat))
