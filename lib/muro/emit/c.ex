@@ -25,6 +25,12 @@ defmodule Muro.Emit.C do
   not. An `unboxed data` constructor returns the struct by value and
   does not.
 
+  A session in the book is a stepper beside the runs. The host passes
+  the state and an event. The function returns the next state and the
+  action, or refuses an event the protocol does not allow. The host
+  keeps the transport. A protocol the machine cannot represent, a repr
+  payload, and an unboxed session payload are refused (`c:session`).
+
   Identifiers come from `Muro.Emit.Name`. A source name is spelled there.
   A helper, a step, a constructor argument, and a temporary are generated
   there. The two spellings share no identifier. A binder is claimed there
@@ -218,7 +224,9 @@ defmodule Muro.Emit.C do
   `params` is `{ctype, c_name}` for each live argument. `run internal` has
   `export: false`.
   """
-  def prepare(book, stem) when is_list(book) and is_binary(stem) do
+  def prepare(book, stem, opts \\ []) when is_list(book) and is_binary(stem) and is_list(opts) do
+    path = Keyword.get(opts, :path, stem <> ".muro")
+
     case IR.elaborate(book) do
       {:ok, funs} ->
         nm = name_map(book)
@@ -231,9 +239,14 @@ defmodule Muro.Emit.C do
 
             with :ok <- Emit.refuse_may_fail(book),
                  :ok <- Emit.refuse_unboxed_opt(book, funs),
-                 {:ok, opts} <- opt_typedefs(funs, book, bytes?) do
-              {:ok, header(book, sigs, stem, nm, opts, bytes?, strings?),
-               source(book, runs, sigs, texts, extras, stem, nm, opts, bytes?, strings?), sigs}
+                 {:ok, opt_src} <- opt_typedefs(funs, book, bytes?),
+                 {:ok, sess_h, sess_c} <- Muro.Emit.C.Session.fragments(book, path, nm, sigs) do
+              header = header(book, sigs, stem, nm, opt_src, bytes?, strings?)
+
+              source =
+                source(book, runs, sigs, texts, extras, stem, nm, opt_src, bytes?, strings?)
+
+              {:ok, splice_session(header, sess_h), source <> sess_c, sigs}
             end
 
           {:error, _} = err ->
@@ -242,6 +255,21 @@ defmodule Muro.Emit.C do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  # The header's last `#endif` closes the file guard. An earlier one
+  # closes `muro__ALLOC`. The session declarations stay inside the guard.
+  defp splice_session(header, ""), do: header
+
+  defp splice_session(header, sess) do
+    parts = String.split(header, "#endif\n")
+
+    if length(parts) >= 2 do
+      {front, [last]} = Enum.split(parts, -1)
+      Enum.join(front, "#endif\n") <> "\n" <> String.trim(sess) <> "\n#endif\n" <> last
+    else
+      header <> "\n" <> sess
     end
   end
 

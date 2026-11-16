@@ -91,8 +91,10 @@ defmodule Muro do
 
   @doc """
   Write `<name>.h` and `<name>.c` next to `path` for its run definitions.
-  A `run` stream is a seed, an environment, and a step. Machine tensors
-  are refused (`c:machine`).
+  A session in the book is also a pure step: state and event in, next
+  state and action out. A `run` stream is a seed, an environment, and a
+  step. Machine tensors are refused (`c:machine`). A session the machine
+  cannot represent is refused (`c:session`).
 
   An exported run whose live arguments and result are `Nat` is also a NIF.
   `elixir_make` builds `priv/<name>.so`, and `<name>.ex` loads it.
@@ -106,7 +108,7 @@ defmodule Muro do
     dir = Path.dirname(path)
 
     with {:ok, book} <- checked_book(path, opts),
-         {:ok, header, source, sigs} <- Emit.C.prepare(book, stem) do
+         {:ok, header, source, sigs} <- Emit.C.prepare(book, stem, path: path) do
       if nif?, do: Emit.Nif.ensure_make!(sigs), else: :ok
       # Claimed for every run, before `nat_export?` drops internal and non-Nat runs.
       names = Emit.elixir_names(book)
