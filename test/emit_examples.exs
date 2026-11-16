@@ -1,6 +1,10 @@
 # The image of every example except the keyed family. `mix muro.emit`
 # skips a family, so these bytes are the bytes main emitted. The digest
 # is one sha256 per book. Keyed-slots is the book this change adds.
+#
+# An Elixir image is hashed as its parsed form. Elixir 1.20 prints a map
+# in iterator order and breaks a line where 1.18 does not, and that order
+# follows atoms already created in the VM. The parsed form is the image.
 defmodule Muro.EmitExamples do
   @exclude "keyed-slots.muro"
 
@@ -13,8 +17,7 @@ defmodule Muro.EmitExamples do
     |> Enum.map(fn path ->
       rel = Path.relative_to(path, root)
       if System.get_env("MURO_EMIT_DIGEST") == "1", do: IO.puts(:stderr, rel)
-      # The external binary of a map keeps its internal order unless asked.
-      hash = path |> picture() |> :erlang.term_to_binary([:deterministic]) |> sha()
+      hash = path |> picture() |> canon() |> :erlang.term_to_binary([:deterministic]) |> sha()
       "#{hash}  #{rel}"
     end)
   end
@@ -115,6 +118,57 @@ defmodule Muro.EmitExamples do
   defp norm(x), do: x
 
   defp sha(bin), do: Base.encode16(:crypto.hash(:sha256, bin), case: :lower)
+
+  defp canon(x) when is_binary(x) do
+    if String.starts_with?(String.trim_leading(x), "defmodule ") do
+      case Code.string_to_quoted(x, columns: false) do
+        {:ok, ast} -> {:elixir, strip(ast)}
+        _ -> x
+      end
+    else
+      x
+    end
+  end
+
+  defp canon(x) when is_list(x), do: Enum.map(x, &canon/1)
+  defp canon(x) when is_map(x), do: Map.new(x, fn {k, v} -> {canon(k), canon(v)} end)
+
+  defp canon(x) when is_tuple(x),
+    do: x |> Tuple.to_list() |> Enum.map(&canon/1) |> List.to_tuple()
+
+  defp canon(x), do: x
+
+  # Drop parser metadata, and sort a map by its keys. Atom order in a VM
+  # is not the order of the names, so the sort key is the external binary.
+  defp strip({:%{}, meta, args}) when is_list(meta) do
+    {base, pairs} =
+      case args do
+        [{:|, inner, [left, extra]}] when is_list(inner) and is_list(extra) ->
+          {strip(left), extra}
+
+        pairs when is_list(pairs) ->
+          {nil, pairs}
+      end
+
+    pairs =
+      pairs
+      |> Enum.map(fn {k, v} -> {strip(k), strip(v)} end)
+      |> Enum.sort_by(fn {k, _} -> :erlang.term_to_binary(k, [:deterministic]) end)
+
+    if base, do: {:map, base, pairs}, else: {:map, pairs}
+  end
+
+  defp strip({form, meta, args}) when is_list(meta) and is_list(args) do
+    {strip(form), Enum.map(args, &strip/1)}
+  end
+
+  defp strip({form, meta, ctx}) when is_list(meta) and is_atom(ctx) do
+    {strip(form), ctx}
+  end
+
+  defp strip({a, b}), do: {strip(a), strip(b)}
+  defp strip(list) when is_list(list), do: Enum.map(list, &strip/1)
+  defp strip(other), do: other
 end
 
 if System.get_env("MURO_EMIT_DIGEST") == "1" do
