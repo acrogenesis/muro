@@ -794,7 +794,6 @@ defmodule Muro.Synth.ClassCert do
   end
 
   defp ready?(:mismatch, ctx), do: mismatch_closed?(ctx)
-  defp ready?(:bad, _ctx), do: false
 
   # The leaf reads the all-false completion of whatever was not split.
   # Prune only when that completion's proof does not need a later bit.
