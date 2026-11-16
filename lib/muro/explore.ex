@@ -3,8 +3,9 @@ defmodule Muro.Explore do
   The book as a graph, read from a book `Muro.Load.file/1` already checked.
 
   One node for each spec, evidence, and run. One edge for each use: a
-  free name in a term, a step of a process, a party of a meeting, and a
-  `dual`. A session node holds the configurations its meetings proved.
+  free name in a term, a step of a process, a party of a meeting, a
+  `dual`, and a family to the meeting it names. A session node holds
+  the configurations its meetings proved.
   Those configurations are the graph `Muro.Meet` or `Muro.Async` records
   while it decides the meeting, not a second search.
 
@@ -106,6 +107,7 @@ defmodule Muro.Explore do
       acc = term_edges(d, from, names, by_name, acc)
       acc = step_edges(book, d, from, by_name, acc)
       acc = meet_edges(d, from, by_name, acc)
+      acc = family_edges(d, from, by_name, acc)
       dual_edges(d, from, by_name, acc)
     end)
     |> Enum.reverse()
@@ -733,6 +735,15 @@ defmodule Muro.Explore do
   end
 
   defp meet_edges(_, _, _, acc), do: acc
+
+  defp family_edges(%{kind: :family, meeting: meeting, loc: loc}, from, by_name, acc) do
+    case Map.get(by_name, meeting) do
+      nil -> acc
+      to -> use_edge(acc, from, to, loc, nil, nil, :family)
+    end
+  end
+
+  defp family_edges(_, _, _, acc), do: acc
 
   defp party_edge(acc, from, name, by_name, loc) do
     case Map.get(by_name, name) do

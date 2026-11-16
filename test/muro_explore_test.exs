@@ -99,6 +99,21 @@ defmodule Muro.ExploreTest do
              Enum.sort([find_node(g, "wrapped").id, find_node(g, "far-wrap").id])
   end
 
+  test "a family is drawn to the meeting it names" do
+    assert {:ok, book} = Load.file(Path.expand("examples/keyed-slots.muro", File.cwd!()))
+    g = Explore.graph(book)
+    family = find_node(g, "slots")
+    meeting = find_node(g, "slot")
+    assert family.kind == :family
+    assert family.mode == :spec
+    assert meeting.kind == :meet
+
+    assert Enum.any?(
+             g.edges,
+             &(&1.use == :family and &1.from == family.id and &1.to == meeting.id)
+           )
+  end
+
   test "data is not a node, and a std import's definitions are" do
     {:ok, result} = Load.file(Path.expand("examples/result.muro", File.cwd!()))
     g = Explore.graph(result)
