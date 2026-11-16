@@ -412,6 +412,13 @@ defmodule Muro.IR do
   defp elab_form(_st, :ze, _ctx, k), do: ok(:ze, :nat, [], k)
   defp elab_form(_st, :one, _ctx, k), do: ok(:tt, :unit, [], k)
 
+  # A closed numeral stays a numeral through elaboration. Each backend
+  # that prints this image turns it into the successor chain it already
+  # emits for `suc`.
+  defp elab_form(_st, {:nat, n}, _ctx, k) when is_integer(n) and n >= 0 do
+    ok({:nat, n}, :nat, [], k)
+  end
+
   defp elab_form(st, {:su, u}, ctx, k) do
     with {:ok, e} <- elab(st, u, ctx, k) do
       ok({:su, e.tm}, :nat, e.steps, e.k)

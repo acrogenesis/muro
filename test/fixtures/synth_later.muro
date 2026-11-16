@@ -1,0 +1,39 @@
+-- now pays 1 and then nothing. later pays 0 and then 100.
+-- The trace oracle prefers now. The action values do not.
+import "../../examples/cshrl/std/nat.muro"
+import "../../examples/cshrl/lib/agent.muro"
+
+data State : Type where
+  start : State
+  soon  : State
+  late  : State
+
+data Action : Type where
+  now   : Action
+  later : Action
+
+def Reward : spec Type := Nat
+
+def step : run Π (s : State) → Π (a : Action) → State × Reward :=
+  λ (s : State) → λ (a : Action) →
+    match s motive (λ _ → State × Reward)
+      | start =>
+          (match a motive (λ _ → State × Reward)
+            | now => (soon, suc 0)
+            | later => (late, 0))
+      | soon =>
+          (match a motive (λ _ → State × Reward)
+            | now => (soon, 0)
+            | later => (soon, 0))
+      | late =>
+          (match a motive (λ _ → State × Reward)
+            | now => (late, 100)
+            | later => (late, 100))
+
+def le : spec Π (r : Reward) → Π (q : Reward) → Type := Le
+def max : run Π (r : Reward) → Π (q : Reward) → Reward := maxN
+def bottom : run Reward := 0
+def all-actions : run List Action := cons now (cons later nil)
+def default-action : run Action := now
+def horizon : run Nat := suc (suc 0)
+def all-states : run List State := cons start (cons soon (cons late nil))

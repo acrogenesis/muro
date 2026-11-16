@@ -839,7 +839,8 @@ defmodule Muro.Synth.Book do
 
   defp helper_block(host, specs, taken) do
     kinds = MapSet.new(specs, & &1.kind)
-    need_pos = MapSet.member?(kinds, :has_pos_reward)
+    need_reach = MapSet.member?(kinds, :reaches_pos)
+    need_pos = MapSet.member?(kinds, :has_pos_reward) or need_reach
     need_same = MapSet.member?(kinds, :is_self_loop) or MapSet.member?(kinds, :leads_terminal)
     need_terminal = MapSet.member?(kinds, :leads_terminal)
 
@@ -868,11 +869,31 @@ defmodule Muro.Synth.Book do
         :error
 
       {:ok, same, taken, same_text} ->
-        helper_rest(host, specs, taken, need_terminal, pos, pos_text, same, same_text)
+        helper_rest(
+          host,
+          specs,
+          taken,
+          need_terminal,
+          need_reach,
+          pos,
+          pos_text,
+          same,
+          same_text
+        )
     end
   end
 
-  defp helper_rest(host, specs, taken, need_terminal, pos, pos_text, same, same_text) do
+  defp helper_rest(
+         host,
+         specs,
+         taken,
+         need_terminal,
+         need_reach,
+         pos,
+         pos_text,
+         same,
+         same_text
+       ) do
     {terminal, taken, terminal_text} =
       if need_terminal do
         {name, taken} = alloc("dyn-terminal", taken)
@@ -881,12 +902,31 @@ defmodule Muro.Synth.Book do
         {nil, taken, ""}
       end
 
+    # A closed cover gets a table the checker re-checks. Anything else
+    # keeps the recurrence.
+    {one, taken, reach_text} =
+      if need_reach do
+        {best, taken} = alloc("dyn-best-pos", taken)
+        {one, taken} = alloc("dyn-one", taken)
+        {any, taken} = alloc("dyn-any", taken)
+        {text, taken} = Muro.Synth.Reach.sources(host, best, one, any, pos, taken)
+        {one, taken, text}
+      else
+        {nil, taken, ""}
+      end
+
     {struct_helpers, taken} = Muro.Synth.Term.render_helpers(specs, taken)
-    text = Enum.join([struct_helpers.text, pos_text, same_text, terminal_text], "\n")
+
+    text =
+      Enum.join(
+        [struct_helpers.text, pos_text, reach_text, same_text, terminal_text],
+        "\n"
+      )
 
     {:ok,
      %{
        pos: pos,
+       one: one,
        same: same,
        terminal: terminal,
        text: text,
@@ -927,6 +967,10 @@ defmodule Muro.Synth.Book do
 
   defp eval_clause(%{spec: %{kind: :leads_terminal, action: action}, ctor: ctor}, helpers) do
     "      | #{ctor} => #{helpers.terminal} (fst (step c #{action}))"
+  end
+
+  defp eval_clause(%{spec: %{kind: :reaches_pos, action: action}, ctor: ctor}, helpers) do
+    "      | #{ctor} => #{helpers.one} c #{action} horizon"
   end
 
   defp eval_clause(%{spec: %{kind: :hint, name: name}, ctor: ctor}, _helpers) do

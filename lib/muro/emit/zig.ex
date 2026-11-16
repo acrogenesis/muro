@@ -416,6 +416,10 @@ defmodule Muro.Emit.Zig do
   defp emit_tm(:tt, _env, st), do: {:ok, {[], "#{g("tt")}()", :unit, :pure, st}}
   defp emit_tm(:abort, _env, st), do: {:ok, {[], "#{stdn()}.posix.abort()", :never, :pure, st}}
 
+  defp emit_tm({:nat, n}, env, st) when is_integer(n) and n >= 0 do
+    emit_tm(nat_spine(n), env, st)
+  end
+
   defp emit_tm({:su, u}, env, st) do
     with {:ok, {lines, ex, lay, eff, st}} <- emit_tm(u, env, st) do
       {lines, ex, eff, st} = materialize(lines, ex, eff, st)
@@ -2529,4 +2533,7 @@ defmodule Muro.Emit.Zig do
     """
     |> String.trim()
   end
+
+  defp nat_spine(0), do: :ze
+  defp nat_spine(n) when is_integer(n) and n > 0, do: {:su, nat_spine(n - 1)}
 end

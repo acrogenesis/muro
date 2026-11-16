@@ -113,7 +113,7 @@ defmodule Muro.Synth.Host do
             {decode_state!(host, next), reward}
           end)
           |> Map.put(:leb, fn left, right ->
-            truth!(call(host, "leb", [left, right]))
+            truth!(call(host, "leb", [emit_nat(left), emit_nat(right)]))
           end)
           |> Map.put(:eval_feature, fn feature, state ->
             truth!(call(host, "eval-feature", [atom!(host, feature), state_arg(host, state)]))
@@ -545,6 +545,13 @@ defmodule Muro.Synth.Host do
   defp nat_int(0), do: 0
   defp nat_int({:suc, n}), do: 1 + nat_int(n)
   defp nat_int(n) when is_integer(n) and n >= 0, do: n
+
+  # `leb` is emitted as a match on zero and suc. A reward the search
+  # stored as an integer has to be that chain before the call.
+  defp emit_nat(n) when is_integer(n) and n >= 0, do: do_emit_nat(n, 0)
+  defp emit_nat(other), do: other
+  defp do_emit_nat(0, acc), do: acc
+  defp do_emit_nat(n, acc) when n > 0, do: do_emit_nat(n - 1, {:suc, acc})
 
   defp truth!(true), do: true
   defp truth!(false), do: false

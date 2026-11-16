@@ -1,0 +1,35 @@
+-- Three states and no declared feature. stay pays more at a now.
+-- At late, stay leaves for a and pays nothing yet. Depth 0 is empty.
+-- A conjunction at depth 1 matches. reaches-pos is a different column.
+import "../../examples/cshrl/std/nat.muro"
+import "../../examples/cshrl/std/list.muro"
+
+data State : Type where
+  a : State
+  b : State
+  late : State
+
+data Action : Type where
+  go   : Action
+  stay : Action
+
+def step : run Π (s : State) → Π (act : Action) → State × Nat :=
+  λ (s : State) → λ (act : Action) →
+    match s motive (λ _ → State × Nat)
+      | a =>
+          (match act motive (λ _ → State × Nat)
+            | go => (a, suc 0)
+            | stay => (a, suc (suc 0)))
+      | b =>
+          (match act motive (λ _ → State × Nat)
+            | go => (b, 0)
+            | stay => (b, 0))
+      | late =>
+          (match act motive (λ _ → State × Nat)
+            | go => (late, 0)
+            | stay => (a, 0))
+
+def all-actions : run List Action := cons go (cons stay nil)
+def default-action : run Action := stay
+def horizon : run Nat := suc 0
+def all-states : run List State := cons a (cons b (cons late nil))

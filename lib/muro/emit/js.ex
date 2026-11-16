@@ -1350,6 +1350,10 @@ defmodule Muro.Emit.JS do
   defp emit_tm(:tt, _st), do: {:ok, "null"}
   defp emit_tm(:abort, st), do: {:ok, st.h.abort <> "()"}
 
+  defp emit_tm({:nat, n}, st) when is_integer(n) and n >= 0 do
+    emit_tm(nat_spine(n), st)
+  end
+
   defp emit_tm({:su, t}, st) do
     with {:ok, e} <- emit_tm(t, st), do: {:ok, "#{st.h.suc}(#{e})"}
   end
@@ -2722,4 +2726,7 @@ defmodule Muro.Emit.JS do
   end
 
   defp render_lay(_lay, _ctx, _nested), do: "unknown"
+
+  defp nat_spine(0), do: :ze
+  defp nat_spine(n) when is_integer(n) and n > 0, do: {:su, nat_spine(n - 1)}
 end

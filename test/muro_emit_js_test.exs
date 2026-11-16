@@ -1779,6 +1779,16 @@ defmodule Muro.EmitJSTest do
     file
   end
 
+  test "a closed numeral is the successor chain" do
+    dir = tmp()
+    path = Path.join(dir, "two.muro")
+    File.write!(path, "def two : run Nat := 2\n")
+    out = capture_io(fn -> Mix.Tasks.Muro.Emit.run([path, "--backend", "js"]) end)
+    assert out =~ Path.join(dir, "two.mjs")
+    source = File.read!(Path.join(dir, "two.mjs"))
+    assert source =~ "muro__suc(muro__suc(0n))"
+  end
+
   defp write_book(dir, name, src) do
     File.write!(Path.join(dir, name <> ".muro"), src)
     name

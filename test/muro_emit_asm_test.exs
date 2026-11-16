@@ -196,6 +196,13 @@ defmodule Muro.EmitAsmTest do
     refute File.exists?(Path.join(dir, "#{name}.s"))
   end
 
+  test "a closed numeral is the successor chain" do
+    dir = tmp_dir()
+    File.write!(Path.join(dir, "two.muro"), "def two : run Nat := 2\n")
+    source = File.read!(emit_asm!(dir, "two"))
+    assert source =~ "  ldr r0, =muro_zero_obj\n  bl muro_suc\n  bl muro_suc"
+  end
+
   defp emit_asm!(dir, name) do
     path = Path.join(dir, "#{name}.muro")
     out = capture_io(fn -> Mix.Tasks.Muro.Emit.run([path, "--backend", "asm"]) end)

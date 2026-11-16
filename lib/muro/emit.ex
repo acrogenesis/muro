@@ -404,6 +404,13 @@ defmodule Muro.Emit do
   defp emit_db(:ze, _, _book, _names), do: "0"
   defp emit_db(:one, _, _book, _names), do: ":tt"
   defp emit_db({:su, u}, d, book, names), do: "{:suc, #{emit_db(u, d, book, names)}}"
+
+  # A closed numeral is a machine integer in the book. The host still
+  # matches on zero and suc, so the integer becomes that chain here.
+  defp emit_db({:nat, n}, _, _, _) when is_integer(n) and n >= 0 do
+    Enum.reduce(1..n//1, "0", fn _, acc -> "{:suc, #{acc}}" end)
+  end
+
   defp emit_db({:ann, e, _}, d, book, names), do: emit_db(e, d, book, names)
   defp emit_db(:rfl, _, _book, _names), do: ":refl"
   defp emit_db({:rwt, _, _, t}, d, book, names), do: emit_db(t, d, book, names)

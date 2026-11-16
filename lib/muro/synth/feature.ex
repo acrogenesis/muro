@@ -5,7 +5,10 @@ defmodule Muro.Synth.Feature do
   #
   # The templates follow CSHRL.Synthesis.DynFeatureTemplate
   # (`has-pos-reward`, `is-self-loop`) and the dynamics half of
-  # CSHRL.Synthesis.AutoFeatureNat (`leads-terminal`). The pipeline is
+  # CSHRL.Synthesis.AutoFeatureNat (`leads-terminal`). `reaches-pos` is
+  # `has-pos-reward` extended to `horizon`. The loop installs it only
+  # after depth 0 and depth 1 are empty, because a first-pass atom with
+  # the same truth vector would replace an earlier test. The pipeline is
   # the one in literate/CSHRLSynthesis.lagda.tex §Feature Discovery
   # (`sec:ftl`): enumerate, drop trivial features, drop redundant ones.
   # CSHRL.Synthesis.CSHRLLoop raises depth on `cegar-needed`; the loop
@@ -63,6 +66,12 @@ defmodule Muro.Synth.Feature do
     terminal?(host, next)
   end
 
+  # Positive now, or positive on some continuation inside the horizon.
+  # At horizon 0 the second disjunct is false, so this is `has-pos-reward`.
+  def eval_spec(host, _hint_eval, %{kind: :reaches_pos, action: action}, state) do
+    reaches?(host, state, action, host.horizon)
+  end
+
   def eval_spec(host, _hint_eval, %{kind: kind} = spec, state)
       when kind in [:ctor_is, :vals_eq, :spread_eq, :pair_any, :len_is, :nat_is] do
     Muro.Synth.Term.eval_spec(host.schema, spec, state)
@@ -71,6 +80,44 @@ defmodule Muro.Synth.Feature do
   # A state is terminal when every action stays there. That is the
   # absorbing state of the step function. It is not a label on a
   # constructor.
+  @doc """
+  `reaches-pos` for each action, reduced on the cover.
+
+  `:same` means every new test was constant or a duplicate of a test
+  already installed. `{:ok, specs}` is the previous tests followed by
+  the ones that remained. The search that calls this has already found
+  an empty version space.
+  """
+  def extend_reach(host) do
+    specs = List.wrap(host[:feature_specs])
+
+    cond do
+      not is_integer(host[:horizon]) or host.horizon < 0 ->
+        :same
+
+      not is_list(host[:actions]) or host.actions == [] ->
+        :same
+
+      true ->
+        states = Muro.Synth.Oracle.cover(host)
+
+        if nat_rewards?(host, states) do
+          taken =
+            Enum.reduce(specs, taken_names(host.book), fn spec, taken ->
+              take(taken, spec.name)
+            end)
+
+          {added, _taken} = add_all(taken, host.actions, "reaches-pos", :reaches_pos)
+          hint_eval = Map.get(host, :hint_eval, host.eval_feature)
+          eval = fn spec, state -> eval_spec(host, hint_eval, spec, state) end
+          reduced = reduce(specs ++ added, states, eval)
+          if reduced == specs, do: :same, else: {:ok, reduced}
+        else
+          :same
+        end
+    end
+  end
+
   def terminal?(host, state) do
     Enum.all?(host.actions, fn action ->
       {next, _reward} = host.step.(state, action)
@@ -203,7 +250,7 @@ defmodule Muro.Synth.Feature do
   defp partition_specs(specs) do
     dyn =
       Enum.filter(specs, fn spec ->
-        spec.kind in [:has_pos_reward, :is_self_loop, :leads_terminal]
+        spec.kind in [:has_pos_reward, :is_self_loop, :leads_terminal, :reaches_pos]
       end)
 
     hints = Enum.filter(specs, &(&1.kind == :hint))
@@ -278,6 +325,46 @@ defmodule Muro.Synth.Feature do
   defp positive?(n) when is_integer(n), do: n > 0
   defp positive?(_reward), do: false
 
+  # `reaches(s, a, k)` is the reward of `a` now, or the best continuation
+  # from the successor with `k` steps still to spend. `k = 0` spends
+  # nothing further. Rewards are closed Nats, so a positive trace is
+  # strictly above the all-zero trace and "some continuation pays" is
+  # the same bit as "the best continuation pays".
+  defp reaches?(host, state, action, k) do
+    remember(host, {:r, state, action, k}, fn ->
+      {next, reward} = host.step.(state, action)
+      positive?(reward) or best_pos?(host, next, k)
+    end)
+  end
+
+  defp best_pos?(_host, _state, k) when not is_integer(k) or k <= 0, do: false
+
+  defp best_pos?(host, state, k) do
+    remember(host, {:b, state, k}, fn ->
+      Enum.any?(host.actions, fn action -> reaches?(host, state, action, k - 1) end)
+    end)
+  end
+
+  # Search memo only. `Muro.Synth.Loop.run/2` deletes `:muro_synth_reaches`
+  # at the start and at the end. The checker does not read this key.
+  # The table is re-read after the computation. An inner call stores its
+  # own bit, and writing the outer snapshot over that table would drop it.
+  defp remember(host, key, fun) do
+    full = {host.step, key}
+    table = Process.get(:muro_synth_reaches, %{})
+
+    case Map.fetch(table, full) do
+      {:ok, bit} ->
+        bit
+
+      :error ->
+        bit = fun.()
+        table = Process.get(:muro_synth_reaches, %{})
+        Process.put(:muro_synth_reaches, Map.put(table, full, bit))
+        bit
+    end
+  end
+
   defp closed_nat?(0), do: true
   defp closed_nat?({:suc, n}), do: closed_nat?(n)
   defp closed_nat?(n) when is_integer(n) and n >= 0, do: true
@@ -295,6 +382,14 @@ defmodule Muro.Synth.Feature do
   defp all_true?(values), do: Enum.all?(values, &(&1 == true))
 
   defp all_false?(values), do: Enum.all?(values, &(&1 == false))
+
+  @doc """
+  Drop a `vals-eq` or `spread-eq` that a `pair-any` on the same site covers.
+
+  This is `FeatureTemplate.eliminate-redundant`. It does not look at a
+  cover, and it does not know what the site means.
+  """
+  def eliminate_redundant(specs) when is_list(specs), do: drop_subsumed(specs)
 
   # FeatureTemplate.eliminate-redundant: `pair-any i j` subsumes
   # `vals-eq i j` and `spread-eq i j` on the same path. Dynamics
