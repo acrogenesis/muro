@@ -93,6 +93,9 @@ defmodule Muro.Check do
       %{kind: :temporal} ->
         {:skip, "#{name} is a temporal declaration, not a definition"}
 
+      %{kind: :family} ->
+        {:skip, "#{name} is a family, not a definition"}
+
       %{kind: :talk} ->
         {:skip, "#{name} is a talk, not a definition"}
 
@@ -171,6 +174,7 @@ defmodule Muro.Check do
               :read,
               :meet,
               :temporal,
+              :family,
               :talk,
               :choreography,
               :repr,
@@ -3916,8 +3920,18 @@ defmodule Muro.Check do
   # meeting once, then decides the formula. `check_sig/2` does not use
   # this clause: the meeting was already checked, and the declaration
   # reads that recorded outcome. Fuel does not reduce a formula.
-  def check_def(book, %{kind: :temporal} = d, fuel) do
-    temporal_report(d, Muro.Temporal.judge(book, d, fuel))
+  def check_def(book, %{kind: :temporal, meeting: meeting, formula: formula} = d, fuel) do
+    case find_family(book, meeting) do
+      nil -> temporal_report(d, Muro.Temporal.judge(book, d, fuel))
+      family -> temporal_report(d, Muro.Family.judge_formula(book, family, formula))
+    end
+  end
+
+  # Standalone check of one family. `check_sig/2` does not use this
+  # clause: the meeting was already checked, and the declaration reads
+  # that recorded outcome. The family graph is not built.
+  def check_def(book, %{kind: :family} = d, fuel) do
+    family_report(d, Muro.Family.check_decl(book, d, fuel))
   end
 
   # Host representation. No kernel term. `Muro.Repr` is the contract.
@@ -3952,6 +3966,19 @@ defmodule Muro.Check do
            ) do
       :ok
     end
+  end
+
+  defp family_report(%{name: name} = d, result) do
+    loc = Print.loc_prefix(Map.get(d, :loc))
+
+    case result do
+      :ok -> {:note, Muro.Family.line(d)}
+      {:error, msg} -> {:error, "#{loc}#{name}: #{msg}"}
+    end
+  end
+
+  defp find_family(book, name) do
+    Enum.find(book, &match?(%{kind: :family, name: ^name}, &1))
   end
 
   defp temporal_report(%{name: name} = d, result) do
@@ -4591,6 +4618,7 @@ defmodule Muro.Check do
           :read,
           :meet,
           :temporal,
+          :family,
           :talk,
           :choreography,
           :repr,
@@ -4875,9 +4903,9 @@ defmodule Muro.Check do
   end
 
   @doc """
-  Success lines of the temporal declarations in the book just checked,
-  in book order. Empty when that check was refused, or when the book
-  has no temporal declaration.
+  Success lines of the keyed families and temporal declarations in the
+  book just checked, in book order. Empty when that check was refused,
+  or when the book has neither.
   """
   def temporal_lines, do: Process.get(@temporal_key, [])
 
@@ -4891,19 +4919,24 @@ defmodule Muro.Check do
   @doc """
   Check a named book. Options: `fuel: n` (default `default_fuel/0`).
 
-  Each definition other than a temporal declaration is checked against
-  the whole book, on its own process, with that same fuel. `:ok` means
-  every definition checked. `{:error, msg}` is every failure, in book
-  order, separated by a blank line. Fuel is the only bound; a definition
-  is not cut off by a wall-clock timeout.
-  A temporal declaration that holds adds one line to `temporal_lines/0`.
+  Each definition other than a temporal declaration or a keyed family
+  is checked against the whole book, on its own process, with that same
+  fuel. `:ok` means every definition checked. `{:error, msg}` is every
+  failure, in book order, separated by a blank line. Fuel is the only
+  bound; a definition is not cut off by a wall-clock timeout.
+  A family that checks, and a temporal declaration that holds, each add
+  one line to `temporal_lines/0`, in book order.
 
   Each meeting is checked once. That walk records the source
   configuration graph the explorer draws, and it is not run again for
   the drawing. When a temporal declaration names the meeting, the
   compiled configuration graph is explored once and shared by every
   declaration of that meeting. A meeting that does not check is
-  skipped, and its compiled graph is not explored.
+  skipped, and its compiled graph is not explored. A family reads that
+  same recorded outcome and does not walk the meeting again. A temporal
+  declaration over a family reads that same check. When the family does
+  not check, the formula is `skipped because <family> does not check`
+  and is not walked.
   """
   def check_sig(named_book, opts \\ []) do
     note_check()
@@ -4917,7 +4950,13 @@ defmodule Muro.Check do
 
     with {:ok, book} <- Ast.book_to_db(named_book, db_opts) do
       indexed = Enum.with_index(book)
-      {temps, defs} = Enum.split_with(indexed, fn {d, _} -> match?(%{kind: :temporal}, d) end)
+
+      {late, defs} =
+        Enum.split_with(indexed, fn {d, _} ->
+          match?(%{kind: :temporal}, d) or match?(%{kind: :family}, d)
+        end)
+
+      {temps, fams} = Enum.split_with(late, fn {d, _} -> match?(%{kind: :temporal}, d) end)
 
       def_slots =
         defs
@@ -4932,9 +4971,10 @@ defmodule Muro.Check do
 
       meetings = recorded_meetings(defs, def_slots)
       temp_slots = temporal_slots(book, temps, meetings)
+      fam_slots = family_slots(book, fams, meetings)
 
       outcomes =
-        (def_slots ++ temp_slots)
+        (def_slots ++ temp_slots ++ fam_slots)
         |> Enum.sort_by(&elem(&1, 0))
         |> Enum.map(&elem(&1, 1))
 
@@ -4974,17 +5014,44 @@ defmodule Muro.Check do
   defp temporal_slots(_book, [], _meetings), do: []
 
   defp temporal_slots(book, temps, meetings) do
+    {over_family, over_meet} =
+      Enum.split_with(temps, fn {%{meeting: meeting}, _i} -> find_family(book, meeting) end)
+
     prepared =
-      temps
+      over_meet
       |> Enum.map(fn {%{meeting: meeting}, _i} -> meeting end)
       |> Enum.uniq()
       |> Map.new(fn name ->
         {name, Muro.Temporal.prepare(book, name, recorded_status(meetings, name))}
       end)
 
-    Enum.map(temps, fn {d, i} ->
-      {i,
-       temporal_report(d, Muro.Temporal.judge_prepared(book, d, Map.fetch!(prepared, d.meeting)))}
+    meet_slots =
+      Enum.map(over_meet, fn {d, i} ->
+        {i,
+         temporal_report(
+           d,
+           Muro.Temporal.judge_prepared(book, d, Map.fetch!(prepared, d.meeting))
+         )}
+      end)
+
+    family_slots =
+      Enum.map(over_family, fn {d, i} ->
+        family = find_family(book, d.meeting)
+
+        status =
+          Muro.Family.check(book, family, recorded_status(meetings, family.meeting))
+
+        {i, temporal_report(d, Muro.Family.judge_formula(book, family, d.formula, status))}
+      end)
+
+    meet_slots ++ family_slots
+  end
+
+  defp family_slots(_book, [], _meetings), do: []
+
+  defp family_slots(book, fams, meetings) do
+    Enum.map(fams, fn {d, i} ->
+      {i, family_report(d, Muro.Family.check(book, d, recorded_status(meetings, d.meeting)))}
     end)
   end
 
