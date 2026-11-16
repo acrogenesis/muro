@@ -120,11 +120,17 @@ defmodule Muro.Synth do
   # shrinks to five, because C(76, 6) is 218618940.
   @subset_budget 100_000_000
   # Four queens considers 94970 programs. One million is above that
-  # walk and below the eight-queens size walk, which had already
-  # considered 3766542 programs by the end of size 7.
+  # walk and below an earlier eight-queens size walk, which had already
+  # considered 3766542 programs by the end of size 7. That count is the
+  # one the manual cites. The stopped eight-queens walk was not re-run
+  # under this bound.
   @considered_budget 1_000_000
-  # Growth of this enumeration, not the size of the VM. 512 MiB stops
-  # a walk that is still under the considered budget.
+  # Soft bound on current growth, sampled in `sized_insert` before each
+  # candidate is inserted. `:erlang.memory(:total)` minus the total at
+  # the start of the walk. Not a hard cap on the peak: the candidate
+  # just inserted can pass the bound before the next sample, and a
+  # later sample reads the total after collection, not the high-water
+  # mark. 512 MiB.
   @memory_budget 512 * 1_048_576
 
   @doc """
@@ -144,30 +150,31 @@ defmodule Muro.Synth do
   def subset_budget, do: @subset_budget
 
   @doc """
-  Programs `enumerate_sized/4` considers before it stops.
+  Programs `enumerate_sized/6` considers before it stops, unless a call
+  passes `considered_budget:`.
 
   The walk stops once it has considered this many programs. The report
-  names `considered budget` and does not deploy a predicate. A test
-  overrides the bound with
-  `Application.put_env(:muro, :synth_considered_budget, n)` before the
-  walk starts. The walk reads the bound once, at the start.
+  names `considered budget` and does not deploy a predicate. The walk
+  reads the bound once, at the start. `Muro.Synth.Loop.run/2` takes the
+  same option.
   """
-  def considered_budget do
-    Application.get_env(:muro, :synth_considered_budget, @considered_budget)
-  end
+  def considered_budget, do: @considered_budget
 
   @doc """
-  Bytes of growth `enumerate_sized/4` may add before it stops.
+  Bytes of current growth `enumerate_sized/6` may observe before it
+  stops, unless a call passes `memory_budget:`.
 
-  The bound is the growth of `:erlang.memory(:total)` during that walk,
-  not the size of the VM. The report names `memory budget`. A test
-  overrides it with
-  `Application.put_env(:muro, :synth_memory_budget, n)` before the walk
-  starts. A negative override stops at the first program.
+  The bound is a soft sample of current growth, not a hard cap on the
+  peak and not the size of the VM. Before each candidate is inserted,
+  the walk reads `:erlang.memory(:total)` minus the total recorded when
+  the walk started. The candidate just inserted can take that total
+  past the bound; the next sample is what stops the walk. A later
+  sample reads the total after collection, not the high-water mark.
+  The report names `memory budget`. A negative bound stops before the
+  first candidate. `Muro.Synth.Loop.run/2` takes the same option, and
+  the walk reads it once, at the start.
   """
-  def memory_budget do
-    Application.get_env(:muro, :synth_memory_budget, @memory_budget)
-  end
+  def memory_budget, do: @memory_budget
 
   @doc """
   Pack `pred` on `states` into an integer. The first state is the high bit.
@@ -205,21 +212,20 @@ defmodule Muro.Synth do
 
   `{:ok, index, meta}` is a finished walk. `{:empty, reason, meta}` is
   a stop: `reason` is `considered budget` or `memory budget`. `meta`
-  counts only the programs considered before that stop. A partial bank
-  is not returned. The bounds are `considered_budget/0` and
-  `memory_budget/0`, read once at the start.
-  """
-  def enumerate_sized(features, max_size, sig_fun, width)
-      when is_list(features) and is_integer(max_size) and max_size >= 1 and
-             is_function(sig_fun, 1) and is_integer(width) and width >= 0 do
-    enumerate_sized(features, max_size, sig_fun, width, nil)
-  end
+  counts only the programs considered before that stop, and `size` is
+  the size the walk had reached. A partial bank is not returned.
 
-  def enumerate_sized(features, max_size, sig_fun, width, wanted)
+  `opts` may set `considered_budget:` and `memory_budget:`. Omitted, the
+  bounds are `considered_budget/0` and `memory_budget/0`. The walk reads
+  them once, at the start. Each bound must be an integer.
+  """
+  def enumerate_sized(features, max_size, sig_fun, width, wanted \\ nil, opts \\ [])
       when is_list(features) and is_integer(max_size) and max_size >= 1 and
              is_function(sig_fun, 1) and is_integer(width) and width >= 0 and
-             (is_nil(wanted) or is_struct(wanted, MapSet)) do
+             (is_nil(wanted) or is_struct(wanted, MapSet)) and is_list(opts) do
     started = System.monotonic_time(:millisecond)
+    considered_budget = budget_opt!(opts, :considered_budget, @considered_budget)
+    memory_budget = budget_opt!(opts, :memory_budget, @memory_budget)
     mask = Bitwise.bsl(1, width) - 1
     feat_atoms = Enum.map(features, &{:feat, &1})
     atoms = [true, false | feat_atoms]
@@ -254,13 +260,16 @@ defmodule Muro.Synth do
       trace: trace?(),
       started: started,
       stop: nil,
-      considered_budget: considered_budget(),
-      memory_budget: memory_budget(),
+      size: 0,
+      considered_budget: considered_budget,
+      memory_budget: memory_budget,
       base_mem: :erlang.memory(:total)
     }
 
     st =
       Enum.reduce_while(1..max_size, st, fn size, st ->
+        st = %{st | size: size}
+
         if stopped?(st) do
           {:halt, st}
         else
@@ -302,8 +311,19 @@ defmodule Muro.Synth do
       distinct: st.distinct,
       truncated: k_ideal >= 2 and k_cap < k_ideal,
       sizes: sizes,
+      size: st.size,
       enum_ms: System.monotonic_time(:millisecond) - started
     }
+  end
+
+  defp budget_opt!(opts, key, default) do
+    case Keyword.get(opts, key, default) do
+      n when is_integer(n) ->
+        n
+
+      other ->
+        raise ArgumentError, "#{key} must be an integer, got: #{inspect(other)}"
+    end
   end
 
   defp stopped?(%{stop: stop}) when is_binary(stop), do: true
@@ -675,6 +695,10 @@ defmodule Muro.Synth do
   # One choke point for both bounds. A program past either bound is not
   # inserted. `seen` still records every signature that was inserted, so
   # the counts stay the counts of the programs actually considered.
+  #
+  # The memory sample is the current total, not a peak. It runs before
+  # this candidate is inserted, so the previous candidate can already
+  # have taken the total past the bound.
   defp sized_insert(%{stop: stop} = st, _prog_fun, _size, _sig) when is_binary(stop), do: st
 
   defp sized_insert(st, _prog_fun, _size, _sig) when st.considered >= st.considered_budget do
@@ -694,6 +718,8 @@ defmodule Muro.Synth do
     end
   end
 
+  # Current growth since `base_mem`, not the high-water mark. Collection
+  # between samples lowers the total the next candidate sees.
   defp over_memory?(st) do
     :erlang.memory(:total) - st.base_mem > st.memory_budget
   end

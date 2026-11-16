@@ -12,6 +12,11 @@ defmodule Muro.Synth.Loop do
   @doc """
   Version-space search on a checked environment.
 
+  `:considered_budget` and `:memory_budget` are the sized-search bounds.
+  Omitted, they are `Muro.Synth.considered_budget/0` and
+  `Muro.Synth.memory_budget/0`. The walk reads each bound once, at the
+  start. A bound that is not an integer is a usage error.
+
   The fuel bound and the round bound are operational. A loop that stops
   because of either bound has not established `sufficient-cegis`.
   """
@@ -40,6 +45,9 @@ defmodule Muro.Synth.Loop do
     checker =
       Keyword.get(opts, :checker, fn book, fuel -> Muro.check_file(book, fuel: fuel) end)
 
+    considered = Keyword.get(opts, :considered_budget, Synth.considered_budget())
+    memory = Keyword.get(opts, :memory_budget, Synth.memory_budget())
+
     cond do
       oracle not in Oracle.names() ->
         {:error, :usage, "unknown oracle #{oracle}"}
@@ -49,6 +57,12 @@ defmodule Muro.Synth.Loop do
 
       not (is_integer(max_depth) and max_depth >= depth) ->
         {:error, :usage, "the depth bound is below --depth"}
+
+      not is_integer(considered) ->
+        {:error, :usage, "the considered budget must be an integer"}
+
+      not is_integer(memory) ->
+        {:error, :usage, "the memory budget must be an integer"}
 
       true ->
         open(
@@ -62,7 +76,8 @@ defmodule Muro.Synth.Loop do
           score,
           anchor,
           checker,
-          structural
+          structural,
+          %{considered_budget: considered, memory_budget: memory}
         )
     end
   end
@@ -78,7 +93,8 @@ defmodule Muro.Synth.Loop do
          score,
          anchor,
          checker,
-         structural
+         structural,
+         limits
        ) do
     case Muro.Synth.Host.open(path, fuel: fuel, structural: structural) do
       {:error, _kind, _msg} = err ->
@@ -93,16 +109,28 @@ defmodule Muro.Synth.Loop do
             {:ok, silent(cex)}
 
           {:ok, spec} ->
-            search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel)
+            search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel, limits)
         end
     end
   end
 
-  defp search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel) do
-    search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel, length(spec.cover))
+  defp search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel, limits) do
+    search(
+      host,
+      spec,
+      depth,
+      max_depth,
+      rounds,
+      score,
+      anchor,
+      checker,
+      fuel,
+      length(spec.cover),
+      limits
+    )
   end
 
-  defp search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel, left) do
+  defp search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel, left, limits) do
     feat = fn feature, state -> host.eval_feature.(feature, state) end
 
     case conflict(spec.cover, spec.tasks, host, feat) do
@@ -122,7 +150,8 @@ defmodule Muro.Synth.Loop do
           later,
           predicted,
           oracle,
-          task
+          task,
+          limits
         )
 
       :ok ->
@@ -139,7 +168,8 @@ defmodule Muro.Synth.Loop do
               score,
               anchor,
               checker,
-              fuel
+              fuel,
+              limits
             )
 
           {:empty, versions, at} ->
@@ -190,12 +220,13 @@ defmodule Muro.Synth.Loop do
          later,
          predicted,
          oracle,
-         task
+         task,
+         limits
        ) do
     case Muro.Synth.Feature.deepen(host, earlier, later) do
       {:ok, specs, path_depth} ->
         host = install_paths(host, specs, path_depth)
-        search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel, left)
+        search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel, left, limits)
 
       {:stop, specs, path_depth} ->
         host = if specs, do: install_paths(host, specs, path_depth), else: host
@@ -215,7 +246,8 @@ defmodule Muro.Synth.Loop do
           later,
           predicted,
           oracle,
-          task
+          task,
+          limits
         )
     end
   end
@@ -241,7 +273,8 @@ defmodule Muro.Synth.Loop do
          later,
          predicted,
          oracle,
-         task
+         task,
+         limits
        ) do
     feat = fn feature, state -> host.eval_feature.(feature, state) end
 
@@ -258,7 +291,20 @@ defmodule Muro.Synth.Loop do
 
       fresh ->
         host = Muro.Synth.Host.install_features(host, fresh)
-        search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel, left - 1)
+
+        search(
+          host,
+          spec,
+          depth,
+          max_depth,
+          rounds,
+          score,
+          anchor,
+          checker,
+          fuel,
+          left - 1,
+          limits
+        )
     end
   end
 
@@ -299,7 +345,8 @@ defmodule Muro.Synth.Loop do
          score,
          anchor,
          checker,
-         fuel
+         fuel,
+         limits
        ) do
     case Muro.Synth.Feature.extend_reach(host) do
       :same ->
@@ -309,7 +356,7 @@ defmodule Muro.Synth.Loop do
         host = Muro.Synth.Host.install_features(host, specs)
         feat = fn feature, state -> host.eval_feature.(feature, state) end
 
-        case fit_sized(host, spec.tasks, score, feat, versions, %{}) do
+        case fit_sized(host, spec.tasks, score, feat, versions, %{}, limits) do
           {:empty, versions, at, search} ->
             {:ok, empty(host, versions, at, search)}
 
@@ -340,7 +387,7 @@ defmodule Muro.Synth.Loop do
   # A size that adds none is not recorded. The walk stops at the first
   # size that satisfies every task. A task with no program by the size
   # bound is an empty space at that bound.
-  defp fit_sized(host, tasks, score, feat, versions, rejected) do
+  defp fit_sized(host, tasks, score, feat, versions, rejected, limits) do
     states =
       case tasks do
         [%{observations: observations} | _] -> Enum.map(observations, &elem(&1, 0))
@@ -364,7 +411,9 @@ defmodule Muro.Synth.Loop do
            max_size,
            &Synth.signature(&1, states, feat),
            length(states),
-           MapSet.new(task_sigs)
+           MapSet.new(task_sigs),
+           considered_budget: limits.considered_budget,
+           memory_budget: limits.memory_budget
          ) do
       {:empty, reason, meta} ->
         record = search_record(meta, max_size, reason)
@@ -404,6 +453,8 @@ defmodule Muro.Synth.Loop do
       enum_ms: meta.enum_ms,
       considered: meta.considered,
       distinct: meta.distinct,
+      truncated: meta.truncated,
+      size: meta.size,
       lines: lines,
       sized: true,
       stop: stop
@@ -980,6 +1031,9 @@ defmodule Muro.Synth.Loop do
     |> Map.put(:enum_ms, search.enum_ms)
     |> Map.put(:considered, search.considered)
     |> Map.put(:distinct, search.distinct)
+    |> Map.put(:truncated, search.truncated)
+    |> Map.put(:size, search.size)
+    |> Map.put(:stop, search.stop)
     |> Map.update(:lines, search.lines, &(&1 ++ search.lines))
   end
 

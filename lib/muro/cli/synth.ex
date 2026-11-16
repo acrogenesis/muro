@@ -50,7 +50,7 @@ defmodule Muro.CLI.Synth do
         type: :boolean,
         default: "false",
         doc:
-          "Print the report as one JSON object on standard error. The object is a log of the version space and the counterexamples. It is not a certificate."
+          "Print the report as one JSON object on standard error. The object is a log of the version space and the counterexamples. When a sized search stops at the considered budget or the memory budget, the object names that stop and the counts the walk had reached, including the size it had reached. It is not a certificate."
       }
     ]
   end
@@ -146,12 +146,7 @@ defmodule Muro.CLI.Synth do
             do: Path.dirname(Path.expand(out)),
             else: File.cwd!()
 
-        case Muro.Synth.cegis_loop(path,
-               oracle: oracle,
-               depth: depth,
-               fuel: fuel,
-               anchor: anchor
-             ) do
+        case Muro.Synth.cegis_loop(path, loop_opts(oracle, depth, fuel, anchor, hooks)) do
           {:error, :book, message} ->
             {:exit, 2, "", [message, "refusing to synthesize from a book that does not check"]}
 
@@ -164,6 +159,22 @@ defmodule Muro.CLI.Synth do
           {:ok, result} ->
             present(result, out, Keyword.get(opts, :json, false), hooks)
         end
+    end
+  end
+
+  # `hooks` may carry `:considered_budget` and `:memory_budget`. The
+  # command does not read those bounds from the application environment.
+  # Omitted, the search uses its defaults.
+  defp loop_opts(oracle, depth, fuel, anchor, hooks) do
+    [oracle: oracle, depth: depth, fuel: fuel, anchor: anchor]
+    |> put_hook(:considered_budget, hooks)
+    |> put_hook(:memory_budget, hooks)
+  end
+
+  defp put_hook(opts, key, hooks) do
+    case Keyword.fetch(hooks, key) do
+      {:ok, value} -> Keyword.put(opts, key, value)
+      :error -> opts
     end
   end
 
@@ -236,6 +247,11 @@ defmodule Muro.CLI.Synth do
       |> put_present(:path_bound, Map.get(result, :path_bound))
       |> put_present(:sizes, Map.get(result, :sizes))
       |> put_present(:enum_ms, Map.get(result, :enum_ms))
+      |> put_present(:considered, Map.get(result, :considered))
+      |> put_present(:distinct, Map.get(result, :distinct))
+      |> put_present(:truncated, Map.get(result, :truncated))
+      |> put_present(:size, Map.get(result, :size))
+      |> put_present(:stop, Map.get(result, :stop))
 
     JSON.encode!(payload) <> "\n"
   end
