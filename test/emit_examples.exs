@@ -7,8 +7,9 @@
 #
 # `norm/1` strips the absolute working directory. Then:
 #
-# Raw bytes, comments included. Measured on Elixir 1.18.4 (OTP 28),
-# Elixir 1.20.4 (OTP 28), and Elixir 1.20.4 (OTP 29), over every example
+# Raw bytes, comments included. CI runs this digest on Elixir 1.18.4
+# (OTP 27.2) and Elixir 1.20.4 (OTP 28.1), and the Elixir job runs it
+# again on Elixir 1.20.4 (OTP 29), over every example
 # except the keyed family. The bytes match for `:elixir`, `:c`, `:rust`,
 # `:zig`, `:asm`, `:js`, `:node`, `:mbi`, and `:exunit`. A change to the
 # header comment in `Muro.Emit.emit_module/2` changes `:elixir` and fails
@@ -17,10 +18,10 @@
 # Parsed form, `:fsm` and `:otp`. Elixir 1.18 breaks a line inside an
 # inspected tuple in the state machine that Elixir 1.20 on OTP 29 keeps
 # on one line. The OTP image is inspected terms (`Muro.Emit.Otp`). On
-# Elixir 1.20 those bytes differ between OTP 28 and OTP 29. Elixir 1.18
-# on OTP 28 prints the OTP 29 bytes. `Code.string_to_quoted_with_comments/2`
-# (`columns: false`) drops that difference. Metadata is dropped, and map
-# pairs are sorted by their external key. The comment texts are kept, in
+# Elixir 1.20 those bytes differ between OTP 28 and OTP 29.
+# `Code.string_to_quoted_with_comments/2` (`columns: false`) drops that
+# difference. Metadata is dropped, and map pairs are sorted by their
+# external key. The comment texts are kept, in
 # source order, and the line number is not, so a line break does not move
 # the digest and a change to the generated comment does. A binary that
 # does not start with `defmodule`, or that does not parse, stays raw.
