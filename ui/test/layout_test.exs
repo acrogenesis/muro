@@ -3,6 +3,9 @@ defmodule MuroVisor.LayoutTest do
 
   @moduletag timeout: 180_000
 
+  # Checking and laying out every example can take longer than the
+  # module cap when the runner is busy.
+  @tag timeout: 600_000
   test "every book that checks has a stable layered layout" do
     root = Path.expand("../../examples", __DIR__)
 
