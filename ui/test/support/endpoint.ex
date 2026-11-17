@@ -1,6 +1,8 @@
 defmodule MuroVisor.TestEndpoint do
   @moduledoc false
 
+  import ExUnit.Assertions
+
   @doc """
   Leave the shared endpoint running and not listening.
 
@@ -55,5 +57,36 @@ defmodule MuroVisor.TestEndpoint do
     _ = Application.stop(:muro_visor)
     {:ok, _} = Application.ensure_all_started(:muro_visor)
     :ok
+  end
+
+  @doc """
+  The port must not complete a TCP handshake.
+
+  A listener that has just closed answers with `:econnrefused`. OTP 28
+  answers the same close with `:econnreset`. A handshake that succeeds
+  is tried again for a short time, then this fails.
+  """
+  def refute_accept!(port) when is_integer(port) and port > 0 do
+    case connect_closed(port, 20) do
+      {:error, reason} when reason in [:econnrefused, :econnreset] ->
+        :ok
+
+      other ->
+        flunk("port #{port} was still reachable after shutdown: #{inspect(other)}")
+    end
+  end
+
+  defp connect_closed(_port, 0), do: :still_open
+
+  defp connect_closed(port, attempts) do
+    case :gen_tcp.connect({127, 0, 0, 1}, port, [], 200) do
+      {:ok, sock} ->
+        _ = :gen_tcp.close(sock)
+        Process.sleep(25)
+        connect_closed(port, attempts - 1)
+
+      other ->
+        other
+    end
   end
 end

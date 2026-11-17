@@ -1,0 +1,58 @@
+-- reachable_fork.muro — a recursive tree whose actions diverge.
+--
+-- The state is a tree. `init` is `bin (tip 0) (tip 0)`. `move` reaches
+-- `bin (bin (tip 0) (tip 0)) (tip 0)`, and `stay` reaches
+-- `bin (tip 0) (bin (tip 0) (tip 0))`. From either of those, both
+-- actions return to `init`. The cover is those three trees. A walk
+-- that steps only `move` never meets the third, and a walk that steps
+-- only `stay` never meets the second. They do not agree one field
+-- deep: the left child is a bin only at the second tree. Every reward
+-- on the cover is positive. No action stays put, and no state is
+-- absorbing. Nothing in this book names a feature or `all-states`.
+import "../std/nat.muro"
+import "../lib/agent.muro"
+
+data State : Type where
+  tip : Π (n : Nat) → State
+  bin : Π (+ l : State) → Π (r : State) → State
+
+data Action : Type where
+  move : Action
+  stay : Action
+
+def Reward : spec Type := Nat
+
+def step : run Π (s : State) → Π (a : Action) → State × Reward :=
+  λ (s : State) → λ (a : Action) →
+    match s motive (λ _ → State × Reward)
+      | tip _ => (bin (tip 0) (tip 0), 0)
+      | bin l r =>
+          (match l motive (λ _ → State × Reward)
+            | tip _ =>
+                (match r motive (λ _ → State × Reward)
+                  | tip _ =>
+                      (match a motive (λ _ → State × Reward)
+                        | move => (bin (bin (tip 0) (tip 0)) (tip 0), suc 0)
+                        | stay => (bin (tip 0) (bin (tip 0) (tip 0)), suc (suc 0)))
+                  | bin _ _ =>
+                      (match a motive (λ _ → State × Reward)
+                        | move => (bin (tip 0) (tip 0), suc 0)
+                        | stay => (bin (tip 0) (tip 0), suc (suc 0))))
+            | bin _ _ =>
+                (match r motive (λ _ → State × Reward)
+                  | tip _ =>
+                      (match a motive (λ _ → State × Reward)
+                        | move => (bin (tip 0) (tip 0), suc (suc 0))
+                        | stay => (bin (tip 0) (tip 0), suc 0))
+                  | bin _ _ =>
+                      (match a motive (λ _ → State × Reward)
+                        | move => (bin (tip 0) (tip 0), suc (suc 0))
+                        | stay => (bin (tip 0) (tip 0), suc 0))))
+
+def le : spec Π (r : Reward) → Π (q : Reward) → Type := Le
+def max : run Π (r : Reward) → Π (q : Reward) → Reward := maxN
+def bottom : run Reward := 0
+def all-actions : run List Action := cons move (cons stay nil)
+def default-action : run Action := stay
+def horizon : run Nat := 0
+def init : run State := bin (tip 0) (tip 0)
