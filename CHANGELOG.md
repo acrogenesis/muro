@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.21.15
+
+`always` over a keyed family is checked on a fixed script. Key `a` runs `init`, then `signal`, then `signal`. Key `b` runs `init`. A `signal` waits while an earlier instance of its key, already known, is unresolved. `examples/keyed-slots.muro` holds in 171649 reachable states, 729184 transitions. The same book with `signal never held` is refused: `a signal` opens while `a init` is still running.
+
+A retry is that same instance, once. The next time the marked party stops before the server has reached `done` or `stop`, the instance gives up. Giving up counts as resolved, and it is not delivered. A second `init` opens at once. A `signal` with nothing earlier unresolved opens at once and runs the meeting. `eventually` and `leads_to` over a family are not decided yet. The check is the Elixir graph. The temporal theorems are unchanged.
+
+### Manual
+
+- Temporal, Limits, and Examples: the family graph, the counts, and what `resolved` counts.
+
+### Package
+
+- Version 0.21.15.
+
 ## 0.21.14
 
 `--backend c` writes a session stepper beside the runs. Each session is a pure step: the host passes the state and an event, and the function returns the next state and the action, or refuses an event the protocol does not allow. The host keeps the transport. There is no protocol loop. A meeting marked `may fail` is still refused. Rust and Zig are unchanged.
