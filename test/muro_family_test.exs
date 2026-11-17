@@ -56,7 +56,8 @@ defmodule Muro.FamilyTest do
     assert Muro.check_file("examples/keyed-slots.muro") == :ok
 
     assert Check.temporal_lines() == [
-             "family slots: slot per key of Event"
+             "family slots: slot per key of Event",
+             "temporal no-overtake: holds in 171649 reachable states, 729184 transitions"
            ]
   end
 
@@ -195,28 +196,28 @@ defmodule Muro.FamilyTest do
   end
 
   test "forall over key stays the key sort when a data type is named key" do
-    assert {:error, msg} =
-             check("""
-             data key : Type where
-               wrap : Nat -> key
-             data Event : Type where
-               init : Event
-               signal : Event
-             session ping := send Nat end
-             session pong := recv Nat end
-             conform a : ping := put 0 done
-             conform b : pong := get (n : Nat) done
-             meet wire : a with b buffer 1
-             family slots : wire per key of Event
-               init never held
-               signal held while earlier unresolved
-             temporal named : slots :=
-               forall (k : key). always ((opened k signal) implies (resolved k init))
-             """)
+    assert check("""
+           data key : Type where
+             wrap : Nat -> key
+           data Event : Type where
+             init : Event
+             signal : Event
+           session ping := send Nat end
+           session pong := recv Nat end
+           conform a : ping := put 0 done
+           conform b : pong := get (n : Nat) done
+           meet wire : a with b buffer 1
+           family slots : wire per key of Event
+             init never held
+             signal held while earlier unresolved
+           temporal named : slots :=
+             forall (k : key). always ((opened k signal) implies (resolved k init))
+           """) == :ok
 
-    assert msg =~ ~r/\d+:\d+: named: not yet decided/
-    refute msg =~ "ranges over an open type"
-    refute msg =~ "expects a key"
+    assert ["family slots: wire per key of Event", line] = Check.temporal_lines()
+    assert line =~ ~r/^temporal named: holds in \d+ reachable states, \d+ transitions$/
+    refute line =~ "ranges over an open type"
+    refute line =~ "expects a key"
   end
 
   test "a constructor with no rule is refused" do
@@ -320,7 +321,9 @@ defmodule Muro.FamilyTest do
 
   # `resolved k init` only. An earlier signal is not this formula: the
   # atoms take a constructor name, not an instance. See manual/limits.md.
-  test "a formula over the family is not yet decided" do
+  # `always` is decided. `leads_to` is not, so the book is refused there
+  # and the holds line is not stored.
+  test "always is decided and leads_to is not" do
     src =
       @slots <>
         """
@@ -331,9 +334,9 @@ defmodule Muro.FamilyTest do
         """
 
     assert {:error, msg} = check(src)
-    assert msg =~ ~r/\d+:\d+: no-overtake: not yet decided/
     assert msg =~ ~r/\d+:\d+: no-starve: not yet decided/
-    refute msg =~ "step 2"
+    refute msg =~ "no-overtake"
+    refute msg =~ "holds in"
   end
 
   test "a constructor the kind does not have is not the decision" do
