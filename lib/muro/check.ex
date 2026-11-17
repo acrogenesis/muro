@@ -3986,6 +3986,10 @@ defmodule Muro.Check do
     loc = Print.loc_prefix(Map.get(d, :loc))
 
     case result do
+      # The line is the count. For a family that count is the fixed
+      # script at one retry: a model hypothesis, not data-independence.
+      # The sentence stands beside the count in the manual. A meeting
+      # uses this same line, and that count is the proved graph.
       {:ok, n, m} ->
         {:note, "temporal #{name}: holds in #{n} reachable states, #{transitions(m)}"}
 
@@ -4937,8 +4941,10 @@ defmodule Muro.Check do
   same recorded outcome and does not walk the meeting again. A temporal
   declaration over a family reads that same check. When the family does
   not check, the formula is `skipped because <family> does not check`
-  and is not walked. `always` explores the family graph once per family
-  and shares it. `eventually` and `leads_to` do not explore it.
+  and is not walked. `always` explores the family graph once per family,
+  after every formula of that family has been walked and at least one
+  `always` is well-formed, and shares it. An ill-formed formula does
+  not explore it. `eventually` and `leads_to` do not explore it.
   """
   def check_sig(named_book, opts \\ []) do
     note_check()
@@ -5055,15 +5061,16 @@ defmodule Muro.Check do
     meet_slots ++ family_slots
   end
 
-  # One search for every `always` on this family. A liveness formula
-  # does not build the graph.
+  # One search for every well-formed `always` on this family. The
+  # formulas are walked first. An ill-formed formula, and a liveness
+  # formula, do not build the graph.
   defp family_prep(book, family, :ok, decls) do
     formulas =
       for {%{meeting: name, formula: formula}, _i} <- decls,
           name == family.name,
           do: formula
 
-    if Enum.any?(formulas, &family_always?/1) do
+    if Muro.Family.needs_graph?(book, family, formulas) do
       Muro.Family.Graph.prepare(book, family)
     else
       :skip
@@ -5071,10 +5078,6 @@ defmodule Muro.Check do
   end
 
   defp family_prep(_book, _family, _status, _decls), do: :skip
-
-  defp family_always?({:forall, _, _, body}), do: family_always?(body)
-  defp family_always?({:always, _}), do: true
-  defp family_always?(_), do: false
 
   defp family_slots(_book, [], _meetings), do: []
 

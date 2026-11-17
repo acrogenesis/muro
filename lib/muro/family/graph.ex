@@ -9,13 +9,18 @@ defmodule Muro.Family.Graph do
   index can arrive after a later one has opened.
 
   `always` is decided here. `eventually` and `leads_to` are not.
-  Nothing in this module is an Agda proof. The script is not a theorem
-  about every key.
+  Nothing in this module is an Agda proof.
+
+  A count of reachable states is a model hypothesis, not
+  data-independence. The model is one retry and the fixed script.
   """
 
   alias Muro.Temporal.Graph, as: Meet
 
   # One rerun after the first attempt. The next death gives up.
+  # With the fixed script in `instances/2`, this bound is the model.
+  # A "holds in N states" count is a model hypothesis, not
+  # data-independence.
   @bound 1
 
   @doc false
@@ -24,29 +29,68 @@ defmodule Muro.Family.Graph do
   @doc """
   `{:ok, search}` with the reachable states, the breadth-first parents,
   and the successor-table size. `{:error, message}` when the meeting
-  has no compiled graph.
+  has no compiled graph, or when that meeting is stuck.
+
+  The meeting is the one `Muro.Temporal.prepare/3` returns, so `NoStuck`
+  runs once on the meeting before any family state is built. A may-fail
+  death or drop is a step, and a bad view that still has one is not
+  stuck. A meeting the checker has accepted stays accepted. The family
+  counts are the script, and this pass does not change them.
+
+  The counts are a model hypothesis, not data-independence.
   """
   def prepare(book, family, opts \\ []) when is_list(book) do
+    # Noted before the cache, so a caller can see that prepare ran
+    # even when the suite reuses a search it already built.
+    Muro.Explore.note(:family, family.name)
+
     with {:ok, meet} <- fetch_meet(book, family.meeting),
-         {:ok, mg} <- Muro.Temporal.meeting_graph(book, meet) do
+         {:ok, %{g: mg}} <- Muro.Temporal.prepare(book, meet.name, :ok) do
       instances = Keyword.get(opts, :instances) || instances(book, family)
-      {server, task} = roles(mg)
+      rules = Map.new(family.rules, &{&1.ctor, &1.hold})
 
-      g = %{
-        family: family.name,
-        meet: mg,
-        instances: instances,
-        by_id: Map.new(instances, &{&1.id, &1}),
-        rules: Map.new(family.rules, &{&1.ctor, &1.hold}),
-        keys: instances |> Enum.map(& &1.key) |> Enum.uniq(),
-        server: server,
-        task: task,
-        init: Meet.init(mg),
-        start: Tuple.duplicate(:absent, length(instances))
-      }
+      remember({mg, instances, rules, family.name}, fn ->
+        compose(family, mg, instances, rules)
+      end)
+    end
+  end
 
-      {states, parents, transitions} = reachable(g)
-      {:ok, %{g: g, states: states, parents: parents, transitions: transitions}}
+  defp compose(family, mg, instances, rules) do
+    {server, task} = roles(mg)
+
+    g = %{
+      family: family.name,
+      meet: mg,
+      instances: instances,
+      by_id: Map.new(instances, &{&1.id, &1}),
+      rules: rules,
+      keys: instances |> Enum.map(& &1.key) |> Enum.uniq(),
+      server: server,
+      task: task,
+      init: Meet.init(mg),
+      start: Tuple.duplicate(:absent, length(instances))
+    }
+
+    {states, parents, transitions} = reachable(g)
+    {:ok, %{g: g, states: states, parents: parents, transitions: transitions}}
+  end
+
+  # The worked script is about 171649 states. The suite sets
+  # `:family_graph_cache` and reuses one search. A check outside the
+  # suite builds that graph once per family and does not keep it.
+  defp remember(key, fun) do
+    if Application.get_env(:muro, :family_graph_cache, false) do
+      case :persistent_term.get({__MODULE__, key}, :miss) do
+        :miss ->
+          result = fun.()
+          if match?({:ok, _}, result), do: :persistent_term.put({__MODULE__, key}, result)
+          result
+
+        result ->
+          result
+      end
+    else
+      fun.()
     end
   end
 
@@ -79,9 +123,15 @@ defmodule Muro.Family.Graph do
   `{:ok, states, transitions}` when every `always` instance holds.
   `{:error, message}` is the breadth-first trace of the first that
   does not. A formula that is not `always` is `not yet decided`.
+  A `forall` whose type is not `key` is `forall over <name> is not a key`.
+
+  `states` is a model hypothesis, not data-independence.
   """
   def decide(%{g: g, states: states, parents: parents, transitions: m}, formula) do
     case formulas(g, formula) do
+      {:error, msg} ->
+        {:error, msg}
+
       :live ->
         {:error, "not yet decided"}
 
@@ -141,17 +191,34 @@ defmodule Muro.Family.Graph do
   end
 
   defp formulas(g, formula) do
-    {binders, body} = peel(formula, [])
+    case peel(formula, []) do
+      {:error, _} = err ->
+        err
 
-    case body do
-      {:always, prop} -> instantiate(prop, binders, g.keys)
-      _ -> :live
+      {:ok, {binders, {:always, prop}}} ->
+        instantiate(prop, binders, g.keys)
+
+      {:ok, _} ->
+        :live
     end
   end
 
   defp peel({:forall, x, {:dat, "key", []}, body}, acc), do: peel(body, [{:key, x} | acc])
-  defp peel({:forall, _x, _ty, body}, acc), do: peel(body, [{:value, nil} | acc])
-  defp peel(body, acc), do: {Enum.reverse(acc), body}
+
+  defp peel({:forall, _x, ty, _body}, _acc) do
+    {:error, "forall over #{forall_ty(ty)} is not a key"}
+  end
+
+  defp peel(body, acc), do: {:ok, {Enum.reverse(acc), body}}
+
+  defp forall_ty(:bit), do: "Bit"
+  defp forall_ty(:nat), do: "Nat"
+  defp forall_ty(:unit), do: "Unit"
+  defp forall_ty({:dat, name, _}), do: name
+  defp forall_ty({:vec, _, _}), do: "Vec"
+  defp forall_ty({:pair, _, _}), do: "a pair"
+  defp forall_ty({:rec, _}), do: "a record"
+  defp forall_ty(other), do: inspect(other)
 
   defp instantiate(prop, [], _keys), do: [prop]
 
@@ -160,8 +227,6 @@ defmodule Muro.Family.Graph do
       instantiate(subst(prop, var, key), rest, keys)
     end)
   end
-
-  defp instantiate(prop, [{:value, _} | rest], keys), do: instantiate(prop, rest, keys)
 
   defp subst({:not, p}, var, key), do: {:not, subst(p, var, key)}
   defp subst({:and, p, q}, var, key), do: {:and, subst(p, var, key), subst(q, var, key)}
@@ -221,6 +286,8 @@ defmodule Muro.Family.Graph do
       end)
   end
 
+  # `@bound` is one retry. `instances/2` is the fixed script. The
+  # length of this search is a model hypothesis, not data-independence.
   defp reachable(g) do
     drain(g, [g.start], [], MapSet.new([g.start]), %{}, [], 0)
   end

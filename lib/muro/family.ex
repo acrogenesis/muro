@@ -99,6 +99,19 @@ defmodule Muro.Family do
 
   defp decide_always(_book, _family, _formula, {:error, msg}), do: {:error, msg}
 
+  @doc false
+  def needs_graph?(book, %{key: key}, formulas) when is_list(book) and is_list(formulas) do
+    case closed_kind(book, key) do
+      {:ok, data} ->
+        Enum.any?(formulas, fn formula ->
+          always?(formula) and walk_formula(book, data, %{}, formula) == :ok
+        end)
+
+      _ ->
+        false
+    end
+  end
+
   defp meeting_ok(name, :absent), do: {:error, "unknown meeting #{name}"}
   defp meeting_ok(name, :unchecked), do: {:error, "skipped because #{name} does not check"}
   defp meeting_ok(_name, :ok), do: :ok
@@ -184,25 +197,15 @@ defmodule Muro.Family do
   end
 
   # `key` is the sort, including when a data type of that name exists.
+  # Any other binder is refused here. Deciding used to peel it and
+  # ignore it, so `forall (c : Bit). always true` held vacuously.
   defp bind(_book, {:dat, "key", []}), do: {:ok, :key}
-  defp bind(_book, :bit), do: {:ok, :value}
-  defp bind(_book, :nat), do: {:error, "forall over Nat ranges over an open type"}
+  defp bind(_book, ty), do: {:error, "forall over #{forall_ty(ty)} is not a key"}
 
-  defp bind(book, {:dat, name, _}) do
-    case Enum.find(book, &(&1[:kind] == :data and &1.name == name)) do
-      %{params: params, ctors: ctors} = data ->
-        if ctors != [] and Enum.all?(ctors, &nullary?(&1, data)) and params_closed?(params) do
-          {:ok, :value}
-        else
-          {:error, "forall over #{name} ranges over an open type"}
-        end
-
-      _ ->
-        {:error, "forall over #{name} ranges over an open type"}
-    end
-  end
-
-  defp bind(_book, ty), do: {:error, "forall over #{ty_open(ty)} ranges over an open type"}
+  defp forall_ty(:bit), do: "Bit"
+  defp forall_ty(:nat), do: "Nat"
+  defp forall_ty({:dat, name, _}), do: name
+  defp forall_ty(ty), do: ty_open(ty)
 
   defp ty_open(:unit), do: "Unit"
   defp ty_open({:vec, _, _}), do: "Vec"

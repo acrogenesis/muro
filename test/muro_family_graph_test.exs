@@ -152,6 +152,43 @@ defmodule Muro.Family.GraphTest do
     assert counts(one) == counts(two)
   end
 
+  test "decide refuses a quantifier that is not a key" do
+    search = %{
+      g: %{keys: ["a"], family: "slots", instances: []},
+      states: [],
+      parents: %{},
+      transitions: 0
+    }
+
+    assert Graph.decide(search, {:forall, "c", :bit, {:always, true}}) ==
+             {:error, "forall over Bit is not a key"}
+
+    assert Graph.decide(search, {:forall, "c", {:dat, "Event", []}, {:always, true}}) ==
+             {:error, "forall over Event is not a key"}
+
+    assert Graph.decide(search, {:forall, "c", :bit, {:eventually, true}}) ==
+             {:error, "forall over Bit is not a key"}
+  end
+
+  test "prepare refuses a stuck meeting before the family search" do
+    src = """
+    data Event : Type where
+      init : Event
+    session ping := recv Nat end
+    session pong := recv Nat end
+    conform a : ping := get (n : Nat) done
+    conform b : pong := get (n : Nat) done
+    meet wire : a with b buffer 1
+    family slots : wire per key of Event
+      init never held
+    """
+
+    {:ok, book} = Parser.parse(src)
+    family = Enum.find(book, &(&1.kind == :family))
+    assert {:error, msg} = Graph.prepare(book, family)
+    assert msg =~ "deadlock"
+  end
+
   test "always false fails at the start" do
     src = """
     data Event : Type where

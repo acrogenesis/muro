@@ -1004,7 +1004,9 @@ defmodule Muro.Explore do
   # A test listens by passing its pid. Production leaves the key unset,
   # and a check then does nothing here. `:meeting` is the checker's one
   # walk, which records the source configuration graph. `:graph` is the
-  # compiled configuration graph, explored once per meeting.
+  # compiled configuration graph, explored once per meeting. `:family`
+  # is the keyed-family search. It is noted when that search is asked
+  # for, including when the suite reuses one it already built.
   @key {__MODULE__, :hook}
 
   @doc false

@@ -2,13 +2,13 @@
 
 ## 0.21.15
 
-`always` over a keyed family is checked on a fixed script. Key `a` runs `init`, then `signal`, then `signal`. Key `b` runs `init`. A `signal` waits while an earlier instance of its key, already known, is unresolved. `examples/keyed-slots.muro` holds in 171649 reachable states, 729184 transitions. The same book with `signal never held` is refused: `a signal` opens while `a init` is still running.
+`always` over a keyed family is checked on a fixed script. Key `a` runs `init`, then `signal`, then `signal`. Key `b` runs `init`. A `signal` opens when no earlier arrived instance of its key is unresolved. An instance that has not arrived is not unresolved. `examples/keyed-slots.muro` holds in 171649 reachable states, 729184 transitions. That count is a model hypothesis, not data-independence: the script is fixed and a retry happens once. The checker builds the graph once for the family, and that search is the cost of the check. The same book with `signal never held` in place of `signal held while earlier unresolved` is refused: `a signal` opens while `a init` is still running. Deleting the rule is `no rule for signal`.
 
-A retry is that same instance, once. The next time the marked party stops before the server has reached `done` or `stop`, the instance gives up. Giving up counts as resolved, and it is not delivered. A second `init` opens at once. A `signal` with nothing earlier unresolved opens at once and runs the meeting. `eventually` and `leads_to` over a family are not decided yet. The check is the Elixir graph. The temporal theorems are unchanged.
+`resolved` holds when every counting instance of that constructor is resolved, and there may be none. A `signal` that opens before any `init` is known does not refute `no-overtake`. The hold line is the stronger guard. A retry is that same instance, once. The next time the marked party stops before the server has reached `done` or `stop`, the instance gives up. Giving up counts as resolved, and it is not delivered. A second `init` opens at once. A `signal` with nothing earlier unresolved opens at once and runs the meeting. `eventually` and `leads_to` over a family are not decided yet. A `forall` over a type other than `key` is refused. The check is the Elixir graph. The temporal theorems are unchanged.
 
 ### Manual
 
-- Temporal, Limits, and Examples: the family graph, the counts, and what `resolved` counts.
+- Temporal, Limits, and Examples: the family graph, the counts, what `resolved` counts, and the cost of that search.
 
 ### Package
 
