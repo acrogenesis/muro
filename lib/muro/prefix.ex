@@ -67,10 +67,9 @@ defmodule Muro.Prefix do
 
   # The declaration still names a continuation as `{:sess, _, _}`.
   # Dualising that text crashes. The position search opens the
-  # continuation and dualises that.
+  # continuation and dualises that. `open_use` has already refused
+  # every other shape, so a missing declaration is the `nil` branch.
   defp source_proto(_book, {:dual, ref}), do: {:ok, {:dual, ref}}
-
-  defp source_proto(_book, _), do: {:error, "unknown session"}
 
   defp decl(book, name) when is_binary(name) do
     Enum.find(book, &(Map.get(&1, :kind) == :session and &1.name == name))
