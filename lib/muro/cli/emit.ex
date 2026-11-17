@@ -41,6 +41,14 @@ defmodule Muro.CLI.Emit do
         default: "false",
         doc:
           "With --backend exunit, also collect the closed equations of the files this book imports directly. It is an error with any other backend. Absent, the suite is this file only."
+      },
+      %{
+        name: :prefix,
+        type: :string,
+        value: "TEXT",
+        default: "",
+        doc:
+          "With --backend c, prepend TEXT to every run the host calls and to that book's session entry points. TEXT is a C identifier, and it includes the separator, as in admit_. Other backends refuse the flag. Absent, the C names are unchanged."
       }
     ]
   end
@@ -53,7 +61,10 @@ defmodule Muro.CLI.Emit do
       """),
       Muro.CLI.Text.section(
         "USAGE",
-        Muro.CLI.Text.pre(["muro emit path.muro [--backend NAME] [--node NAME] [--imports]"])
+        Muro.CLI.Text.pre([
+          "muro emit path.muro [--backend NAME] [--node NAME] [--imports]",
+          "    [--prefix TEXT]"
+        ])
       ),
       Muro.CLI.Text.section(
         "ARGUMENTS",
@@ -106,15 +117,16 @@ defmodule Muro.CLI.Emit do
         backend = Keyword.get(parsed, :backend, "elixir")
         node = Keyword.get(parsed, :node)
         imports? = Keyword.get(parsed, :imports, false)
+        prefix = Keyword.get(parsed, :prefix)
 
         case paths do
-          [path] -> emit(path, backend, node, imports?, nif)
+          [path] -> emit(path, backend, node, imports?, nif, prefix)
           _other -> {:raise, "", "expected one path"}
         end
     end
   end
 
-  defp emit(path, backend, node, imports?, nif) do
+  defp emit(path, backend, node, imports?, nif, prefix) do
     cond do
       backend == "beam" ->
         {:raise, "",
@@ -123,8 +135,14 @@ defmodule Muro.CLI.Emit do
       imports? and backend != "exunit" ->
         {:raise, "", "--imports is only valid with --backend exunit"}
 
+      prefix not in [nil, ""] and backend != "c" ->
+        {:raise, "", "--prefix is only valid with --backend c"}
+
       backend == "exunit" and is_nil(node) ->
         emit_exunit(path, imports?)
+
+      backend == "c" and is_nil(node) ->
+        emit_c(path, nif, prefix)
 
       true ->
         dispatch(path, backend, node, nif)
@@ -172,13 +190,6 @@ defmodule Muro.CLI.Emit do
     end
   end
 
-  defp dispatch(path, "c", nil, nif) do
-    case Muro.emit_c(path, nif: nif?(nif)) do
-      {:ok, files} -> {:ok, Muro.CLI.join_lines(files), ""}
-      {:error, message} -> {:raise, "", message}
-    end
-  end
-
   defp dispatch(path, "rust", nil, _nif) do
     files(Muro.emit_rust(path))
   end
@@ -221,6 +232,16 @@ defmodule Muro.CLI.Emit do
 
   defp dispatch(_path, other, nil, _nif) do
     {:raise, "", "unknown backend: #{other}"}
+  end
+
+  defp emit_c(path, nif, prefix) do
+    opts = [nif: nif?(nif)]
+    opts = if prefix in [nil, ""], do: opts, else: Keyword.put(opts, :c_prefix, prefix)
+
+    case Muro.emit_c(path, opts) do
+      {:ok, files} -> {:ok, Muro.CLI.join_lines(files), ""}
+      {:error, message} -> {:raise, "", message}
+    end
   end
 
   defp files({:ok, paths}), do: {:ok, Muro.CLI.join_lines(paths), ""}

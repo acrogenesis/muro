@@ -408,12 +408,14 @@ defmodule Muro.Gen do
     end
   end
 
+  defp entry_c_prefix(entry), do: Map.get(entry, :c_prefix) || ""
+
   defp native_parts(entry, :c, book, _stem, _root) do
     # The header is named from the target (`src/rounding.c` writes
     # `rounding.h`). The book's stem would include a different file.
     stem = entry.target |> Path.rootname() |> Path.basename()
 
-    case Muro.Emit.C.prepare(book, stem, path: entry.book) do
+    case Muro.Emit.C.prepare(book, stem, path: entry.book, c_prefix: entry_c_prefix(entry)) do
       {:ok, header, source, _sigs} ->
         {:ok, [{entry.target, source}, {header_rel(entry.target), header}]}
 

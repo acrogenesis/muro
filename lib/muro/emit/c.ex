@@ -89,6 +89,45 @@ defmodule Muro.Emit.C do
   @doc false
   def source_id(name) when is_binary(name), do: spell(name)
 
+  # Named constants a host can `_Static_assert`. The struct field stays
+  # `uint8_t`. The enumerator is the tag the struct already stores.
+  @doc false
+  def ctor_tag_type(type_name) when is_binary(type_name) do
+    "muro__tag_#{source_id(type_name)}"
+  end
+
+  @doc false
+  def ctor_tag(type_name, ctor_name) when is_binary(type_name) and is_binary(ctor_name) do
+    "#{ctor_tag_type(type_name)}_#{source_id(ctor_name)}"
+  end
+
+  # One number space for every data declaration in the book, in book
+  # order, constructors in declaration order. The stem keeps two books
+  # from defining the same enum. `prefix` is prepended when the host
+  # asked for one, and it already includes the separator.
+  @doc false
+  def ctor_word_type(stem, prefix \\ "") when is_binary(stem) and is_binary(prefix) do
+    prefix <> "muro__word_" <> Name.encode(stem)
+  end
+
+  @doc false
+  def ctor_word(stem, type_name, ctor_name, prefix \\ "")
+      when is_binary(stem) and is_binary(type_name) and is_binary(ctor_name) and
+             is_binary(prefix) do
+    ctor_word_type(stem, prefix) <> "_#{source_id(type_name)}_#{source_id(ctor_name)}"
+  end
+
+  @doc false
+  def ctor_words(book, stem, prefix \\ "") when is_list(book) and is_binary(stem) do
+    book
+    |> data_defs()
+    |> Enum.flat_map(fn d ->
+      Enum.map(d.ctors, fn c ->
+        %{type: d.name, ctor: c.name, word: ctor_word(stem, d.name, c.name, prefix)}
+      end)
+    end)
+  end
+
   @doc false
   def generated_samples do
     tags = ~w(
@@ -227,38 +266,52 @@ defmodule Muro.Emit.C do
   `export: false`.
   """
   def prepare(book, stem, opts \\ []) when is_list(book) and is_binary(stem) and is_list(opts) do
+    prefix = Keyword.get(opts, :c_prefix, "")
     path = Keyword.get(opts, :path, stem <> ".muro")
 
-    case IR.elaborate(book) do
-      {:ok, funs} ->
-        nm = name_map(book)
+    with :ok <- validate_c_prefix(prefix),
+         {:ok, funs} <- IR.elaborate(book) do
+      nm = name_map(book)
 
-        case compile_funs(funs, book, nm) do
-          {:ok, sigs, texts, extras} ->
-            runs = Emit.run_defs(book)
-            bytes? = bytes_image?(funs) or data_field_bytes?(book)
-            strings? = strings_image?(funs) or data_field_string?(book)
+      case compile_funs(funs, book, nm, prefix) do
+        {:ok, sigs, texts, extras} ->
+          runs = Emit.run_defs(book)
+          bytes? = bytes_image?(funs) or data_field_bytes?(book)
+          strings? = strings_image?(funs) or data_field_string?(book)
 
-            with :ok <- Emit.refuse_may_fail(book),
-                 :ok <- Emit.refuse_unboxed_opt(book, funs),
-                 {:ok, opt_src} <- opt_typedefs(funs, book, bytes?),
-                 {:ok, sess_h, sess_c} <- Muro.Emit.C.Session.fragments(book, path, nm, sigs) do
-              header = header(book, sigs, stem, nm, opt_src, bytes?, strings?)
+          with :ok <- Emit.refuse_may_fail(book),
+               :ok <- Emit.refuse_unboxed_opt(book, funs),
+               {:ok, opt_src} <- opt_typedefs(funs, book, bytes?),
+               {:ok, sess_h, sess_c} <-
+                 Muro.Emit.C.Session.fragments(book, path, nm, sigs,
+                   c_prefix: prefix,
+                   stem: stem
+                 ) do
+            header = header(book, sigs, stem, nm, opt_src, bytes?, strings?, prefix)
 
-              source =
-                source(book, runs, sigs, texts, extras, stem, nm, opt_src, bytes?, strings?)
+            source =
+              source(book, runs, sigs, texts, extras, stem, nm, opt_src, bytes?, strings?)
 
-              {:ok, splice_session(header, sess_h), source <> sess_c, sigs}
-            end
+            {:ok, splice_session(header, sess_h), source <> sess_c, sigs}
+          end
 
-          {:error, _} = err ->
-            err
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+        {:error, _} = err ->
+          err
+      end
+    else
+      {:error, reason} -> {:error, reason}
     end
   end
+
+  # Empty is the 0.21.14 names. Anything else is concatenated, so the
+  # caller includes the separator (`admit_`).
+  defp validate_c_prefix(""), do: :ok
+
+  defp validate_c_prefix(prefix) when is_binary(prefix) do
+    if prefix =~ ~r/\A[A-Za-z_][A-Za-z0-9_]*\z/, do: :ok, else: {:error, "c:prefix"}
+  end
+
+  defp validate_c_prefix(_), do: {:error, "c:prefix"}
 
   # The header's last non-empty line is the file guard. An earlier
   # `#endif` closes `muro__ALLOC`, and a comment may contain the same
@@ -289,11 +342,11 @@ defmodule Muro.Emit.C do
     end)
   end
 
-  defp compile_funs(funs, book, nm) do
+  defp compile_funs(funs, book, nm, prefix \\ "") do
     runs = Emit.run_defs(book)
 
     with {:ok, groups, step_map} <- Emit.partition_funs(funs, runs) do
-      names = Emit.def_names(book, &spell/1, nm.taken)
+      names = Emit.def_names(book, &(prefix <> spell(&1)), nm.taken)
       by_name = Map.new(groups, fn {fun, _} -> {fun.name, fun} end)
 
       Enum.reduce_while(groups, {:ok, [], [], []}, fn {fun, _steps}, {:ok, sigs, texts, extras} ->
@@ -1969,7 +2022,7 @@ defmodule Muro.Emit.C do
     s |> String.split("\n") |> Enum.map_join("\n", &(pad <> &1))
   end
 
-  defp header(book, sigs, stem, nm, opts, bytes?, strings?) do
+  defp header(book, sigs, stem, nm, opts, bytes?, strings?, prefix) do
     guard = guard(stem)
 
     parts = [
@@ -1978,8 +2031,7 @@ defmodule Muro.Emit.C do
       "#define #{guard}",
       "#include <stdint.h>",
       alloc_macro(),
-      nat_struct(),
-      unit_struct(),
+      prelude_guard(),
       if(bytes?, do: bytes_header(), else: ""),
       if(strings?, do: string_header(), else: ""),
       data_typedefs(book),
@@ -1987,11 +2039,25 @@ defmodule Muro.Emit.C do
       atom_enum(book, nm),
       stream_typedef(sigs, book),
       data_bodies(book),
+      word_enum(book, stem, prefix),
       prototypes(sigs),
       "#endif"
     ]
 
     join_parts(parts)
+  end
+
+  # `muro__nat` and `muro__unit` are the same two structs in every book.
+  # One guard lets two headers share a translation unit.
+  defp prelude_guard do
+    """
+    #ifndef MURO__PRELUDE
+    #define MURO__PRELUDE
+    #{nat_struct()}
+    #{unit_struct()}
+    #endif
+    """
+    |> String.trim()
   end
 
   defp source(book, runs, sigs, funs, extras, stem, nm, _opts, bytes?, strings?) do
@@ -2629,6 +2695,46 @@ defmodule Muro.Emit.C do
     end)
   end
 
+  defp word_enum(book, stem, prefix) do
+    rows = ctor_words(book, stem, prefix)
+
+    if rows == [] do
+      ""
+    else
+      ty = ctor_word_type(stem, prefix)
+
+      members =
+        rows
+        |> Enum.with_index()
+        |> Enum.map_join(",\n  ", fn {row, i} -> "#{row.word} = #{i}" end)
+
+      """
+      typedef enum #{ty} {
+        #{members}
+      } #{ty};
+      """
+      |> String.trim()
+    end
+  end
+
+  defp tag_enum(%{ctors: []}), do: ""
+
+  defp tag_enum(d) do
+    ty = ctor_tag_type(d.name)
+
+    members =
+      d.ctors
+      |> Enum.with_index()
+      |> Enum.map_join(",\n  ", fn {ctor, i} -> "#{ctor_tag(d.name, ctor.name)} = #{i}" end)
+
+    """
+    typedef enum #{ty} {
+      #{members}
+    } #{ty};
+    """
+    |> String.trim()
+  end
+
   defp struct_src(d, book) do
     name = struct_name(d.name)
     tagf = g("field_tag")
@@ -2663,15 +2769,20 @@ defmodule Muro.Emit.C do
 
     union_body = Enum.join(["    char #{unused};" | union_members], "\n")
 
-    """
-    struct #{name} {
-      uint8_t #{tagf}; /* #{comment} */
-      union {
-    #{union_body}
-      } #{asf};
-    };
-    """
-    |> String.trim()
+    body =
+      """
+      struct #{name} {
+        uint8_t #{tagf}; /* #{comment} */
+        union {
+      #{union_body}
+        } #{asf};
+      };
+      """
+      |> String.trim()
+
+    [tag_enum(d), body]
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join("\n")
   end
 
   defp data_ctors(book, nm, sigs) do

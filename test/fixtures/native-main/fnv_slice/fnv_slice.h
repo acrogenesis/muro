@@ -5,10 +5,13 @@
 #ifndef muro__ALLOC
 #define muro__ALLOC(n) malloc(n)
 #endif
+#ifndef MURO__PRELUDE
+#define MURO__PRELUDE
 typedef struct muro__nat muro__nat;
 struct muro__nat { uint8_t muro__field_tag; muro__nat *muro__field_suc; }; /* 0 = zero, 1 = suc */
 typedef struct muro__unit muro__unit;
 struct muro__unit { uint8_t muro__field_tag; };
+#endif
 #include <stddef.h>
 typedef struct { const uint8_t *p; size_t n; } muro__slice;
 static const uint8_t muro__empty_bytes[1] = {0};

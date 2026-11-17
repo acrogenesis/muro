@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.21.19
+
+`--backend c` steps a session with a constructor word. `muro__sess_<name>_step_word` takes the direction, the payload kind, and a `uint64_t`. A data word is the constructor's number in this book: every data declaration, in book order, then that declaration's constructors. The name-string step still works. A pair, a record, a vector, and a constructor with fields stay on that step. The header names the status, the direction, and the payload kind, and it names each constructor twice: the tag inside its type, and the flat word. `MURO_SESS_SEND` is 1, `MURO_SESS_RECV` is 2, `MURO_SESS_PICK` is 4, and `MURO_SESS_DATA` is 8. The first constructor of a type is tag 0.
+
+`struct muro__nat` and `struct muro__unit` sit under one include guard. Two emitted headers can share a translation unit. Two session headers with the same number of nat slots share the state struct. A different count is a compile error. A bytes typedef and a string typedef stay in the book that uses them. A data struct keeps the source spelling, so two books that declare the same type still cannot be included together.
+
+A host passes `int64_t` to an `I64` run, including −1. `lti` compares that value as signed. Session init still takes `uint64_t`.
+
+`run internal` is `static` and is not a header entry. `--prefix`, and `c_prefix:` on a `:c` manifest entry (`c_prefix` in `muro.toml`), prepends that text to every run and to that book's session entry points. The text includes the separator. Without a prefix the names are unchanged. Two session books with no prefix both define `muro__sess_init`.
+
+The Elixir emitter omits a `match` clause whose constructor the scrutinee cannot return. A match on a value the book still builds keeps every clause.
+
+### Manual
+
+- Emit, Sessions, Machine numbers, Committed modules, and The executable: the word step, the named constants, the shared prelude, an `I64` of −1, and the C prefix.
+
+### Package
+
+- Version 0.21.19.
+
 ## 0.21.16
 
 `mix muro.synth` ranks a recursive `State` that does not declare `all-states`. `init` is the state the walk starts from, or a list of them. The cover is every state reached from `init` under `step` of every action in `all-actions`, when that set closes within 256 states. A cover of 256 states is accepted. A successor that would exceed 256 states is refused, and no prefix of that set is certified. The closure is computed in Elixir. It is not an Agda theorem. The predicate that survives is certified on that cover by the same ranking as a declared cover. A book that declares `all-states` is unchanged. Recursion under a product, with no `all-states`, is refused when the environment is opened. A value `step` returns that is not a `State` is refused before any ranking.

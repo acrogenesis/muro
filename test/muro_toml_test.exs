@@ -135,6 +135,51 @@ defmodule Muro.TomlTest do
     assert dup =~ "duplicate target src/a.h (modules entries 1 and 2)"
   end
 
+  test "c_prefix is stored for a c entry and refused for another backend" do
+    dir = tmp()
+    write_book(dir, "muro/one.muro")
+    version = Mix.Tasks.Muro.version()
+
+    assert {:ok, manifest} =
+             load(dir, """
+             muro = "#{version}"
+
+             [[modules]]
+             book = "muro/one.muro"
+             target = "src/one.c"
+             backend = "c"
+             c_prefix = "admit_"
+             """)
+
+    assert [%{kind: :c, c_prefix: "admit_"}] = manifest.modules
+
+    assert {:error, other} =
+             load(dir, """
+             muro = "#{version}"
+
+             [[modules]]
+             book = "muro/one.muro"
+             target = "src/one.rs"
+             backend = "rust"
+             c_prefix = "admit_"
+             """)
+
+    assert other =~ "c_prefix: is only valid for kind: :c"
+
+    assert {:error, bad} =
+             load(dir, """
+             muro = "#{version}"
+
+             [[modules]]
+             book = "muro/one.muro"
+             target = "src/one.c"
+             backend = "c"
+             c_prefix = "1bad"
+             """)
+
+    assert bad =~ "c_prefix: must be a C identifier prefix"
+  end
+
   test "paths outside the project and a book that is missing are refused" do
     dir = tmp()
     version = Mix.Tasks.Muro.version()
