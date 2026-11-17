@@ -102,16 +102,79 @@ defmodule Muro.Synth.Oracle do
     end)
   end
 
-  def cover(host) do
-    if host.all_states, do: host.all_states, else: reachable(host, host.states)
+  # A nullary cover is finite by the constructors. A reachable cover of a
+  # self-referential `State` is not: `step` can build a new term at every
+  # state. 256 admits a term graph of a few dozen states, which the
+  # certificate already ranks, and refuses a successor that would exceed
+  # that count without building that certificate. Size 256 is accepted.
+  # It is not the inhabitant cap of 32, and it is not the reachability-table
+  # cap. The states already met are not returned.
+  @reachable_cap 256
+
+  def reachable_cap, do: @reachable_cap
+
+  def reachable_bound_message do
+    "reachable states are not finite within #{@reachable_cap}; declare all-states"
   end
 
+  def step_not_state_message, do: "step has a value that is not a State"
+
+  def step_left_message, do: "step left the reachable cover"
+
+  def cover(host) do
+    cond do
+      host.all_states ->
+        host.all_states
+
+      nullary_cover?(host) ->
+        reachable(host, host.states)
+
+      true ->
+        # A finite structured enumeration. `step` of a complete inhabitant
+        # list stays inside it, so the unbounded walk is not this path.
+        host.states
+    end
+  end
+
+  @doc """
+  The states reached from `seeds` under `step` of every action.
+
+  `{:error, :bound}` is a fresh state that would exceed `reachable_cap/0`.
+  A cover of exactly that many states is returned. `{:error, :not_state}`
+  is a value `step` returns that does not decode as a `State`. `{:error,
+  :left}` is a successor that is a state and is not in the set the walk
+  closed. A set that does not close is not truncated to the states already
+  met.
+  """
+  def close_under_step(host, seeds) when is_list(seeds) do
+    seeds = Enum.uniq_by(seeds, &state_key/1)
+
+    if length(seeds) > @reachable_cap do
+      {:error, :bound}
+    else
+      seen = MapSet.new(Enum.map(seeds, &state_key/1))
+
+      with {:ok, order} <- grow_bounded(host, seeds, seeds, seen, @reachable_cap),
+           :ok <- stays_inside(host, order) do
+        {:ok, order}
+      end
+    end
+  end
+
+  # Unbounded, and only for a nullary `State`. A self-referential cover is
+  # installed into `all_states` before `cover/1` asks, and a finite
+  # structured enumeration is `host.states`. This walk is not that closure,
+  # and it is not bounded by `reachable_cap/0`.
   defp reachable(host, seeds) do
+    true = nullary_cover?(host)
     grow(host, seeds, seeds, MapSet.new(seeds))
   end
 
+  defp nullary_cover?(host), do: not Map.get(host, :structured, false)
+
   defp grow(_host, order, [], _seen), do: order
 
+  # Nullary constructors only. See `reachable/2`.
   defp grow(host, order, [state | rest], seen) do
     fresh =
       Enum.flat_map(host.actions, fn action ->
@@ -122,6 +185,74 @@ defmodule Muro.Synth.Oracle do
 
     grow(host, order ++ fresh, rest ++ fresh, MapSet.union(seen, MapSet.new(fresh)))
   end
+
+  defp grow_bounded(_host, order, [], _seen, _cap), do: {:ok, order}
+
+  defp grow_bounded(host, order, [state | rest], seen, cap) do
+    case fresh_states(host, state, seen) do
+      {:error, reason} when reason in [:left, :not_state] ->
+        {:error, reason}
+
+      {:ok, fresh} ->
+        cond do
+          fresh == [] ->
+            grow_bounded(host, order, rest, seen, cap)
+
+          length(order) + length(fresh) > cap ->
+            {:error, :bound}
+
+          true ->
+            seen = MapSet.union(seen, MapSet.new(Enum.map(fresh, &state_key/1)))
+            grow_bounded(host, order ++ fresh, rest ++ fresh, seen, cap)
+        end
+    end
+  end
+
+  defp stays_inside(host, states) do
+    seen = MapSet.new(Enum.map(states, &state_key/1))
+
+    Enum.reduce_while(states, :ok, fn state, :ok ->
+      case fresh_states(host, state, seen) do
+        {:ok, []} -> {:cont, :ok}
+        {:ok, _} -> {:halt, {:error, :left}}
+        {:error, reason} when reason in [:left, :not_state] -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp fresh_states(host, state, seen) do
+    Enum.reduce_while(host.actions, {:ok, []}, fn action, {:ok, acc} ->
+      case one_step(host, state, action) do
+        {:error, reason} when reason in [:left, :not_state] ->
+          {:halt, {:error, reason}}
+
+        {:ok, next} ->
+          key = state_key(next)
+
+          if MapSet.member?(seen, key) or Enum.any?(acc, &(state_key(&1) == key)) do
+            {:cont, {:ok, acc}}
+          else
+            {:cont, {:ok, acc ++ [next]}}
+          end
+      end
+    end)
+  end
+
+  defp one_step(host, state, action) do
+    {next, _reward} = host.step.(state, action)
+    {:ok, next}
+  rescue
+    e in ArgumentError ->
+      if not_state_error?(e), do: {:error, :not_state}, else: {:error, :left}
+  end
+
+  # `Term.decode!/2` raises this when `step` returns a value that is not
+  # a `State`. Any other `ArgumentError` is a successor that left the cover.
+  defp not_state_error?(%ArgumentError{message: "not a value of this state" <> _}), do: true
+  defp not_state_error?(_), do: false
+
+  defp state_key(%Muro.Synth.Term{value: value}), do: value
+  defp state_key(other), do: other
 
   defp compare(host, "trace", state, action, other, blind) do
     {left, memo} = trace(host, state, other, host.horizon, blind, %{})

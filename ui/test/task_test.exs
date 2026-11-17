@@ -69,7 +69,7 @@ defmodule MuroVisor.TaskTest do
 
     silence()
     assert refused()
-    assert {:error, :econnrefused} = :gen_tcp.connect({127, 0, 0, 1}, port, [], 200)
+    MuroVisor.TestEndpoint.refute_accept!(port)
   end
 
   test "missing endpoint config is filled and the visor application serves the book" do

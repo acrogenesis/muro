@@ -215,6 +215,9 @@ defmodule Muro.SynthFeatureTest do
            ]
 
     assert Muro.Synth.Term.equatable?(schema)
+    assert Muro.Synth.Term.direct_rec?(schema)
+    assert Muro.Synth.Term.reachable?(schema)
+    assert Muro.Synth.Term.cert_refusal(schema) == nil
     assert Muro.Synth.Term.inhabitants(schema) == :open
 
     raw = {:bin, {:tip, 0}, {:tip, {:suc, 0}}}
@@ -358,6 +361,9 @@ defmodule Muro.SynthFeatureTest do
 
     refute match?({:open, _}, listed)
     refute Muro.Synth.Term.equatable?(listed)
+    assert Muro.Synth.Term.self_referential?(listed)
+    refute Muro.Synth.Term.direct_rec?(listed)
+    refute Muro.Synth.Term.reachable?(listed)
 
     assert Muro.Synth.Term.cert_refusal(listed) ==
              "State recursion under List/product cannot be certified"
@@ -373,6 +379,9 @@ defmodule Muro.SynthFeatureTest do
       """)
 
     refute Muro.Synth.Term.equatable?(paired)
+    assert Muro.Synth.Term.self_referential?(paired)
+    refute Muro.Synth.Term.direct_rec?(paired)
+    refute Muro.Synth.Term.reachable?(paired)
 
     assert Muro.Synth.Term.cert_refusal(paired) ==
              "State recursion under List/product cannot be certified"

@@ -12,6 +12,8 @@ defmodule Muro.SynthLoopTest do
   @tree "examples/cshrl/envs/tree_cover.muro"
   @tip "examples/cshrl/envs/tip_suc.muro"
   @deep "examples/cshrl/envs/nested_bin.muro"
+  @reach "examples/cshrl/envs/reachable_bin.muro"
+  @fork "examples/cshrl/envs/reachable_fork.muro"
   @neg "test/fixtures/synth_neg.muro"
   @gap "test/fixtures/synth_gap.muro"
   @horizon "test/fixtures/synth_horizon.muro"
@@ -609,6 +611,98 @@ defmodule Muro.SynthLoopTest do
     assert text =~ "certificate CoindHomo"
   end
 
+  @tag timeout: 180_000
+  test "a reachable cover of a recursive State is certified" do
+    src = File.read!(@reach)
+    refute src =~ "data Feature"
+    refute src =~ "def all-states"
+    refute src =~ "eval-feature"
+
+    assert {:ok, host} = Muro.Synth.Host.open(@reach)
+    assert length(host.all_states) == 2
+
+    assert Enum.map(host.all_states, & &1.spell) == [
+             "(bin (bin (tip 0) (tip 0)) (tip 0))",
+             "(bin (bin (bin (tip 0) (tip 0)) (tip 0)) (tip 0))"
+           ]
+
+    assert {:ok, missed} =
+             Muro.Synth.cegis_loop(@reach, structural: false, depth: 0, max_depth: 0)
+
+    assert missed.status == :insufficient
+    assert missed.book == nil
+
+    assert {:ok, result} = Muro.Synth.cegis_loop(@reach, depth: 0, max_depth: 0)
+    assert result.status == :certified
+    assert result.certificate == "CoindHomo"
+    assert result.program == {:feat, "ctor-is-p0-0-bin-bin-bin"}
+    assert result.book =~ "def survivor : run PredProg := (feat ctor-is-p0-0-bin-bin-bin)"
+    assert result.book =~ "evidence CoindHomo rank"
+    refute result.book =~ "has-pos-reward"
+    refute result.book =~ "CoinductiveHomomorphism"
+
+    text = joined(result)
+    assert text =~ "muro synth: homomorphism checked"
+    assert text =~ "program: (feat ctor-is-p0-0-bin-bin-bin)"
+    assert text =~ "at (bin (bin (tip 0) (tip 0)) (tip 0)) the program prefers stay"
+    assert text =~ "at (bin (bin (bin (tip 0) (tip 0)) (tip 0)) (tip 0)) the program prefers move"
+    assert text =~ "certificate CoindHomo"
+  end
+
+  @tag timeout: 180_000
+  test "actions that diverge are both in the reachable cover" do
+    src = File.read!(@fork)
+    refute src =~ "data Feature"
+    refute src =~ "def all-states"
+    refute src =~ "eval-feature"
+    refute src =~ "find-policy"
+    refute src =~ "find-ranking"
+
+    assert {:ok, host} = Muro.Synth.Host.open(@fork)
+    assert host.actions == ["move", "stay"]
+    assert length(host.all_states) == 3
+
+    assert Enum.map(host.all_states, & &1.spell) == [
+             "(bin (tip 0) (tip 0))",
+             "(bin (bin (tip 0) (tip 0)) (tip 0))",
+             "(bin (tip 0) (bin (tip 0) (tip 0)))"
+           ]
+
+    [seed | _] = host.all_states
+
+    assert {:ok, by_move} =
+             Muro.Synth.Oracle.close_under_step(%{host | actions: ["move"]}, [seed])
+
+    assert length(by_move) == 2
+    refute Enum.any?(by_move, &(&1.spell == "(bin (tip 0) (bin (tip 0) (tip 0)))"))
+
+    assert {:ok, by_stay} =
+             Muro.Synth.Oracle.close_under_step(%{host | actions: ["stay"]}, [seed])
+
+    assert length(by_stay) == 2
+    refute Enum.any?(by_stay, &(&1.spell == "(bin (bin (tip 0) (tip 0)) (tip 0))"))
+
+    assert {:ok, result} = Muro.Synth.cegis_loop(@fork, depth: 0, max_depth: 0)
+    assert result.status == :certified
+    assert result.certificate == "CoindHomo"
+    assert result.program == {:feat, "ctor-is-p0-bin-bin"}
+    assert result.book =~ "def survivor : run PredProg := (feat ctor-is-p0-bin-bin)"
+    assert result.book =~ "match eval survivor"
+    assert result.book =~ "evidence CoindHomo rank"
+    refute result.book =~ "find-policy"
+    refute result.book =~ "find-ranking"
+    refute result.book =~ "has-pos-reward"
+    refute result.book =~ "CoinductiveHomomorphism"
+
+    text = joined(result)
+    assert text =~ "muro synth: homomorphism checked"
+    assert text =~ "program: (feat ctor-is-p0-bin-bin)"
+    assert text =~ "at (bin (tip 0) (tip 0)) the program prefers stay"
+    assert text =~ "at (bin (bin (tip 0) (tip 0)) (tip 0)) the program prefers move"
+    assert text =~ "at (bin (tip 0) (bin (tip 0) (tip 0))) the program prefers stay"
+    assert text =~ "certificate CoindHomo"
+  end
+
   # `left` is private to the search. A deepen that separates the pair
   # calls search again with the same invent budget. Only a successful
   # invention spends a round.
@@ -720,6 +814,28 @@ defmodule Muro.SynthLoopTest do
     assert result.reason == "State recursion under List/product cannot be certified"
     refute result.book =~ "evidence CoindHomo"
     refute result.book =~ "def rank"
+  end
+
+  test "product recursion without all-states is refused at open" do
+    dir = tmp()
+
+    src =
+      product_rec_src()
+      |> String.replace(
+        """
+        def all-states : run List State :=
+          cons (tip 0) (cons (fork (tip 0, tip 0)) nil)
+        """,
+        ""
+      )
+
+    path = write_book(dir, "prod-open.muro", src)
+
+    assert {:error, :usage, "State constructors take arguments; declare all-states"} =
+             Muro.Synth.Host.open(path)
+
+    assert {:error, :usage, "State constructors take arguments; declare all-states"} =
+             Muro.Synth.cegis_loop(path, depth: 0, max_depth: 0)
   end
 
   @tag timeout: 180_000
@@ -1942,8 +2058,331 @@ defmodule Muro.SynthLoopTest do
         λ (_ : Nat) → λ (_ : Nat) → true
       """)
 
+    assert {:error, :usage, "a recursive State declares no initial state"} =
+             Muro.Synth.Host.open(path)
+  end
+
+  test "an open constructor with init is still refused" do
+    dir = tmp()
+
+    path =
+      write_book(dir, "open-init.muro", """
+      import "std:bool.muro"
+      import "std:list.muro"
+
+      data State : Type where
+        cell : Π (xs : List Nat) → State
+
+      data Action : Type where
+        go : Action
+
+      def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+        λ (s : State) → λ (_ : Action) → (s, 0)
+
+      def all-actions : run List Action := cons go nil
+      def horizon : run Nat := 0
+      def init : run State := cell nil
+      def leb : run Π (m : Nat) → Π (n : Nat) → Bool :=
+        λ (_ : Nat) → λ (_ : Nat) → true
+      """)
+
     assert {:error, :usage, "State constructors take arguments; declare all-states"} =
              Muro.Synth.Host.open(path)
+  end
+
+  test "init of the wrong type is refused" do
+    dir = tmp()
+
+    path =
+      write_book(dir, "init-nat.muro", """
+      import "std:bool.muro"
+      import "std:list.muro"
+
+      data State : Type where
+        tip : Π (n : Nat) → State
+        bin : Π (l : State) → Π (r : State) → State
+
+      data Action : Type where
+        go : Action
+
+      def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+        λ (s : State) → λ (_ : Action) → (s, 0)
+
+      def all-actions : run List Action := cons go nil
+      def horizon : run Nat := 0
+      def init : run Nat := 0
+      def leb : run Π (m : Nat) → Π (n : Nat) → Bool :=
+        λ (_ : Nat) → λ (_ : Nat) → true
+      """)
+
+    assert {:error, :usage, "init must be run State or run List State"} =
+             Muro.Synth.Host.open(path)
+  end
+
+  test "a declared all-states is not replaced by init" do
+    dir = tmp()
+
+    path =
+      write_book(dir, "declared.muro", """
+      import "std:bool.muro"
+      import "std:list.muro"
+
+      data State : Type where
+        tip : Π (n : Nat) → State
+        bin : Π (l : State) → Π (r : State) → State
+
+      data Action : Type where
+        go : Action
+
+      def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+        λ (s : State) → λ (_ : Action) → (s, 0)
+
+      def all-actions : run List Action := cons go nil
+      def horizon : run Nat := 0
+      def all-states : run List State := cons (tip 0) nil
+      def init : run State := bin (tip 0) (tip 0)
+      def leb : run Π (m : Nat) → Π (n : Nat) → Bool :=
+        λ (_ : Nat) → λ (_ : Nat) → true
+      """)
+
+    assert {:ok, host} = Muro.Synth.Host.open(path)
+    assert Enum.map(host.all_states, & &1.spell) == ["(tip 0)"]
+  end
+
+  test "init lists the states the reachable cover starts from" do
+    dir = tmp()
+
+    path =
+      write_book(dir, "seeds.muro", """
+      import "std:bool.muro"
+      import "std:list.muro"
+
+      data State : Type where
+        tip : Π (n : Nat) → State
+        bin : Π (l : State) → Π (r : State) → State
+
+      data Action : Type where
+        go : Action
+
+      def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+        λ (s : State) → λ (_ : Action) → (s, 0)
+
+      def all-actions : run List Action := cons go nil
+      def horizon : run Nat := 0
+      def init : run List State :=
+        cons (tip 0) (cons (bin (tip 0) (tip 0)) nil)
+      def leb : run Π (m : Nat) → Π (n : Nat) → Bool :=
+        λ (_ : Nat) → λ (_ : Nat) → true
+      """)
+
+    assert {:ok, host} = Muro.Synth.Host.open(path)
+
+    assert Enum.map(host.all_states, & &1.spell) == [
+             "(tip 0)",
+             "(bin (tip 0) (tip 0))"
+           ]
+  end
+
+  test "a reachable set that does not close within the bound is refused" do
+    dir = tmp()
+
+    path =
+      write_book(dir, "tick.muro", """
+      import "std:bool.muro"
+      import "std:list.muro"
+
+      data State : Type where
+        stop : State
+        more : Π (+ s : State) → State
+
+      data Action : Type where
+        go : Action
+
+      def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+        λ (s : State) → λ (_ : Action) →
+          match s motive (λ _ → State × Nat)
+            | stop => (more stop, 0)
+            | more s => (more (more s), 0)
+
+      def all-actions : run List Action := cons go nil
+      def horizon : run Nat := 0
+      def init : run State := stop
+      def leb : run Π (m : Nat) → Π (n : Nat) → Bool :=
+        λ (_ : Nat) → λ (_ : Nat) → true
+      """)
+
+    message = Muro.Synth.Oracle.reachable_bound_message()
+    assert {:error, :usage, ^message} = Muro.Synth.Host.open(path)
+    assert {:error, :usage, ^message} = Muro.Synth.cegis_loop(path, depth: 0, max_depth: 0)
+    assert message =~ "not finite within #{Muro.Synth.Oracle.reachable_cap()}"
+  end
+
+  test "an empty init list declares no initial state" do
+    dir = tmp()
+
+    path =
+      write_book(dir, "empty-init.muro", """
+      import "std:bool.muro"
+      import "std:list.muro"
+
+      data State : Type where
+        stop : State
+        more : Π (+ s : State) → State
+
+      data Action : Type where
+        go : Action
+
+      def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+        λ (s : State) → λ (_ : Action) → (s, 0)
+
+      def all-actions : run List Action := cons go nil
+      def horizon : run Nat := 0
+      def init : run List State := nil
+      def leb : run Π (m : Nat) → Π (n : Nat) → Bool :=
+        λ (_ : Nat) → λ (_ : Nat) → true
+      """)
+
+    assert {:error, :usage, "a recursive State declares no initial state"} =
+             Muro.Synth.Host.open(path)
+  end
+
+  test "init that does not decode as a State is refused" do
+    dir = tmp()
+
+    path =
+      write_book(dir, "init-word.muro", """
+      import "std:bool.muro"
+      import "std:list.muro"
+
+      data State : Type where
+        stop : State
+        more : Π (s : State) → Π (n : U8) → State
+
+      data Action : Type where
+        go : Action
+
+      def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+        λ (s : State) → λ (_ : Action) →
+          match s motive (λ _ → State × Nat)
+            | stop => (stop, 0)
+            | more s _ => (s, 0)
+
+      def all-actions : run List Action := cons go nil
+      def horizon : run Nat := 0
+      def init : run State := more stop (toU8 0)
+      def leb : run Π (m : Nat) → Π (n : Nat) → Bool :=
+        λ (_ : Nat) → λ (_ : Nat) → true
+      """)
+
+    assert {:error, :usage, "init has a value that is not a State"} = Muro.Synth.Host.open(path)
+  end
+
+  test "a successor that is not a State is refused before the cover is closed" do
+    dir = tmp()
+
+    path =
+      write_book(dir, "not-state.muro", """
+      import "std:bool.muro"
+      import "std:list.muro"
+
+      data State : Type where
+        stop : State
+        more : Π (s : State) → Π (n : U8) → State
+
+      data Action : Type where
+        go : Action
+
+      def step : run Π (s : State) → Π (a : Action) → State × Nat :=
+        λ (s : State) → λ (_ : Action) →
+          match s motive (λ _ → State × Nat)
+            | stop => (more stop (toU8 0), 0)
+            | more s _ => (s, 0)
+
+      def all-actions : run List Action := cons go nil
+      def horizon : run Nat := 0
+      def init : run State := stop
+      def leb : run Π (m : Nat) → Π (n : Nat) → Bool :=
+        λ (_ : Nat) → λ (_ : Nat) → true
+      """)
+
+    message = Muro.Synth.Oracle.step_not_state_message()
+    assert {:error, :usage, ^message} = Muro.Synth.Host.open(path)
+    assert {:error, :usage, ^message} = Muro.Synth.cegis_loop(path, depth: 0, max_depth: 0)
+    refute message == Muro.Synth.Oracle.step_left_message()
+  end
+
+  test "a successor outside the closed set is not a non-state step" do
+    key = {:left_probe, make_ref()}
+
+    step = fn state, action ->
+      seen = Process.get(key, %{})
+      n = Map.get(seen, {state, action}, 0)
+      Process.put(key, Map.put(seen, {state, action}, n + 1))
+
+      if n == 0 do
+        {state, 0}
+      else
+        {{:escaped, state}, 0}
+      end
+    end
+
+    host = %{actions: ["go"], step: step}
+    assert {:error, :left} = Muro.Synth.Oracle.close_under_step(host, [:here])
+
+    other = %{
+      actions: ["go"],
+      step: fn _state, _action -> raise ArgumentError, "left the module" end
+    }
+
+    assert {:error, :left} = Muro.Synth.Oracle.close_under_step(other, [:here])
+
+    decode = %{
+      actions: ["go"],
+      step: fn _state, _action ->
+        raise ArgumentError, "not a value of this state: 0"
+      end
+    }
+
+    assert {:error, :not_state} = Muro.Synth.Oracle.close_under_step(decode, [:here])
+    refute Muro.Synth.Oracle.step_not_state_message() == Muro.Synth.Oracle.step_left_message()
+  end
+
+  test "a cover of 256 states is accepted and 257 is refused" do
+    assert {:ok, cover} = Muro.Synth.Oracle.close_under_step(chain_host(256), [0])
+    assert length(cover) == 256
+
+    assert {:error, :bound} = Muro.Synth.Oracle.close_under_step(chain_host(257), [0])
+
+    stay = %{
+      actions: ["go"],
+      step: fn state, _action -> {state, 0} end
+    }
+
+    assert {:ok, held} = Muro.Synth.Oracle.close_under_step(stay, Enum.to_list(0..255))
+    assert length(held) == 256
+    assert {:error, :bound} = Muro.Synth.Oracle.close_under_step(stay, Enum.to_list(0..256))
+  end
+
+  test "the unbounded closure walk is nullary constructors only" do
+    finite = %{
+      all_states: nil,
+      structured: true,
+      states: [:a, :b],
+      actions: ["go"],
+      step: fn _state, _action -> raise "step is not the finite cover" end
+    }
+
+    assert Muro.Synth.Oracle.cover(finite) == [:a, :b]
+
+    nullary = %{
+      all_states: nil,
+      structured: false,
+      states: [:a],
+      actions: ["go"],
+      step: fn state, _action -> {state, 0} end
+    }
+
+    assert Muro.Synth.Oracle.cover(nullary) == [:a]
   end
 
   test "a mutually inductive State is refused" do
@@ -2438,6 +2877,16 @@ defmodule Muro.SynthLoopTest do
   defp prefer_go(dir), do: write_book(dir, "prefer.muro", prefer_src())
 
   defp two_hot(dir), do: write_book(dir, "hot.muro", two_hot_src())
+
+  defp chain_host(n) do
+    %{
+      actions: ["go"],
+      step: fn state, _action ->
+        next = if state + 1 < n, do: state + 1, else: state
+        {next, 0}
+      end
+    }
+  end
 
   defp product_rec_src do
     """

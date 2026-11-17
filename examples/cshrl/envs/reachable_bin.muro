@@ -1,0 +1,46 @@
+-- reachable_bin.muro — a recursive tree with no declared cover.
+--
+-- The state is a tree. `init` is `bin (bin (tip 0) (tip 0)) (tip 0)`.
+-- move and stay both reach `bin (bin (bin (tip 0) (tip 0)) (tip 0)) (tip 0)`,
+-- and from that tree both return to `init`. The cover is those two
+-- trees. They agree one field deep. Every reward on the cover is
+-- positive. No action stays put, and neither state is absorbing.
+-- Nothing in this book names a feature or `all-states`.
+import "../std/nat.muro"
+import "../lib/agent.muro"
+
+data State : Type where
+  tip : Π (n : Nat) → State
+  bin : Π (+ l : State) → Π (r : State) → State
+
+data Action : Type where
+  move : Action
+  stay : Action
+
+def Reward : spec Type := Nat
+
+def step : run Π (s : State) → Π (a : Action) → State × Reward :=
+  λ (s : State) → λ (a : Action) →
+    match s motive (λ _ → State × Reward)
+      | tip _ => (bin (bin (tip 0) (tip 0)) (tip 0), 0)
+      | bin l _ =>
+          (match l motive (λ _ → State × Reward)
+            | tip _ => (bin (bin (tip 0) (tip 0)) (tip 0), 0)
+            | bin inner _ =>
+                (match inner motive (λ _ → State × Reward)
+                  | tip _ =>
+                      (match a motive (λ _ → State × Reward)
+                        | move => (bin (bin (bin (tip 0) (tip 0)) (tip 0)) (tip 0), suc 0)
+                        | stay => (bin (bin (bin (tip 0) (tip 0)) (tip 0)) (tip 0), suc (suc 0)))
+                  | bin _ _ =>
+                      (match a motive (λ _ → State × Reward)
+                        | move => (bin (bin (tip 0) (tip 0)) (tip 0), suc (suc 0))
+                        | stay => (bin (bin (tip 0) (tip 0)) (tip 0), suc 0))))
+
+def le : spec Π (r : Reward) → Π (q : Reward) → Type := Le
+def max : run Π (r : Reward) → Π (q : Reward) → Reward := maxN
+def bottom : run Reward := 0
+def all-actions : run List Action := cons move (cons stay nil)
+def default-action : run Action := stay
+def horizon : run Nat := 0
+def init : run State := bin (bin (tip 0) (tip 0)) (tip 0)
