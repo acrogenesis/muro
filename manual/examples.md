@@ -38,7 +38,7 @@ See [The wall](wall.md), [Terms](language.md), [Identity](identity.md).
 
 ## ping.muro
 
-An affine session. The protocol is spec. The process is evidence. Elixir, Rust, Zig, and assembly omit the session. C writes the same step as the state machine. `--backend otp` writes a GenServer for each process.
+An affine session. The protocol is spec. The process is evidence. Elixir, Rust, Zig, and assembly omit the session. C writes a step for the session. The actions are the ones the state machine takes, checked by a walk of at most 14 states and depth at most 6. `--backend otp` writes a GenServer for each process.
 
 ```
 session ping := recv Nat (send Nat end)
@@ -54,7 +54,7 @@ See [Terms](language.md#session) and [Emit](emit.md#otp).
 
 ## dual.muro
 
-The other end of a session. The protocol is spec. The process is evidence. Elixir, Rust, Zig, and assembly omit both. C writes each end as the same step as the state machine.
+The other end of a session. The protocol is spec. The process is evidence. Elixir, Rust, Zig, and assembly omit both. C writes a step for each end, checked by that same bounded walk.
 
 ```
 session ping := recv Nat (send Nat end)
@@ -92,7 +92,7 @@ See [Terms](language.md#session).
 
 ## indexed.muro
 
-A received bit selects the next action. The arm is the index. Elixir, Rust, Zig, and assembly omit the session. C writes the same step as the state machine.
+A received bit selects the next action. The arm is the index. Elixir, Rust, Zig, and assembly omit the session. C writes a step for the session, checked by that same bounded walk.
 
 ```
 session route := recv (b : Bit) on (send Nat end) (recv Nat end)
@@ -114,7 +114,7 @@ See [Terms](language.md#session).
 
 ## recursive.muro
 
-A protocol may repeat. The variable sits under an action. Elixir, Rust, Zig, and assembly omit the session. C writes the same step as the state machine.
+A protocol may repeat. The variable sits under an action. Elixir, Rust, Zig, and assembly omit the session. C writes a step for the session, checked by that same bounded walk.
 
 ```
 session loop := rec X. recv Nat (send Nat X)

@@ -2,11 +2,15 @@
 
 ## 0.21.14
 
-`--backend c` writes a session stepper beside the runs. Each session is a pure step: the host passes the state and an event, and the function returns the next state and the action, or refuses an event the protocol does not allow. The host keeps the transport. A meeting marked `may fail` is still refused. Rust and Zig are unchanged.
+`--backend c` writes a session stepper beside the runs. Each session is a pure step: the host passes the state and an event, and the function returns the next state and the action, or refuses an event the protocol does not allow. The host keeps the transport. There is no protocol loop. A meeting marked `may fail` is still refused. Rust and Zig are unchanged.
+
+A session the state machine cannot represent is refused, and so is a payload with a `repr` or an unboxed type, including an unboxed type nested under boxed data. A run the case calls is one the C backend already emits. The value that run sees is built for the call and freed when the step finishes, including when a field of that value does not build. A nat inside that run is built with `muro__suc`, and a nat above 100000 is refused before that term is built. Init takes `uint64_t`, so a negative cannot be supplied. `down` is not a step.
+
+On the session examples, a bounded walk (at most 14 states, depth at most 6, including events the protocol does not allow) compiles with the C compiler and matches the state machine. A foreign key and a position that is not a step of the session are the same unexpected refusal.
 
 ### Manual
 
-- Emit. Sessions. For agents. Examples. Host representations.
+- Emit, Sessions, For agents, and Examples: the C session step, the bounded walk that checks it, and init as `uint64_t`. Host representations.
 
 ### Package
 
