@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.21.16
+
+`mix muro.synth` ranks a recursive `State` that does not declare `all-states`. `init` is the state the walk starts from, or a list of them. The cover is every state reached from `init` under `step` of every action in `all-actions`, when that set closes within 256 states. The predicate that survives is certified on that cover by the same ranking as a declared cover. A walk that meets a fresh state at the bound does not certify a prefix of it. A book that declares `all-states` is unchanged.
+
+`examples/cshrl/envs/reachable_bin.muro` declares no feature and no `all-states`. The cover is two trees. `trace` checks `CoindHomo` for `(feat ctor-is-p0-0-bin-bin-bin)`, which prefers `stay` at the first and `move` at the second.
+
+### Manual
+
+- Synthesis, CSHRL, and Examples: a reachable cover from `init`, and what the checker sees.
+
+### Package
+
+- Version 0.21.16.
+
 ## 0.21.14
 
 `--backend c` writes a session stepper beside the runs. Each session is a pure step: the host passes the state and an event, and the function returns the next state and the action, or refuses an event the protocol does not allow. The host keeps the transport. There is no protocol loop. A meeting marked `may fail` is still refused. Rust and Zig are unchanged.
