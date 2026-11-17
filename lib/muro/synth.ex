@@ -23,9 +23,15 @@ defmodule Muro.Synth do
   negations, a conjunction or a disjunction of two atoms, the same with
   the right atom negated, and a left-associated conjunction or
   disjunction of feature tests. One further layer negates such a
-  disjunction or conjunction and joins it with an atom. One observation
-  signature keeps the smallest program. A later program of the same
-  signature is kept only when it is smaller.
+  disjunction or conjunction and joins it with an atom. An
+  action-indexed family adds two atoms per action: `self` is that
+  action's feature, and `other` is the disjunction of the same stem at
+  every other action. Each is one constructor. The list of actions is
+  not counted again. Those atoms combine by the same negation and
+  pairing rules. The subset chains stay feature tests, because a
+  quantifier is already one constructor for the whole action set. One
+  observation signature keeps the smallest program. A later program of
+  the same signature is kept only when it is smaller.
 
   `cegis_loop/2` is the closed search. It enumerates, refines by
   observations taken from the environment's emitted `step`, deepens
@@ -61,6 +67,12 @@ defmodule Muro.Synth do
   def eval({:and, p, q}, feat, state), do: eval(p, feat, state) and eval(q, feat, state)
   def eval({:or, p, q}, feat, state), do: eval(p, feat, state) or eval(q, feat, state)
   def eval({:not, p}, feat, state), do: not eval(p, feat, state)
+  def eval({:self, _stem, _action, nil}, _feat, _state), do: false
+  def eval({:self, _stem, _action, feature}, feat, state), do: feat.(feature, state)
+
+  def eval({:other, _stem, _action, features}, feat, state) when is_list(features) do
+    Enum.any?(features, &feat.(&1, state))
+  end
 
   @doc """
   The first pair whose predicate holds supplies the action.
@@ -82,9 +94,21 @@ defmodule Muro.Synth do
   def reads({:and, p, q}), do: reads(p) ++ reads(q)
   def reads({:or, p, q}), do: reads(p) ++ reads(q)
   def reads({:not, p}), do: reads(p)
+  def reads({:self, _stem, _action, nil}), do: []
+  def reads({:self, _stem, _action, feature}), do: [feature]
+  def reads({:other, _stem, _action, features}) when is_list(features), do: features
 
   @doc """
   Predicate constructors in `pred`. A feature name adds nothing.
+
+  A constant or a feature test is 1. A negation is 1 plus its body. A
+  conjunction or a disjunction is 1 plus both parts. `{:self, stem,
+  action, feature}`, rendered `selfp`, is 1: it reads that action's
+  column of the stem. `{:other, stem, action, features}`, rendered
+  `otherp`, is also 1: it is the disjunction of the stem at every other
+  action, and the list of those columns is not counted again, so the
+  size does not grow with the number of actions. An `other` with no
+  other column is false and still size 1.
   """
   def size(true), do: 1
   def size(false), do: 1
@@ -92,10 +116,14 @@ defmodule Muro.Synth do
   def size({:not, pred}), do: 1 + size(pred)
   def size({:and, p, q}), do: 1 + size(p) + size(q)
   def size({:or, p, q}), do: 1 + size(p) + size(q)
+  def size({:self, _stem, _action, _feature}), do: 1
+  def size({:other, _stem, _action, features}) when is_list(features), do: 1
 
   @doc """
   The Muro term for `pred`, using `truep`, `falsep`, `feat`, `andp`,
-  `orp`, and `notp`.
+  `orp`, `notp`, `selfp`, and `otherp`. `selfp stem a` and `otherp stem
+  a` name the stem and the action. The columns they read are not
+  written: the policy book's `stem-at` and `other-at` supply them.
   """
   def render(true), do: "truep"
   def render(false), do: "falsep"
@@ -103,6 +131,10 @@ defmodule Muro.Synth do
   def render({:not, pred}), do: "(notp #{render(pred)})"
   def render({:and, p, q}), do: "(andp #{render(p)} #{render(q)})"
   def render({:or, p, q}), do: "(orp #{render(p)} #{render(q)})"
+
+  def render({:self, stem, action, _feature}), do: "(selfp #{stem} #{action})"
+
+  def render({:other, stem, action, _features}), do: "(otherp #{stem} #{action})"
 
   @doc """
   Every predicate built from `features` at this depth. Depth 0 is the
@@ -119,11 +151,10 @@ defmodule Muro.Synth do
   # subset, and the report names this budget. A cover of 76 features
   # shrinks to five, because C(76, 6) is 218618940.
   @subset_budget 100_000_000
-  # Four queens considers 94970 programs. One million is above that
-  # walk and below an earlier eight-queens size walk, which had already
-  # considered 3766542 programs by the end of size 7. That count is the
-  # one the manual cites. The stopped eight-queens walk was not re-run
-  # under this bound.
+  # Four queens considers 8138 programs and stops at size 4. One
+  # million remains the stop for a walk that has not met every
+  # signature. An earlier eight-queens size walk, made before these
+  # atoms, had considered 3766542 programs by the end of size 7.
   @considered_budget 1_000_000
   # Soft bound on current growth, sampled in `sized_insert` before each
   # candidate is inserted. `:erlang.memory(:total)` minus the total at
@@ -210,6 +241,13 @@ defmodule Muro.Synth do
   a later smaller program of a wanted signature replaces the one kept,
   and a repeated signature is not counted twice.
 
+  `opts` may set `families:`, the action-indexed stems from
+  `Muro.Synth.Feature.families/2`. Omitted, the grammar is the feature
+  tests alone. A family contributes `self` and `other` atoms. Their
+  signatures are the feature column and the pointwise disjunction of
+  the other actions. The subset walk does not take those atoms: a
+  quantifier is already the whole action set.
+
   `{:ok, index, meta}` is a finished walk. `{:empty, reason, meta}` is
   a stop: `reason` is `considered budget` or `memory budget`. `meta`
   counts only the programs considered before that stop. `size` is the
@@ -232,6 +270,7 @@ defmodule Muro.Synth do
     started = System.monotonic_time(:millisecond)
     considered_budget = budget_opt!(opts, :considered_budget, @considered_budget)
     memory_budget = budget_opt!(opts, :memory_budget, @memory_budget)
+    families = Keyword.get(opts, :families, [])
     mask = Bitwise.bsl(1, width) - 1
     feat_atoms = Enum.map(features, &{:feat, &1})
     atoms = [true, false | feat_atoms]
@@ -248,6 +287,10 @@ defmodule Muro.Synth do
         false -> {false, 0}
         atom -> {atom, sig_fun.(atom)}
       end)
+
+    {quant_atoms, quant_sigs} = quantifier_atoms(families, sigs)
+    atoms = atoms ++ quant_atoms
+    sigs = Map.merge(sigs, quant_sigs)
 
     st = %{
       max_size: max_size,
@@ -507,6 +550,16 @@ defmodule Muro.Synth do
 
   defp bool_term({:or, p, q}, spell) do
     "(match #{bool_term(p, spell)} motive (λ _ → Bool) | true => true | false => #{bool_term(q, spell)})"
+  end
+
+  defp bool_term({:self, _stem, _action, nil}, _spell), do: "false"
+  defp bool_term({:self, _stem, _action, feature}, spell), do: "(#{spell.(feature)})"
+
+  # The first column is the outermost test, in the order of `features`.
+  defp bool_term({:other, _stem, _action, features}, spell) do
+    List.foldr(features, "false", fn feature, acc ->
+      "(match #{bool_term({:self, nil, nil, feature}, spell)} motive (λ _ → Bool) | true => true | false => #{acc})"
+    end)
   end
 
   defp muro_name(name) when is_atom(name) do
@@ -853,6 +906,59 @@ defmodule Muro.Synth do
       1
     else
       Enum.reduce(1..k, 1, fn i, acc -> div(acc * (n - k + i), i) end)
+    end
+  end
+
+  # `self` reads the action's own column. `other` is the pointwise
+  # disjunction of the other actions in the family. The feature list is
+  # the action set, not a nest of constructors, so both atoms have size 1.
+  # Every column of a family must have a signature. A column without one
+  # is not dropped: dropping it would change what `other` means at every
+  # sibling action, so the walk refuses the family instead.
+  defp quantifier_atoms(families, sigs) do
+    pairs =
+      Enum.flat_map(families, fn family ->
+        actions = family.actions
+        by = family.by_action
+        columns = Enum.map(actions, &family_column!(family, by, &1))
+
+        case Enum.reject(columns, &Map.has_key?(sigs, {:feat, &1})) do
+          [] ->
+            :ok
+
+          missing ->
+            raise ArgumentError,
+                  "action family #{family.stem} has columns with no signature: " <>
+                    Enum.join(missing, ", ")
+        end
+
+        Enum.flat_map(actions, fn action ->
+          feature = Map.fetch!(by, action)
+          others = for other <- actions, other != action, do: Map.fetch!(by, other)
+          self = {:self, family.stem, action, feature}
+          other = {:other, family.stem, action, others}
+          self_sig = Map.fetch!(sigs, {:feat, feature})
+
+          other_sig =
+            Enum.reduce(others, 0, fn name, acc ->
+              Bitwise.bor(acc, Map.fetch!(sigs, {:feat, name}))
+            end)
+
+          [{self, self_sig}, {other, other_sig}]
+        end)
+      end)
+
+    {Enum.map(pairs, &elem(&1, 0)), Map.new(pairs)}
+  end
+
+  defp family_column!(family, by, action) do
+    case Map.fetch(by, action) do
+      {:ok, feature} ->
+        feature
+
+      :error ->
+        raise ArgumentError,
+              "action family #{family.stem} lists #{action} with no column"
     end
   end
 

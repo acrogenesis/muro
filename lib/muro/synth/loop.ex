@@ -28,6 +28,10 @@ defmodule Muro.Synth.Loop do
       run_checked(path, opts)
     after
       Process.delete(:muro_synth_reaches)
+      Process.delete(:muro_synth_open_ms)
+      Process.delete(:muro_synth_reach_ms)
+      Process.delete(:muro_synth_cover)
+      Process.delete(:muro_synth_render_ms)
     end
   end
 
@@ -96,6 +100,8 @@ defmodule Muro.Synth.Loop do
          structural,
          limits
        ) do
+    opened = System.monotonic_time(:millisecond)
+
     case Muro.Synth.Host.open(path, fuel: fuel, structural: structural) do
       {:error, _kind, _msg} = err ->
         err
@@ -109,6 +115,11 @@ defmodule Muro.Synth.Loop do
             {:ok, silent(cex)}
 
           {:ok, spec} ->
+            Process.put(
+              :muro_synth_open_ms,
+              System.monotonic_time(:millisecond) - opened
+            )
+
             search(host, spec, depth, max_depth, rounds, score, anchor, checker, fuel, limits)
         end
     end
@@ -348,11 +359,15 @@ defmodule Muro.Synth.Loop do
          fuel,
          limits
        ) do
+    reached = System.monotonic_time(:millisecond)
+
     case Muro.Synth.Feature.extend_reach(host) do
       :same ->
+        Process.put(:muro_synth_reach_ms, System.monotonic_time(:millisecond) - reached)
         {:ok, empty(host, versions, at)}
 
       {:ok, specs} ->
+        Process.put(:muro_synth_reach_ms, System.monotonic_time(:millisecond) - reached)
         host = Muro.Synth.Host.install_features(host, specs)
         feat = fn feature, state -> host.eval_feature.(feature, state) end
 
@@ -405,6 +420,8 @@ defmodule Muro.Synth.Loop do
 
     max_size = Synth.pred_size_bound()
     trace_features(host)
+    Process.put(:muro_synth_cover, length(states))
+    families = Muro.Synth.Feature.families(host.feature_specs || [], host.actions)
 
     case Synth.enumerate_sized(
            host.features,
@@ -412,6 +429,7 @@ defmodule Muro.Synth.Loop do
            &Synth.signature(&1, states, feat),
            length(states),
            MapSet.new(task_sigs),
+           families: families,
            considered_budget: limits.considered_budget,
            memory_budget: limits.memory_budget
          ) do
@@ -439,12 +457,13 @@ defmodule Muro.Synth.Loop do
 
   defp search_record(meta, max_size, stop) do
     lines =
-      [
-        "enumeration #{meta.enum_ms} ms",
-        "considered #{meta.considered}",
-        "distinct #{meta.distinct}",
-        "predicate size bound #{max_size}"
-      ] ++
+      phase_lines() ++
+        [
+          "enumeration #{meta.enum_ms} ms",
+          "considered #{meta.considered}",
+          "distinct #{meta.distinct}",
+          "predicate size bound #{max_size}"
+        ] ++
         Enum.map(meta.sizes, fn [size, count] -> "size #{size} #{count}" end) ++
         if(meta.truncated, do: ["subset bound #{Synth.subset_budget()}"], else: [])
 
@@ -460,6 +479,17 @@ defmodule Muro.Synth.Loop do
       stop: stop
     }
   end
+
+  defp phase_lines do
+    open = phase("book open", Process.get(:muro_synth_open_ms))
+    reach = phase("reach table", Process.get(:muro_synth_reach_ms))
+    cover = phase("cover", Process.get(:muro_synth_cover))
+    open ++ reach ++ cover
+  end
+
+  defp phase(_label, nil), do: []
+  defp phase("cover", n) when is_integer(n), do: ["cover #{n}"]
+  defp phase(label, ms) when is_integer(ms), do: ["#{label} #{ms} ms"]
 
   defp cumulative(sizes) do
     {rows, _cum} =
@@ -590,6 +620,7 @@ defmodule Muro.Synth.Loop do
          search \\ nil
        ) do
     trace_note("policy render start")
+    render_started = System.monotonic_time(:millisecond)
 
     case Book.render(host, arms, anchor, oracle) do
       {:error, _reason} ->
@@ -613,6 +644,11 @@ defmodule Muro.Synth.Loop do
         )
 
       {:ok, source, meta} ->
+        Process.put(
+          :muro_synth_render_ms,
+          System.monotonic_time(:millisecond) - render_started
+        )
+
         started = System.monotonic_time(:millisecond)
 
         trace_note(
@@ -622,7 +658,10 @@ defmodule Muro.Synth.Loop do
             end)
         )
 
-        case Book.check(source, anchor, fn path -> checker.(path, fuel) end) do
+        # The placement library checks at 8000. The search keeps its fuel.
+        cert_fuel = if Map.get(meta, :class_proof), do: max(fuel, 8_000), else: fuel
+
+        case Book.check(source, anchor, fn path -> checker.(path, cert_fuel) end) do
           :ok ->
             cert_ms = System.monotonic_time(:millisecond) - started
             {:ok, checked(arms, source, versions, Map.put(meta, :cert_ms, cert_ms), search)}
@@ -631,28 +670,68 @@ defmodule Muro.Synth.Loop do
             {:error, :storage, diagnostic}
 
           {:error, text} ->
-            cex = Book.cex_from(text, meta.obligations ++ Book.obligations(host, arms))
+            if Map.get(meta, :class_proof) do
+              refuse_class(host, arms, versions, anchor, oracle, search, text, started)
+            else
+              cex = Book.cex_from(text, meta.obligations ++ Book.obligations(host, arms))
 
-            advance(
-              host,
-              arms,
-              versions,
-              depth,
-              max_depth,
-              rounds,
-              score,
-              feat,
-              anchor,
-              checker,
-              fuel,
-              seen,
-              rejected,
-              cex,
-              oracle,
-              search
-            )
+              advance(
+                host,
+                arms,
+                versions,
+                depth,
+                max_depth,
+                rounds,
+                score,
+                feat,
+                anchor,
+                checker,
+                fuel,
+                seen,
+                rejected,
+                cex,
+                oracle,
+                search
+              )
+            end
         end
     end
+  end
+
+  # A class proof that does not check is a refusal. It is not a
+  # counterexample, and it is not a reason to split the cover.
+  defp refuse_class(host, arms, versions, anchor, oracle, search, text, started) do
+    reason = class_reason(text)
+    Process.put(:muro_synth_class_refusal, reason)
+
+    try do
+      case Book.render(host, arms, anchor, oracle) do
+        {:ok, source, meta} ->
+          cert_ms = System.monotonic_time(:millisecond) - started
+
+          {:ok, checked(arms, source, versions, Map.put(meta, :cert_ms, cert_ms), search)}
+
+        {:error, render_reason} ->
+          {:error, render_reason}
+      end
+    after
+      Process.delete(:muro_synth_class_refusal)
+    end
+  end
+
+  defp class_reason(text) do
+    line =
+      text
+      |> String.split("\n")
+      |> Enum.map(&String.trim/1)
+      |> Enum.find(fn line ->
+        String.match?(line, ~r/^\d+:\d+/) or String.contains?(line, "cannot") or
+          String.contains?(line, "expected") or String.contains?(line, "affine") or
+          String.contains?(line, "out of fuel")
+      end)
+
+    detail = if line in [nil, ""], do: "the checker rejected it", else: line
+    "the class proof did not check: #{String.slice(detail, 0, 400)}"
   end
 
   # The generated book named no obligation. The candidate is not evidence.
@@ -977,6 +1056,7 @@ defmodule Muro.Synth.Loop do
         Enum.map(versions, &"version space #{&1}")
 
     cert_line = "certificate check #{meta.cert_ms} ms"
+    render_line = phase("policy render", Process.get(:muro_synth_render_ms))
 
     result =
       case meta.kind do
@@ -987,6 +1067,7 @@ defmodule Muro.Synth.Loop do
             ["muro synth: homomorphism checked"] ++
               base ++
               ["certificate #{meta.certificate}", cert_line] ++
+              render_line ++
               also
 
           %{
@@ -1005,7 +1086,8 @@ defmodule Muro.Synth.Loop do
           lines =
             ["muro synth: policy checked"] ++
               base ++
-              ["homomorphism is not derivable", meta.reason, cert_line]
+              ["homomorphism is not derivable", meta.reason, cert_line] ++
+              render_line
 
           %{
             status: :policy,

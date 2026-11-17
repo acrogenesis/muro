@@ -77,9 +77,49 @@ defmodule Muro.Synth.Feature do
     Muro.Synth.Term.eval_spec(host.schema, spec, state)
   end
 
-  # A state is terminal when every action stays there. That is the
-  # absorbing state of the step function. It is not a label on a
-  # constructor.
+  # An action-indexed kind is a stem. The name is the prefix the
+  # templates already use. A structural test has no action, so it is
+  # not a stem. The actions are the ones `all-actions` still lists, in
+  # that order, and only where the test survived the cover filter.
+  @family_order [:has_pos_reward, :is_self_loop, :leads_terminal, :reaches_pos]
+  @stem_names %{
+    has_pos_reward: "has-pos-reward",
+    is_self_loop: "is-self-loop",
+    leads_terminal: "leads-terminal",
+    reaches_pos: "reaches-pos"
+  }
+
+  @doc false
+  def families(specs, actions) when is_list(specs) and is_list(actions) do
+    grouped =
+      specs
+      |> Enum.filter(&family_spec?/1)
+      |> Enum.group_by(& &1.kind)
+
+    @family_order
+    |> Enum.flat_map(fn kind ->
+      case Map.fetch(grouped, kind) do
+        :error ->
+          []
+
+        {:ok, group} ->
+          by = Map.new(group, &{&1.action, &1.name})
+          present = Enum.filter(actions, &Map.has_key?(by, &1))
+
+          if present == [] do
+            []
+          else
+            [%{stem: Map.fetch!(@stem_names, kind), kind: kind, actions: present, by_action: by}]
+          end
+      end
+    end)
+  end
+
+  defp family_spec?(%{kind: kind, action: action}) when is_binary(action),
+    do: Map.has_key?(@stem_names, kind)
+
+  defp family_spec?(_spec), do: false
+
   @doc """
   `reaches-pos` for each action, reduced on the cover.
 
@@ -118,6 +158,9 @@ defmodule Muro.Synth.Feature do
     end
   end
 
+  # A state is terminal when every action stays there. That is the
+  # absorbing state of the step function. It is not a label on a
+  # constructor.
   def terminal?(host, state) do
     Enum.all?(host.actions, fn action ->
       {next, _reward} = host.step.(state, action)

@@ -32,12 +32,22 @@ defmodule Muro.Synth.Book do
   environment for a later search.
   """
   def render(host, arms, anchor, oracle) when is_list(arms) and is_binary(oracle) do
-    case bind(host, arms) do
-      :error ->
-        {:error, "state equality is not a run"}
+    # Set before `bind`: the reach text is built there, and a large
+    # placement cover must not tabulate before the class proof is chosen.
+    if Muro.Synth.ClassCert.recur_only?(host, arms, oracle) do
+      Process.put(:muro_synth_class_recur, true)
+    end
 
-      {:ok, bound} ->
-        render_bound(host, arms, anchor, oracle, bound)
+    try do
+      case bind(host, arms) do
+        :error ->
+          {:error, "state equality is not a run"}
+
+        {:ok, bound} ->
+          render_bound(host, arms, anchor, oracle, bound)
+      end
+    after
+      Process.delete(:muro_synth_class_recur)
     end
   end
 
@@ -58,13 +68,19 @@ defmodule Muro.Synth.Book do
 
     case Muro.Synth.Cert.render(host, arms, oracle, bound) do
       {:ok, cert} ->
-        {:ok, header(:certified) <> body <> cert.text,
+        imported =
+          Enum.map_join(Map.get(cert, :imports, []), "", fn path ->
+            "import \"#{rel(anchor, path)}\"\n"
+          end)
+
+        {:ok, header(:certified) <> body <> imported <> cert.text,
          %{
            kind: :certified,
            certificate: cert.certificate,
            also: cert.also,
            reason: nil,
-           obligations: cert.obligations
+           obligations: cert.obligations,
+           class_proof: Map.get(cert, :class_proof, false)
          }}
 
       {:skip, reason} ->
@@ -351,7 +367,11 @@ defmodule Muro.Synth.Book do
       end
 
     {evaluator, names, taken} =
-      evaluator(host.book, taken, plan.feature_type, plan.feature_eval)
+      if quantified?(arms) do
+        evaluator_quant(host, arms, plan, taken)
+      else
+        evaluator(host.book, taken, plan.feature_type, plan.feature_eval)
+      end
 
     names = Map.put(names, :spell, plan.spell)
 
@@ -379,7 +399,8 @@ defmodule Muro.Synth.Book do
       hold: hold,
       placeholder: placeholder,
       feature_text: feature_text(plan, placeholder),
-      taken: taken
+      taken: taken,
+      dyn: Map.get(plan, :dyn)
     }
   end
 
@@ -616,6 +637,256 @@ defmodule Muro.Synth.Book do
     """
   end
 
+  # `selfp` and `otherp` close over the action this arm ranks. `eval`
+  # stays a predicate at a carrier: the action is an argument of the
+  # constructor, not a third argument of `eval`. `stem-at` and `other-at`
+  # are the runs the checker reduces.
+  defp evaluator_quant(host, arms, plan, taken) do
+    book = host.book
+    feature_type = plan.feature_type
+    feature_eval = plan.feature_eval
+    {andb, taken, andb_text} = bool_helper(book, taken, "andb", 2, &andb_source/1)
+    {orb, taken, orb_text} = bool_helper(book, taken, "orb", 2, &orb_source/1)
+    {notb, taken, notb_text} = bool_helper(book, taken, "notb", 1, &notb_source/1)
+    {pred, taken} = alloc("PredProg", taken)
+
+    {ctors, taken} =
+      Enum.map_reduce(@pred_ctors, taken, fn name, taken -> alloc(name, taken) end)
+
+    [feat, andp, orp, notp, truep, falsep] = ctors
+    {selfp, taken} = alloc("selfp", taken)
+    {otherp, taken} = alloc("otherp", taken)
+    {stem, taken} = alloc("Stem", taken)
+    {stem_at, taken} = alloc("stem-at", taken)
+    {other_at, taken} = alloc("other-at", taken)
+
+    families = quant_families(host, arms)
+
+    {stem_spell, taken} =
+      Enum.map_reduce(families, taken, fn family, taken ->
+        {ctor, taken} = alloc(family.stem, taken)
+        {{family.stem, ctor}, taken}
+      end)
+
+    names = %{
+      pred: pred,
+      feat: feat,
+      andp: andp,
+      orp: orp,
+      notp: notp,
+      truep: truep,
+      falsep: falsep,
+      selfp: selfp,
+      otherp: otherp,
+      andb: andb,
+      orb: orb,
+      notb: notb,
+      stem: stem,
+      stem_at: stem_at,
+      other_at: other_at,
+      stem_spell: Map.new(stem_spell)
+    }
+
+    {eval, taken} = alloc("eval", taken)
+    # The scrutinee must not be an action constructor. `match` would
+    # then bind that constructor instead of the value.
+    {stem_k, taken} = alloc("stem-k", taken)
+    {act, taken} = alloc("act", taken)
+    {car, taken} = alloc("car", taken)
+    names = Map.merge(names, %{eval: eval, stem_k: stem_k, act: act, car: car})
+
+    text =
+      IO.iodata_to_binary([
+        andb_text,
+        orb_text,
+        notb_text,
+        quant_source(host, families, names, plan.spell, feature_eval),
+        pred_quant_source(names, feature_type),
+        "\n",
+        eval_quant_source(names, feature_eval),
+        "\n"
+      ])
+
+    {text, names, take(taken, Map.values(names) |> Enum.filter(&is_binary/1))}
+  end
+
+  defp quantified?(arms), do: Enum.any?(arms, &quant_pred?(&1.pred))
+
+  # The families `stem-at` matches on. `feature_plan/3` declares every
+  # column of these families, and `quant_source/5` reads them, so the two
+  # agree on the action set.
+  defp quant_families(host, arms) do
+    if quantified?(arms) do
+      used = stems_used(arms)
+
+      (host.feature_specs || [])
+      |> Muro.Synth.Feature.families(host.actions)
+      |> Enum.filter(&MapSet.member?(used, &1.stem))
+    else
+      []
+    end
+  end
+
+  # Every column of a stem the survivors quantify over. `stem-at` reads
+  # the column at each action, including an action no survivor names, so
+  # the plan declares the whole family rather than the columns `reads`
+  # happens to see.
+  defp quant_columns(host, arms) do
+    Enum.flat_map(quant_families(host, arms), fn family ->
+      Enum.map(family.actions, &Map.fetch!(family.by_action, &1))
+    end)
+  end
+
+  defp quant_pred?({:self, _, _, _}), do: true
+  defp quant_pred?({:other, _, _, _}), do: true
+  defp quant_pred?({:not, pred}), do: quant_pred?(pred)
+  defp quant_pred?({:and, left, right}), do: quant_pred?(left) or quant_pred?(right)
+  defp quant_pred?({:or, left, right}), do: quant_pred?(left) or quant_pred?(right)
+  defp quant_pred?(_pred), do: false
+
+  defp stems_used(arms) do
+    Enum.reduce(arms, MapSet.new(), fn arm, acc -> stem_set(arm.pred, acc) end)
+  end
+
+  defp stem_set({:self, stem, _, _}, acc), do: MapSet.put(acc, stem)
+  defp stem_set({:other, stem, _, _}, acc), do: MapSet.put(acc, stem)
+  defp stem_set({:not, pred}, acc), do: stem_set(pred, acc)
+  defp stem_set({:and, left, right}, acc), do: stem_set(right, stem_set(left, acc))
+  defp stem_set({:or, left, right}, acc), do: stem_set(right, stem_set(left, acc))
+  defp stem_set(_pred, acc), do: acc
+
+  defp pred_quant_source(n, feature_type) do
+    """
+    data #{n.pred} : Type where
+      #{n.feat} : Π (+ f : #{feature_type}) → #{n.pred}
+      #{n.andp} : #{n.pred} → #{n.pred} → #{n.pred}
+      #{n.orp} : #{n.pred} → #{n.pred} → #{n.pred}
+      #{n.notp} : #{n.pred} → #{n.pred}
+      #{n.truep} : #{n.pred}
+      #{n.falsep} : #{n.pred}
+      #{n.selfp} : Π (+ k : #{n.stem}) → Π (+ a : Action) → #{n.pred}
+      #{n.otherp} : Π (+ k : #{n.stem}) → Π (+ a : Action) → #{n.pred}
+    """
+  end
+
+  defp eval_quant_source(n, feature_eval) do
+    """
+    def #{n.eval} : run Π (p : #{n.pred}) → Π (+ c : Carrier) → Bool :=
+      λ (p : #{n.pred}) → λ (+ #{n.car} : Carrier) →
+        match p motive (λ _ → Bool)
+          | #{n.feat} f => #{feature_eval} f #{n.car}
+          | #{n.andp} q r => #{n.andb} (#{n.eval} q #{n.car}) (#{n.eval} r #{n.car})
+          | #{n.orp} q r => #{n.orb} (#{n.eval} q #{n.car}) (#{n.eval} r #{n.car})
+          | #{n.notp} q => #{n.notb} (#{n.eval} q #{n.car})
+          | #{n.truep} => true
+          | #{n.falsep} => false
+          | #{n.selfp} #{n.stem_k} #{n.act} => #{n.stem_at} #{n.stem_k} #{n.act} #{n.car}
+          | #{n.otherp} #{n.stem_k} #{n.act} => #{n.other_at} #{n.stem_k} #{n.act} #{n.car}
+    """
+  end
+
+  defp quant_source(host, families, names, spell, feature_eval) do
+    actions = action_ctors(host.book)
+    k = names.stem_k
+    act = names.act
+    car = names.car
+
+    ctors =
+      Enum.map_join(families, "\n", fn family ->
+        "  #{stem_ctor(names, family.stem)} : #{names.stem}"
+      end)
+
+    stem_arms =
+      Enum.map_join(families, "\n", fn family ->
+        inner =
+          Enum.map_join(actions, "\n", fn action ->
+            body = stem_body(family, action, spell, feature_eval, car)
+            "            | #{action} => #{body}"
+          end)
+
+        """
+          | #{stem_ctor(names, family.stem)} =>
+              (match #{act} motive (λ _ → Bool)
+        #{inner}
+              )
+        """
+      end)
+
+    other_arms =
+      Enum.map_join(actions, "\n", fn action ->
+        calls =
+          actions
+          |> Enum.reject(&(&1 == action))
+          |> Enum.map(&"#{names.stem_at} #{k} #{&1} #{car}")
+
+        "      | #{action} => #{or_chain(names.orb, calls)}"
+      end)
+
+    """
+    data #{names.stem} : Type where
+    #{ctors}
+
+    def #{names.stem_at} : run Π (+ #{k} : #{names.stem}) → Π (+ #{act} : Action) → Π (+ #{car} : Carrier) → Bool :=
+      λ (+ #{k} : #{names.stem}) → λ (+ #{act} : Action) → λ (+ #{car} : Carrier) →
+        match #{k} motive (λ _ → Bool)
+    #{stem_arms}
+    def #{names.other_at} : run Π (+ #{k} : #{names.stem}) → Π (+ #{act} : Action) → Π (+ #{car} : Carrier) → Bool :=
+      λ (+ #{k} : #{names.stem}) → λ (+ #{act} : Action) → λ (+ #{car} : Carrier) →
+        match #{act} motive (λ _ → Bool)
+    #{other_arms}
+    """
+  end
+
+  # An action the family has no column for is false: the cover filter
+  # dropped that test, and `Synth.eval` reads the same family, so `self`
+  # there is false and `other` leaves it out. An action the family has a
+  # column for always has a constructor, because `feature_plan/3`
+  # declares every column of a quantified stem. A column with no
+  # constructor is a plan that disagrees with `other-at`, and the book is
+  # refused rather than read as false.
+  defp stem_body(family, action, spell, feature_eval, car) do
+    case family_column(family, action) do
+      :none ->
+        "false"
+
+      {:ok, feature} ->
+        case Map.fetch(spell, feature) do
+          {:ok, ctor} when is_binary(ctor) ->
+            "#{feature_eval} #{ctor} #{car}"
+
+          _ ->
+            raise ArgumentError,
+                  "stem #{family.stem} has a column at #{action}, #{feature}, " <>
+                    "that the feature plan did not declare"
+        end
+    end
+  end
+
+  defp family_column(family, action) do
+    if action in family.actions,
+      do: {:ok, Map.fetch!(family.by_action, action)},
+      else: :none
+  end
+
+  defp action_ctors(book) do
+    case Enum.find(book, &(Map.get(&1, :kind) == :data and &1.name == "Action")) do
+      %{ctors: ctors} -> Enum.map(ctors, & &1.name)
+      _ -> []
+    end
+  end
+
+  # An application argument is parenthesized. `orb stem-at k a c`
+  # passes the function, and the body then has a function type.
+  defp or_chain(_orb, []), do: "false"
+  defp or_chain(_orb, [one]), do: paren_call(one)
+  defp or_chain(orb, [one | rest]), do: "(#{orb} #{paren_call(one)} #{or_chain(orb, rest)})"
+
+  defp paren_call(term) do
+    if String.starts_with?(term, "(") or not String.contains?(term, " "),
+      do: term,
+      else: "(#{term})"
+  end
+
   defp taken_names(book) do
     Enum.reduce(book, MapSet.new(), fn d, acc -> take(acc, entry_names(d)) end)
   end
@@ -678,6 +949,18 @@ defmodule Muro.Synth.Book do
   defp spell({:and, p, q}, names), do: "(#{names.andp} #{spell(p, names)} #{spell(q, names)})"
   defp spell({:or, p, q}, names), do: "(#{names.orp} #{spell(p, names)} #{spell(q, names)})"
 
+  defp spell({:self, stem, action, _feature}, names) do
+    "(#{names.selfp} #{stem_ctor(names, stem)} #{action})"
+  end
+
+  defp spell({:other, stem, action, _features}, names) do
+    "(#{names.otherp} #{stem_ctor(names, stem)} #{action})"
+  end
+
+  defp stem_ctor(names, stem) do
+    Map.get(Map.get(names, :stem_spell, %{}), stem, stem)
+  end
+
   defp policy_term([arm], bound) do
     decl = Map.fetch!(bound.decl, arm.name)
 
@@ -691,6 +974,14 @@ defmodule Muro.Synth.Book do
   end
 
   defp holds(arms, bound) do
+    if Process.get(:muro_synth_class_recur) == true do
+      ""
+    else
+      hold_lines(arms, bound)
+    end
+  end
+
+  defp hold_lines(arms, bound) do
     Enum.map_join(arms, "\n", fn arm ->
       decl = Map.fetch!(bound.decl, arm.name)
 
@@ -733,6 +1024,7 @@ defmodule Muro.Synth.Book do
     specs =
       arms
       |> Enum.flat_map(&Muro.Synth.reads(&1.pred))
+      |> Kernel.++(quant_columns(host, arms))
       |> Enum.uniq()
       |> Enum.map(&spec!(host, &1))
 
@@ -774,7 +1066,7 @@ defmodule Muro.Synth.Book do
       :error ->
         :error
 
-      {:ok, text, taken, spell} ->
+      {:ok, text, taken, spell, dyn} ->
         {:ok,
          %{
            mode: :declared,
@@ -782,7 +1074,8 @@ defmodule Muro.Synth.Book do
            spell: spell,
            feature_type: "Feature",
            feature_eval: "eval-feature",
-           taken: taken
+           taken: taken,
+           dyn: dyn
          }}
     end
   end
@@ -795,7 +1088,7 @@ defmodule Muro.Synth.Book do
       :error ->
         :error
 
-      {:ok, text, taken, spell} ->
+      {:ok, text, taken, spell, dyn} ->
         {:ok,
          %{
            mode: :extend,
@@ -803,7 +1096,8 @@ defmodule Muro.Synth.Book do
            spell: spell,
            feature_type: type_name,
            feature_eval: eval_name,
-           taken: taken
+           taken: taken,
+           dyn: dyn
          }}
     end
   end
@@ -834,7 +1128,7 @@ defmodule Muro.Synth.Book do
     #{Enum.map_join(rows, "\n", &eval_clause(&1, helpers))}
     """
 
-    {:ok, text, taken, spell}
+    {:ok, text, taken, spell, helpers.dyn}
   end
 
   defp helper_block(host, specs, taken) do
@@ -902,15 +1196,27 @@ defmodule Muro.Synth.Book do
         {nil, taken, ""}
       end
 
-    # A closed cover gets a table the checker re-checks. Anything else
-    # keeps the recurrence.
-    {one, taken, reach_text} =
+    # A closed cover gets a table the checker re-checks. `dyn-one`
+    # stays the recurrence either way, so a class proof can induct.
+    # The table, when there is one, is what `dyn-any` reads.
+    {dyn, taken, reach_text} =
       if need_reach do
         {best, taken} = alloc("dyn-best-pos", taken)
         {one, taken} = alloc("dyn-one", taken)
         {any, taken} = alloc("dyn-any", taken)
-        {text, taken} = Muro.Synth.Reach.sources(host, best, one, any, pos, taken)
-        {one, taken, text}
+        {best_rec, taken} = alloc("dyn-best-rec", taken)
+        {one_rec, taken} = alloc("dyn-one-rec", taken)
+        {any_rec, taken} = alloc("dyn-any-rec", taken)
+        rec = %{best: best_rec, one: one_rec, any: any_rec}
+        {text, taken} = Muro.Synth.Reach.sources(host, best, one, any, pos, taken, rec)
+        tabulated = String.contains?(text, "def #{best_rec} ")
+
+        {%{
+           pos: pos,
+           one: one,
+           best: if(tabulated, do: best_rec, else: best),
+           any: if(tabulated, do: any_rec, else: any)
+         }, taken, text}
       else
         {nil, taken, ""}
       end
@@ -926,9 +1232,10 @@ defmodule Muro.Synth.Book do
     {:ok,
      %{
        pos: pos,
-       one: one,
+       one: if(dyn, do: dyn.one),
        same: same,
        terminal: terminal,
+       dyn: dyn,
        text: text,
        struct: struct_helpers,
        schema: host.schema

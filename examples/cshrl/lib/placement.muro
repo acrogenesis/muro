@@ -1,0 +1,2702 @@
+-- placement.muro — class-level optimality for a binary placement MDP.
+--
+-- The environment supplies the placement structure. This book proves,
+-- from those hypotheses, that a reach-family ranking is a CoindHomo.
+-- It does not rank by traces and it does not call a Finder.
+--
+-- (a) hit s a k is true exactly when action a's reward stream at s
+--     pays the solved reward at some index at most k.
+-- (b) If that action hits within the horizon, its action-value stream
+--     dominates every action.
+-- (c) If no action hits within the horizon, every action-value is the
+--     zero stream, by solve-horizon-suf.
+-- (d) A rank that prefers such an action is a CoindHomo.
+import "core.muro"
+import "../std/nat.muro"
+
+param Config : spec Type
+param horizon : run Nat
+param solved-reward : run Reward
+param class-dead : run State
+param class-ongoing : run Π (c : Config) → State
+param class-solved : run Π (c : Config) → State
+param class-blocked : run Π (+ c : Config) → Bool
+param class-full : run Π (c : Config) → Bool
+param class-place : run Π (+ c : Config) → Π (+ a : Action) → Config
+param class-length : run Π (c : Config) → Nat
+
+-- Which kind of state s is. One proof, by the three constructors.
+data StateView : State → Type where
+  view-dead : StateView class-dead
+  view-solved : Π (+ c : Config) → StateView (class-solved c)
+  view-ongoing : Π (+ c : Config) → StateView (class-ongoing c)
+
+param state-view : evidence Π (s : State) → StateView s
+
+-- a occurs in the list. Both the action and the list are indices:
+-- a data parameter has to be a type. The element is erased, so building
+-- the proof does not spend the action the caller still has to pass on.
+data Elem : Action → List Action → Type where
+  elem-here : Π (- a : Action) → Π (xs : List Action) → Elem a (cons a xs)
+  elem-there : Π (- a : Action) → Π (b : Action) → Π (xs : List Action) →
+               Elem a xs → Elem a (cons b xs)
+
+param in-actions : evidence Π (a : Action) → Elem a all-actions
+
+-- Placing grows the configuration by one.
+param length-place : evidence Π (c : Config) → Π (a : Action) →
+                              {class-length (class-place c a) ≡ suc (class-length c) : Nat}
+
+def nat-eq : run Π (m : Nat) → Π (n : Nat) → Bool :=
+  λ (m : Nat) → λ (n : Nat) →
+    match m motive (λ _ → Bool)
+      | 0 =>
+          (match n motive (λ _ → Bool)
+            | 0 => true
+            | suc _ => false)
+      | suc m1 =>
+          (match n motive (λ _ → Bool)
+            | 0 => false
+            | suc n1 => nat-eq m1 n1)
+
+-- class-full is length = horizon, as a Bool.
+param full-is-length : evidence Π (c : Config) →
+                                {class-full c ≡ nat-eq (class-length c) horizon : Bool}
+
+-- 0 < R. Le computes, so a false reward has no inhabitant.
+param zero-lt-R : evidence le (suc bottom) solved-reward
+
+def class-monus : run Π (m : Nat) → Π (n : Nat) → Nat :=
+  λ (m : Nat) → λ (n : Nat) →
+    match n motive (λ _ → Nat)
+      | 0 => m
+      | suc n1 =>
+          (match m motive (λ _ → Nat)
+            | 0 => 0
+            | suc m1 => class-monus m1 n1)
+
+-- Reward of a placement, from the two booleans. Not the environment's step.
+def judge-on : run Π (blocked : Bool) → Π (full : Bool) → Π (+ c : Config) → State × Reward :=
+  λ (blocked : Bool) → λ (full : Bool) → λ (+ c : Config) →
+    match blocked motive (λ _ → State × Reward)
+      | true => (class-dead, bottom)
+      | false =>
+          (match full motive (λ _ → State × Reward)
+            | true => (class-solved c, solved-reward)
+            | false => (class-ongoing c, bottom))
+
+def class-judge : run Π (+ c : Config) → State × Reward :=
+  λ (+ c : Config) → judge-on (class-blocked c) (class-full c) c
+
+-- A reward the class can pay: bottom, or the solved reward.
+data RewardBin : Reward → Type where
+  bin-zero : RewardBin bottom
+  bin-R : RewardBin solved-reward
+
+def class-pos : run Π (r : Reward) → Bool :=
+  λ (r : Reward) →
+    match r motive (λ _ → Bool)
+      | 0 => false
+      | suc _ => true
+
+-- step agrees with the class step on each kind of state.
+param step-dead : evidence Π (a : Action) →
+                           {step class-dead a ≡ (class-dead, bottom) : State × Reward}
+param step-solved : evidence Π (c : Config) → Π (a : Action) →
+                             {step (class-solved c) a ≡ (class-solved c, solved-reward) : State × Reward}
+param step-ongoing : evidence Π (c : Config) → Π (a : Action) →
+                              {step (class-ongoing c) a ≡ class-judge (class-place c a) : State × Reward}
+
+-- 0 and R are apart, from 0 < R.
+def reward-apart : evidence Π (h : {bottom ≡ solved-reward : Reward}) → Empty :=
+  λ (h : {bottom ≡ solved-reward : Reward}) →
+    rewrite h motive (λ r → le (suc bottom) r) in
+    zero-lt-R
+
+-- solve at dead is the zero reward at every depth. The zero case is the
+-- max of the immediate zeros. The successor rewrites by the hypothesis,
+-- and the concrete action list folds.
+def solve-dead-0 : evidence Π (n : Nat) → {solve class-dead n ≡ bottom : Reward} :=
+  λ (n : Nat) →
+    match n motive (λ (k : Nat) → {solve class-dead k ≡ bottom : Reward})
+      | 0 => refl
+      | suc m =>
+          rewrite solve-dead-0 m
+            motive (λ z →
+              {max-list (map Action Reward (λ (a : Action) → z) all-actions) ≡ bottom : Reward})
+          in refl
+
+-- solve at a solved board is R at every depth.
+def solve-solved-R : evidence Π (+ c : Config) → Π (n : Nat) →
+                              {solve (class-solved c) n ≡ solved-reward : Reward} :=
+  λ (+ c : Config) → λ (n : Nat) →
+    match n motive (λ (k : Nat) → {solve (class-solved c) k ≡ solved-reward : Reward})
+      | 0 => refl
+      | suc m =>
+          rewrite solve-solved-R c m
+            motive (λ z →
+              {max-list (map Action Reward (λ (a : Action) → z) all-actions) ≡ solved-reward : Reward})
+          in refl
+
+-- The immediate reward is bottom or R, by the three kinds of state.
+def ongoing-reward : evidence Π (+ c : Config) → Π (+ a : Action) →
+                              RewardBin (snd (step (class-ongoing c) a)) :=
+  λ (+ c : Config) → λ (+ a : Action) →
+    match (class-blocked (class-place c a))
+      motive (λ b → RewardBin (snd (judge-on b (class-full (class-place c a)) (class-place c a))))
+      | true => bin-zero
+      | false =>
+          (match (class-full (class-place c a))
+            motive (λ f → RewardBin (snd (judge-on false f (class-place c a))))
+            | true => bin-R
+            | false => bin-zero)
+
+def step-reward-binary : evidence Π (s : State) → Π (+ a : Action) → RewardBin (snd (step s a)) :=
+  λ (s : State) → λ (+ a : Action) →
+    match (state-view s) motive (λ t → λ (_ : StateView t) → RewardBin (snd (step t a)))
+      | view-dead => bin-zero
+      | view-solved c => bin-R
+      | view-ongoing c => ongoing-reward c a
+
+-- max of a list of binary rewards is binary.
+def max-list-binary : evidence Π (- f : Action → Reward) → Π (xs : List Action) →
+                               Π (+ each : Π (a : Action) → RewardBin (f a)) →
+                               RewardBin (max-list (map Action Reward f xs)) :=
+  λ (- f : Action → Reward) → λ (xs : List Action) →
+  λ (+ each : Π (a : Action) → RewardBin (f a)) →
+    match xs motive (λ ys → RewardBin (max-list (map Action Reward f ys)))
+      | nil => bin-zero
+      | cons x rest =>
+          (match (each x) motive (λ q → λ (_ : RewardBin q) →
+                    Π (restb : RewardBin (max-list (map Action Reward f rest))) →
+                    RewardBin (max q (max-list (map Action Reward f rest))))
+            | bin-zero => λ (restb : RewardBin (max-list (map Action Reward f rest))) →
+                (match restb motive (λ u → λ (_ : RewardBin u) → RewardBin (max bottom u))
+                  | bin-zero => bin-zero
+                  | bin-R => bin-R)
+            | bin-R => λ (restb : RewardBin (max-list (map Action Reward f rest))) →
+                (match restb motive (λ u → λ (_ : RewardBin u) → RewardBin (max solved-reward u))
+                  | bin-zero => bin-R
+                  | bin-R => bin-R))
+          (max-list-binary f rest each)
+
+def solve-binary : evidence Π (+ s : State) → Π (n : Nat) → RewardBin (solve s n) :=
+  λ (+ s : State) → λ (n : Nat) →
+    match n motive (λ k → RewardBin (solve s k))
+      | 0 => max-list-binary (λ (a : Action) → snd (step s a)) all-actions (λ (a : Action) → step-reward-binary s a)
+      | suc m => max-list-binary (λ (a : Action) → solve (fst (step s a)) m) all-actions (λ (a : Action) → solve-binary (fst (step s a)) m)
+
+-- false is not true.
+def class-ft : evidence Π (h : {false ≡ true : Bool}) → Empty :=
+  λ (h : {false ≡ true : Bool}) →
+    rewrite h motive (λ b → (match b motive (λ _ → Type) | true => Unit | false => Empty)) in tt
+
+-- nat-eq m n is false once m is strictly above n.
+def nat-eq-above : evidence Π (m : Nat) → Π (n : Nat) →
+                            Π (h : {leb (suc n) m ≡ true : Bool}) →
+                            {nat-eq m n ≡ false : Bool} :=
+  λ (m : Nat) →
+    match m motive (λ (x : Nat) → Π (n : Nat) → Π (h : {leb (suc n) x ≡ true : Bool}) → {nat-eq x n ≡ false : Bool})
+      | 0 => λ (n : Nat) → λ (h : {leb (suc n) 0 ≡ true : Bool}) →
+          matchEmpty (class-ft h) motive (λ _ → {nat-eq 0 n ≡ false : Bool})
+      | suc m1 => λ (n : Nat) →
+          match n motive (λ (y : Nat) → Π (h : {leb (suc y) (suc m1) ≡ true : Bool}) → {nat-eq (suc m1) y ≡ false : Bool})
+            | 0 => λ (_ : {leb (suc 0) (suc m1) ≡ true : Bool}) → refl
+            | suc n1 => λ (h : {leb (suc (suc n1)) (suc m1) ≡ true : Bool}) → nat-eq-above m1 n1 h
+
+-- leb (suc m) (suc n) reduces to leb m n.
+def leb-suc-both : evidence Π (m : Nat) → Π (n : Nat) →
+                            Π (h : {leb m n ≡ true : Bool}) →
+                            {leb (suc m) (suc n) ≡ true : Bool} :=
+  λ (m : Nat) → λ (n : Nat) → λ (h : {leb m n ≡ true : Bool}) → h
+
+-- suc m ≤ n implies m ≤ n.
+def leb-weaken : evidence Π (m : Nat) → Π (n : Nat) →
+                          Π (h : {leb (suc m) n ≡ true : Bool}) →
+                          {leb m n ≡ true : Bool} :=
+  λ (m : Nat) →
+    match m motive (λ (x : Nat) → Π (n : Nat) → Π (h : {leb (suc x) n ≡ true : Bool}) → {leb x n ≡ true : Bool})
+      | 0 => λ (n : Nat) → λ (_ : {leb (suc 0) n ≡ true : Bool}) → refl
+      | suc m1 => λ (n : Nat) →
+          match n motive (λ (y : Nat) → Π (h : {leb (suc (suc m1)) y ≡ true : Bool}) → {leb (suc m1) y ≡ true : Bool})
+            | 0 => λ (h : {leb (suc (suc m1)) 0 ≡ true : Bool}) →
+                matchEmpty (class-ft h) motive (λ _ → {leb (suc m1) 0 ≡ true : Bool})
+            | suc n1 => λ (h : {leb (suc (suc m1)) (suc n1) ≡ true : Bool}) → leb-weaken m1 n1 h
+
+-- Placing onto a long board leaves a longer board.
+def place-leb : evidence Π (c : Config) → Π (a : Action) →
+                         Π (h : {leb horizon (class-length c) ≡ true : Bool}) →
+                         {leb (suc horizon) (class-length (class-place c a)) ≡ true : Bool} :=
+  λ (c : Config) → λ (a : Action) → λ (h : {leb horizon (class-length c) ≡ true : Bool}) →
+    rewrite length-place c a motive (λ z → {leb (suc horizon) z ≡ true : Bool}) in
+    leb-suc-both horizon (class-length c) h
+
+-- A board at least as long as the horizon is not solved after one placement.
+def place-not-full : evidence Π (c : Config) → Π (a : Action) →
+                              Π (h : {leb horizon (class-length c) ≡ true : Bool}) →
+                              {class-full (class-place c a) ≡ false : Bool} :=
+  λ (c : Config) → λ (a : Action) → λ (h : {leb horizon (class-length c) ≡ true : Bool}) →
+    rewrite full-is-length (class-place c a) motive (λ b → {b ≡ false : Bool}) in
+    nat-eq-above (class-length (class-place c a)) horizon (place-leb c a h)
+
+-- Every reward on the list is bottom, so the max is bottom.
+def max-all-0 : evidence Π (- f : Action → Reward) → Π (xs : List Action) →
+                         Π (+ each : Π (a : Action) → {f a ≡ bottom : Reward}) →
+                         {max-list (map Action Reward f xs) ≡ bottom : Reward} :=
+  λ (- f : Action → Reward) → λ (xs : List Action) →
+  λ (+ each : Π (a : Action) → {f a ≡ bottom : Reward}) →
+    match xs motive (λ (ys : List Action) → {max-list (map Action Reward f ys) ≡ bottom : Reward})
+      | nil => refl
+      | cons x rest =>
+          rewrite each x
+            motive (λ z → {max z (max-list (map Action Reward f rest)) ≡ bottom : Reward})
+          in
+          rewrite max-all-0 f rest each
+            motive (λ z → {max bottom z ≡ bottom : Reward})
+          in refl
+
+-- The immediate reward of a long placement is bottom. The solved arm
+-- would require the placed board to be full, which place-not-full refuses.
+def judge-snd-long : evidence Π (blocked : Bool) → Π (full : Bool) → Π (+ c : Config) →
+                              Π (hf : {full ≡ false : Bool}) →
+                              {snd (judge-on blocked full c) ≡ bottom : Reward} :=
+  λ (blocked : Bool) → λ (full : Bool) → λ (+ c : Config) →
+  λ (hf : {full ≡ false : Bool}) →
+    match blocked motive (λ b → {snd (judge-on b full c) ≡ bottom : Reward})
+      | true => refl
+      | false =>
+          (match full motive (λ f → Π (p : {f ≡ false : Bool}) → {snd (judge-on false f c) ≡ bottom : Reward})
+            | true => λ (p : {true ≡ false : Bool}) →
+                matchEmpty (class-ft (sym Bool true false p)) motive (λ _ → {solved-reward ≡ bottom : Reward})
+            | false => λ (_ : {false ≡ false : Bool}) → refl)
+          hf
+
+def snd-long : evidence Π (+ c : Config) → Π (+ a : Action) →
+                        Π (big : {leb horizon (class-length c) ≡ true : Bool}) →
+                        {snd (step (class-ongoing c) a) ≡ bottom : Reward} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+  λ (big : {leb horizon (class-length c) ≡ true : Bool}) →
+    rewrite step-ongoing c a motive (λ p → {snd p ≡ bottom : Reward}) in
+    judge-snd-long (class-blocked (class-place c a)) (class-full (class-place c a)) (class-place c a) (place-not-full c a big)
+
+-- A board at least as long as the horizon has solve bottom at every depth.
+-- The successor asks next-zero, which comes later and descends on the depth.
+def long-zero : evidence Π (n : Nat) → Π (+ c : Config) →
+                         Π (big : {leb horizon (class-length c) ≡ true : Bool}) →
+                         {solve (class-ongoing c) n ≡ bottom : Reward} :=
+  λ (n : Nat) → λ (+ c : Config) →
+  λ (big : {leb horizon (class-length c) ≡ true : Bool}) →
+    match n motive (λ (k : Nat) → {solve (class-ongoing c) k ≡ bottom : Reward})
+      | 0 =>
+          max-all-0 (λ (a : Action) → snd (step (class-ongoing c) a)) all-actions
+            (λ (a : Action) → snd-long c a big)
+      | suc m =>
+          max-all-0 (λ (a : Action) → solve (fst (step (class-ongoing c) a)) m) all-actions
+            (λ (a : Action) → next-zero m c a big)
+
+-- The state one placement reaches from a long board also solves to bottom.
+-- long-zero is earlier in the book, so this call keeps the same depth.
+def next-zero : evidence Π (m : Nat) → Π (+ c : Config) → Π (+ a : Action) →
+                         Π (big : {leb horizon (class-length c) ≡ true : Bool}) →
+                         {solve (fst (step (class-ongoing c) a)) m ≡ bottom : Reward} :=
+  λ (m : Nat) → λ (+ c : Config) → λ (+ a : Action) →
+  λ (big : {leb horizon (class-length c) ≡ true : Bool}) →
+    rewrite step-ongoing c a motive (λ p → {solve (fst p) m ≡ bottom : Reward}) in
+    match (class-blocked (class-place c a))
+      motive (λ b → {solve (fst (judge-on b (class-full (class-place c a)) (class-place c a))) m ≡ bottom : Reward})
+      | true => solve-dead-0 m
+      | false =>
+          (match (class-full (class-place c a))
+            motive (λ f → Π (hf : {f ≡ false : Bool}) →
+                         Π (hl : {leb (suc horizon) (class-length (class-place c a)) ≡ true : Bool}) →
+                         {solve (fst (judge-on false f (class-place c a))) m ≡ bottom : Reward})
+            | true => λ (hf : {true ≡ false : Bool}) →
+                λ (_ : {leb (suc horizon) (class-length (class-place c a)) ≡ true : Bool}) →
+                  matchEmpty (class-ft (sym Bool true false hf))
+                    motive (λ _ → {solve (class-solved (class-place c a)) m ≡ bottom : Reward})
+            | false => λ (_ : {false ≡ false : Bool}) →
+                λ (hl : {leb (suc horizon) (class-length (class-place c a)) ≡ true : Bool}) →
+                  long-zero m (class-place c a) (leb-weaken horizon (class-length (class-place c a)) hl))
+          (place-not-full c a big)
+          (place-leb c a big)
+
+-- max n n is n. Reward is a number at the instance, so this is maxN.
+def max-idem : evidence Π (n : Nat) → {maxN n n ≡ n : Nat} :=
+  λ (n : Nat) →
+    match n motive (λ (k : Nat) → {maxN k k ≡ k : Nat})
+      | 0 => refl
+      | suc m => rewrite max-idem m motive (λ z → {suc z ≡ suc m : Nat}) in refl
+
+-- max q R is R when q is bottom or R.
+def max-bin-R : evidence Π (q : Reward) → Π (b : RewardBin q) →
+                         {max q solved-reward ≡ solved-reward : Reward} :=
+  λ (q : Reward) → λ (b : RewardBin q) →
+    match b motive (λ r → λ (_ : RewardBin r) → {max r solved-reward ≡ solved-reward : Reward})
+      | bin-zero => refl
+      | bin-R => max-idem solved-reward
+
+-- max R q is R when q is bottom or R.
+def R-max-bin : evidence Π (q : Reward) → Π (b : RewardBin q) →
+                         {max solved-reward q ≡ solved-reward : Reward} :=
+  λ (q : Reward) → λ (b : RewardBin q) →
+    match b motive (λ r → λ (_ : RewardBin r) → {max solved-reward r ≡ solved-reward : Reward})
+      | bin-zero => refl
+      | bin-R => max-idem solved-reward
+
+-- One listed action pays R, and every action is binary, so the max is R.
+def any-R-max : evidence Π (- f : Action → Reward) → Π (xs : List Action) →
+                         Π (+ each : Π (a : Action) → RewardBin (f a)) →
+                         Π (- w : Action) → Π (mem : Elem w xs) →
+                         Π (hr : {f w ≡ solved-reward : Reward}) →
+                         {max-list (map Action Reward f xs) ≡ solved-reward : Reward} :=
+  λ (- f : Action → Reward) → λ (xs : List Action) →
+  λ (+ each : Π (a : Action) → RewardBin (f a)) →
+  λ (- w : Action) → λ (mem : Elem w xs) →
+  λ (hr : {f w ≡ solved-reward : Reward}) →
+    (match mem motive (λ (b : Action) → λ (ys : List Action) → λ (_ : Elem b ys) →
+                        {f b ≡ solved-reward : Reward} →
+                        {max-list (map Action Reward f ys) ≡ solved-reward : Reward})
+      | elem-here a ys => λ (p : {f a ≡ solved-reward : Reward}) →
+          rewrite p motive (λ z → {max z (max-list (map Action Reward f ys)) ≡ solved-reward : Reward}) in
+          (match (max-list-binary f ys each)
+            motive (λ q → λ (_ : RewardBin q) → {max solved-reward q ≡ solved-reward : Reward})
+            | bin-zero => refl
+            | bin-R => max-idem solved-reward)
+      | elem-there a other ys mem1 => λ (p : {f a ≡ solved-reward : Reward}) →
+          (match (each other)
+            motive (λ q → λ (_ : RewardBin q) →
+                      {max-list (map Action Reward f ys) ≡ solved-reward : Reward} →
+                      {max q (max-list (map Action Reward f ys)) ≡ solved-reward : Reward})
+            | bin-zero => λ (ih : {max-list (map Action Reward f ys) ≡ solved-reward : Reward}) →
+                rewrite ih motive (λ z → {max bottom z ≡ solved-reward : Reward}) in refl
+            | bin-R => λ (ih : {max-list (map Action Reward f ys) ≡ solved-reward : Reward}) →
+                rewrite ih motive (λ z → {max solved-reward z ≡ solved-reward : Reward}) in
+                max-idem solved-reward)
+          (any-R-max f ys each a mem1 p))
+    hr
+
+-- Case split on a binary reward. Each arm receives the equation for the
+-- reward it saw. The arm is typed at that reward; the result is typed at q.
+def reward-split : evidence Π (q : Reward) → Π (b : RewardBin q) → Π (- C : Type) →
+                            Π (z : {q ≡ bottom : Reward} → C) →
+                            Π (r : {q ≡ solved-reward : Reward} → C) → C :=
+  λ (q : Reward) → λ (b : RewardBin q) → λ (- C : Type) →
+  λ (z : {q ≡ bottom : Reward} → C) →
+  λ (r : {q ≡ solved-reward : Reward} → C) →
+    (match b motive (λ t → λ (_ : RewardBin t) →
+              ({t ≡ bottom : Reward} → C) →
+              ({t ≡ solved-reward : Reward} → C) → C)
+      | bin-zero => λ (z1 : {bottom ≡ bottom : Reward} → C) →
+          λ (_ : {bottom ≡ solved-reward : Reward} → C) → z1 refl
+      | bin-R => λ (_ : {solved-reward ≡ bottom : Reward} → C) →
+          λ (r1 : {solved-reward ≡ solved-reward : Reward} → C) → r1 refl)
+    z r
+
+-- solve s (suc m) is bottom, so each successor's solve at m is bottom.
+-- An R successor would make the max R.
+def component-clash : evidence Π (+ s : State) → Π (m : Nat) → Π (a : Action) →
+                               Π (hz : {solve s (suc m) ≡ bottom : Reward}) →
+                               Π (h : {solve (fst (step s a)) m ≡ solved-reward : Reward}) →
+                               {solved-reward ≡ bottom : Reward} :=
+  λ (+ s : State) → λ (m : Nat) → λ (a : Action) →
+  λ (hz : {solve s (suc m) ≡ bottom : Reward}) →
+  λ (h : {solve (fst (step s a)) m ≡ solved-reward : Reward}) →
+    rewrite sym Reward
+             (max-list (map Action Reward (λ (b : Action) → solve (fst (step s b)) m) all-actions))
+             solved-reward
+             (any-R-max (λ (b : Action) → solve (fst (step s b)) m) all-actions
+               (λ (b : Action) → solve-binary (fst (step s b)) m)
+               a (in-actions a) h)
+      motive (λ z → {z ≡ bottom : Reward})
+    in hz
+
+def solve-component-0 : evidence Π (+ s : State) → Π (m : Nat) →
+                                 Π (hz : {solve s (suc m) ≡ bottom : Reward}) →
+                                 Π (a : Action) →
+                                 {solve (fst (step s a)) m ≡ bottom : Reward} :=
+  λ (+ s : State) → λ (m : Nat) →
+  λ (hz : {solve s (suc m) ≡ bottom : Reward}) →
+  λ (a : Action) →
+    reward-split (solve (fst (step s a)) m) (solve-binary (fst (step s a)) m)
+      ({solve (fst (step s a)) m ≡ bottom : Reward})
+      (λ (h : {solve (fst (step s a)) m ≡ bottom : Reward}) → h)
+      (λ (h : {solve (fst (step s a)) m ≡ solved-reward : Reward}) →
+        matchEmpty (reward-apart (sym Reward solved-reward bottom (component-clash s m a hz h)))
+          motive (λ _ → {solve (fst (step s a)) m ≡ bottom : Reward}))
+
+def class-pred : run Π (n : Nat) → Nat :=
+  λ (n : Nat) →
+    match n motive (λ _ → Nat)
+      | 0 => 0
+      | suc m => m
+
+-- suc is injective. The predecessor of both sides is the payload.
+def suc-inj : evidence Π (a : Nat) → Π (b : Nat) →
+                       Π (h : {suc a ≡ suc b : Nat}) → {a ≡ b : Nat} :=
+  λ (a : Nat) → λ (b : Nat) → λ (h : {suc a ≡ suc b : Nat}) →
+    rewrite h motive (λ z → {class-pred z ≡ class-pred (suc b) : Nat}) in refl
+
+def suc-ne-zero : evidence Π (n : Nat) → Π (h : {suc n ≡ 0 : Nat}) → Empty :=
+  λ (n : Nat) → λ (h : {suc n ≡ 0 : Nat}) →
+    rewrite h motive (λ k → (match k motive (λ _ → Type) | 0 => Unit | suc _ => Empty)) in tt
+
+-- class-monus m n is 0 exactly when m ≤ n.
+def monus-zero-leb : evidence Π (m : Nat) → Π (n : Nat) →
+                              Π (h : {class-monus m n ≡ 0 : Nat}) →
+                              {leb m n ≡ true : Bool} :=
+  λ (m : Nat) → λ (n : Nat) →
+    (match n motive (λ j → {class-monus m j ≡ 0 : Nat} → {leb m j ≡ true : Bool})
+      | 0 => λ (h0 : {class-monus m 0 ≡ 0 : Nat}) →
+          (match m motive (λ x → {x ≡ 0 : Nat} → {leb x 0 ≡ true : Bool})
+            | 0 => λ (_ : {0 ≡ 0 : Nat}) → refl
+            | suc m1 => λ (bad : {suc m1 ≡ 0 : Nat}) →
+                matchEmpty (suc-ne-zero m1 bad) motive (λ _ → {leb (suc m1) 0 ≡ true : Bool}))
+          h0
+      | suc n1 => λ (h1 : {class-monus m (suc n1) ≡ 0 : Nat}) →
+          (match m motive (λ x → {class-monus x (suc n1) ≡ 0 : Nat} → {leb x (suc n1) ≡ true : Bool})
+            | 0 => λ (_ : {class-monus 0 (suc n1) ≡ 0 : Nat}) → refl
+            | suc m1 => λ (hs : {class-monus (suc m1) (suc n1) ≡ 0 : Nat}) →
+                monus-zero-leb m1 n1 hs)
+          h1)
+
+-- suc k = m ∸ n implies k = m ∸ suc n.
+def monus-pred : evidence Π (m : Nat) → Π (n : Nat) → Π (k : Nat) →
+                          Π (h : {suc k ≡ class-monus m n : Nat}) →
+                          {k ≡ class-monus m (suc n) : Nat} :=
+  λ (m : Nat) → λ (n : Nat) → λ (k : Nat) →
+    (match n motive (λ j → {suc k ≡ class-monus m j : Nat} → {k ≡ class-monus m (suc j) : Nat})
+      | 0 => λ (h0 : {suc k ≡ class-monus m 0 : Nat}) →
+          (match m motive (λ x → {suc k ≡ x : Nat} → {k ≡ class-monus x (suc 0) : Nat})
+            | 0 => λ (bad : {suc k ≡ 0 : Nat}) →
+                matchEmpty (suc-ne-zero k bad) motive (λ _ → {k ≡ class-monus 0 (suc 0) : Nat})
+            | suc m1 => λ (hs : {suc k ≡ suc m1 : Nat}) → suc-inj k m1 hs)
+          h0
+      | suc n1 => λ (h1 : {suc k ≡ class-monus m (suc n1) : Nat}) →
+          (match m motive (λ x → {suc k ≡ class-monus x (suc n1) : Nat} →
+                                 {k ≡ class-monus x (suc (suc n1)) : Nat})
+            | 0 => λ (bad : {suc k ≡ class-monus 0 (suc n1) : Nat}) →
+                matchEmpty (suc-ne-zero k bad) motive (λ _ → {k ≡ 0 : Nat})
+            | suc m1 => λ (hs : {suc k ≡ class-monus (suc m1) (suc n1) : Nat}) →
+                monus-pred m1 n1 k hs)
+          h1)
+
+-- One placement spends one unit of fuel.
+def fuel-succ : evidence Π (k : Nat) → Π (c : Config) → Π (a : Action) →
+                         Π (h : {suc k ≡ class-monus horizon (class-length c) : Nat}) →
+                         {k ≡ class-monus horizon (class-length (class-place c a)) : Nat} :=
+  λ (k : Nat) → λ (c : Config) → λ (a : Action) →
+  λ (h : {suc k ≡ class-monus horizon (class-length c) : Nat}) →
+    rewrite length-place c a motive (λ z → {k ≡ class-monus horizon z : Nat}) in
+    monus-pred horizon (class-length c) k h
+
+def leb-refl : evidence Π (n : Nat) → {leb n n ≡ true : Bool} :=
+  λ (n : Nat) →
+    match n motive (λ k → {leb k k ≡ true : Bool})
+      | 0 => refl
+      | suc m => leb-refl m
+
+-- k ≤ m implies k ≤ suc m.
+def leb-suc-right : evidence Π (k : Nat) → Π (m : Nat) →
+                             Π (h : {leb k m ≡ true : Bool}) →
+                             {leb k (suc m) ≡ true : Bool} :=
+  λ (k : Nat) →
+    match k motive (λ x → Π (m : Nat) → Π (h : {leb x m ≡ true : Bool}) → {leb x (suc m) ≡ true : Bool})
+      | 0 => λ (m : Nat) → λ (_ : {leb 0 m ≡ true : Bool}) → refl
+      | suc k1 => λ (m : Nat) →
+          match m motive (λ y → Π (h : {leb (suc k1) y ≡ true : Bool}) → {leb (suc k1) (suc y) ≡ true : Bool})
+            | 0 => λ (h : {leb (suc k1) 0 ≡ true : Bool}) →
+                matchEmpty (class-ft h) motive (λ _ → {leb (suc k1) (suc 0) ≡ true : Bool})
+            | suc m1 => λ (h : {leb (suc k1) (suc m1) ≡ true : Bool}) → leb-suc-right k1 m1 h
+
+-- m ∸ n is at most m.
+def monus-le : evidence Π (m : Nat) → Π (n : Nat) →
+                        {leb (class-monus m n) m ≡ true : Bool} :=
+  λ (m : Nat) → λ (n : Nat) →
+    match n motive (λ j → {leb (class-monus m j) m ≡ true : Bool})
+      | 0 => leb-refl m
+      | suc n1 =>
+          (match m motive (λ x → {leb (class-monus x (suc n1)) x ≡ true : Bool})
+            | 0 => refl
+            | suc m1 => leb-suc-right (class-monus m1 n1) m1 (monus-le m1 n1))
+
+-- An immediate solved reward means the next state is solved, so its
+-- solve at depth 0 is R.
+def step-pays-R : evidence Π (+ c : Config) → Π (+ a : Action) →
+                           Π (h : {snd (step (class-ongoing c) a) ≡ solved-reward : Reward}) →
+                           {solve (fst (step (class-ongoing c) a)) 0 ≡ solved-reward : Reward} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+  λ (h : {snd (step (class-ongoing c) a) ≡ solved-reward : Reward}) →
+    (rewrite step-ongoing c a
+      motive (λ p → {snd p ≡ solved-reward : Reward} → {solve (fst p) 0 ≡ solved-reward : Reward})
+    in
+    (match (class-blocked (class-place c a))
+      motive (λ b → {snd (judge-on b (class-full (class-place c a)) (class-place c a)) ≡ solved-reward : Reward} →
+                    {solve (fst (judge-on b (class-full (class-place c a)) (class-place c a))) 0 ≡ solved-reward : Reward})
+      | true => λ (p : {bottom ≡ solved-reward : Reward}) →
+          matchEmpty (reward-apart p) motive (λ _ → {solve class-dead 0 ≡ solved-reward : Reward})
+      | false =>
+          (match (class-full (class-place c a))
+            motive (λ f → {snd (judge-on false f (class-place c a)) ≡ solved-reward : Reward} →
+                          {solve (fst (judge-on false f (class-place c a))) 0 ≡ solved-reward : Reward})
+            | true => λ (_ : {solved-reward ≡ solved-reward : Reward}) →
+                solve-solved-R (class-place c a) 0
+            | false => λ (p : {bottom ≡ solved-reward : Reward}) →
+                matchEmpty (reward-apart p)
+                  motive (λ _ → {solve (class-ongoing (class-place c a)) 0 ≡ solved-reward : Reward}))))
+    h
+
+def max-bottom-id : evidence Π (z : Reward) → {max bottom z ≡ z : Reward} :=
+  λ (z : Reward) → refl
+
+def cons-max : evidence Π (+ f : Action → Reward) → Π (x : Action) → Π (rest : List Action) →
+                        {max-list (map Action Reward f (cons x rest)) ≡
+                         max (f x) (max-list (map Action Reward f rest)) : Reward} :=
+  λ (+ f : Action → Reward) → λ (x : Action) → λ (rest : List Action) → refl
+
+-- The max stays R when every R in f is an R in g. The list is the
+-- first argument so the cons tail is the descent.
+def max-R-prop : evidence Π (xs : List Action) →
+                          Π (+ f : Action → Reward) → Π (+ g : Action → Reward) →
+                          Π (+ fbin : Π (a : Action) → RewardBin (f a)) →
+                          Π (+ prop : Π (a : Action) → Π (_ : {f a ≡ solved-reward : Reward}) →
+                                       {g a ≡ solved-reward : Reward}) →
+                          Π (+ gbin : Π (a : Action) → RewardBin (g a)) →
+                          Π (hr : {max-list (map Action Reward f xs) ≡ solved-reward : Reward}) →
+                          {max-list (map Action Reward g xs) ≡ solved-reward : Reward} :=
+  λ (xs : List Action) →
+  λ (+ f : Action → Reward) → λ (+ g : Action → Reward) →
+  λ (+ fbin : Π (a : Action) → RewardBin (f a)) →
+  λ (+ prop : Π (a : Action) → Π (_ : {f a ≡ solved-reward : Reward}) → {g a ≡ solved-reward : Reward}) →
+  λ (+ gbin : Π (a : Action) → RewardBin (g a)) →
+    (match xs motive (λ ys → {max-list (map Action Reward f ys) ≡ solved-reward : Reward} →
+                              {max-list (map Action Reward g ys) ≡ solved-reward : Reward})
+      | nil => λ (p : {max-list (map Action Reward f nil) ≡ solved-reward : Reward}) →
+          matchEmpty (reward-apart p) motive (λ _ → {max-list (map Action Reward g nil) ≡ solved-reward : Reward})
+      | cons x rest => λ (p : {max-list (map Action Reward f (cons x rest)) ≡ solved-reward : Reward}) →
+          reward-split (f x) (fbin x)
+            ({max-list (map Action Reward g (cons x rest)) ≡ solved-reward : Reward})
+            (λ (h0 : {f x ≡ bottom : Reward}) →
+              ((λ (ih : {max-list (map Action Reward g rest) ≡ solved-reward : Reward}) →
+                reward-split (g x) (gbin x)
+                  ({max-list (map Action Reward g (cons x rest)) ≡ solved-reward : Reward})
+                  (λ (hg0 : {g x ≡ bottom : Reward}) →
+                    rewrite (cons-max g x rest)
+                      motive (λ z → {z ≡ solved-reward : Reward})
+                    in
+                    (rewrite hg0
+                      motive (λ z → {max z (max-list (map Action Reward g rest)) ≡ solved-reward : Reward})
+                    in
+                    (rewrite (max-bottom-id (max-list (map Action Reward g rest)))
+                      motive (λ w → {w ≡ solved-reward : Reward})
+                    in ih)))
+                  (λ (hgR : {g x ≡ solved-reward : Reward}) →
+                    rewrite (cons-max g x rest)
+                      motive (λ z → {z ≡ solved-reward : Reward})
+                    in
+                    (rewrite hgR
+                      motive (λ z → {max z (max-list (map Action Reward g rest)) ≡ solved-reward : Reward})
+                    in
+                    (match (max-list-binary g rest gbin)
+                      motive (λ q → λ (_ : RewardBin q) → {max solved-reward q ≡ solved-reward : Reward})
+                      | bin-zero => refl
+                      | bin-R => max-idem solved-reward))))
+              (max-R-prop rest f g fbin prop gbin
+                (rewrite (sym Reward (max bottom (max-list (map Action Reward f rest)))
+                              (max-list (map Action Reward f rest))
+                              (max-bottom-id (max-list (map Action Reward f rest))))
+                  motive (λ w → {w ≡ solved-reward : Reward})
+                in
+                (rewrite (sym Reward (f x) bottom h0)
+                  motive (λ z → {max z (max-list (map Action Reward f rest)) ≡ solved-reward : Reward})
+                in
+                (rewrite (sym Reward (max-list (map Action Reward f (cons x rest)))
+                              (max (f x) (max-list (map Action Reward f rest)))
+                              (cons-max f x rest))
+                  motive (λ z → {z ≡ solved-reward : Reward})
+                in p))))))
+            (λ (hR : {f x ≡ solved-reward : Reward}) →
+              rewrite (cons-max g x rest)
+                motive (λ z → {z ≡ solved-reward : Reward})
+              in
+              (rewrite (prop x hR)
+                motive (λ z → {max z (max-list (map Action Reward g rest)) ≡ solved-reward : Reward})
+              in
+              (match (max-list-binary g rest gbin)
+                motive (λ q → λ (_ : RewardBin q) → {max solved-reward q ≡ solved-reward : Reward})
+                | bin-zero => refl
+                | bin-R => max-idem solved-reward))))
+
+-- solve stays R once it is R. Dead never pays R. Solved always does.
+-- An ongoing board pushes the R one step later, or into a successor.
+def solve-mono : evidence Π (+ s : State) → Π (+ n : Nat) →
+                          Π (h : {solve s n ≡ solved-reward : Reward}) →
+                          {solve s (suc n) ≡ solved-reward : Reward} :=
+  λ (+ s : State) → λ (+ n : Nat) →
+  λ (h : {solve s n ≡ solved-reward : Reward}) →
+    (match (state-view s) motive (λ t → λ (_ : StateView t) →
+              {solve t n ≡ solved-reward : Reward} →
+              {solve t (suc n) ≡ solved-reward : Reward})
+      | view-dead => λ (p : {solve class-dead n ≡ solved-reward : Reward}) →
+          matchEmpty (reward-apart
+            (rewrite (sym Reward (solve class-dead n) bottom (solve-dead-0 n))
+              motive (λ z → {z ≡ solved-reward : Reward})
+            in p))
+          motive (λ _ → {solve class-dead (suc n) ≡ solved-reward : Reward})
+      | view-solved c => λ (_ : {solve (class-solved c) n ≡ solved-reward : Reward}) →
+          solve-solved-R c (suc n)
+      | view-ongoing c => λ (p : {solve (class-ongoing c) n ≡ solved-reward : Reward}) →
+          (match n motive (λ k → {solve (class-ongoing c) k ≡ solved-reward : Reward} →
+                                 {solve (class-ongoing c) (suc k) ≡ solved-reward : Reward})
+            | 0 => λ (p0 : {solve (class-ongoing c) 0 ≡ solved-reward : Reward}) →
+                max-R-prop all-actions
+                  (λ (a : Action) → snd (step (class-ongoing c) a))
+                  (λ (a : Action) → solve (fst (step (class-ongoing c) a)) 0)
+                  (λ (a : Action) → step-reward-binary (class-ongoing c) a)
+                  (λ (a : Action) → λ (pay : {snd (step (class-ongoing c) a) ≡ solved-reward : Reward}) →
+                      step-pays-R c a pay)
+                  (λ (a : Action) → solve-binary (fst (step (class-ongoing c) a)) 0)
+                  p0
+            | suc m => λ (p1 : {solve (class-ongoing c) (suc m) ≡ solved-reward : Reward}) →
+                max-R-prop all-actions
+                  (λ (a : Action) → solve (fst (step (class-ongoing c) a)) m)
+                  (λ (a : Action) → solve (fst (step (class-ongoing c) a)) (suc m))
+                  (λ (a : Action) → solve-binary (fst (step (class-ongoing c) a)) m)
+                  (λ (a : Action) → λ (pay : {solve (fst (step (class-ongoing c) a)) m ≡ solved-reward : Reward}) →
+                      solve-mono (fst (step (class-ongoing c) a)) m pay)
+                  (λ (a : Action) → solve-binary (fst (step (class-ongoing c) a)) (suc m))
+                  p1)
+          p)
+    h
+
+-- plus n 0 is n. plus recurs on the left, so the right zero is a proof.
+def plus-right-zero : evidence Π (n : Nat) → {plus n 0 ≡ n : Nat} :=
+  λ (n : Nat) →
+    match n motive (λ (i : Nat) → {plus i 0 ≡ i : Nat})
+      | 0 => refl
+      | suc n1 =>
+          rewrite (plus-right-zero n1)
+            motive (λ z → {suc z ≡ suc n1 : Nat})
+          in refl
+
+-- n ≤ m gives m back as n plus the difference.
+def plus-monus-le : evidence Π (n : Nat) → Π (m : Nat) →
+                             Π (le : {leb n m ≡ true : Bool}) →
+                             {plus n (class-monus m n) ≡ m : Nat} :=
+  λ (n : Nat) →
+    match n motive (λ (i : Nat) → Π (m : Nat) → Π (le : {leb i m ≡ true : Bool}) →
+                            {plus i (class-monus m i) ≡ m : Nat})
+      | 0 => λ (m : Nat) → λ (_ : {leb 0 m ≡ true : Bool}) → refl
+      | suc n1 => λ (m : Nat) →
+          match m motive (λ (j : Nat) → Π (le : {leb (suc n1) j ≡ true : Bool}) →
+                                  {plus (suc n1) (class-monus j (suc n1)) ≡ j : Nat})
+            | 0 => λ (le : {leb (suc n1) 0 ≡ true : Bool}) →
+                matchEmpty (class-ft le)
+                  motive (λ _ → {plus (suc n1) (class-monus 0 (suc n1)) ≡ 0 : Nat})
+            | suc m1 => λ (le : {leb (suc n1) (suc m1) ≡ true : Bool}) →
+                rewrite (plus-monus-le n1 m1 le)
+                  motive (λ z → {suc z ≡ suc m1 : Nat})
+                in refl
+
+-- solve at the next depth is bottom, so solve here is bottom.
+def solve-0-backward : evidence Π (+ s : State) → Π (n : Nat) →
+                                Π (h : {solve s (suc n) ≡ bottom : Reward}) →
+                                {solve s n ≡ bottom : Reward} :=
+  λ (+ s : State) → λ (n : Nat) →
+  λ (h : {solve s (suc n) ≡ bottom : Reward}) →
+    reward-split (solve s n) (solve-binary s n)
+      ({solve s n ≡ bottom : Reward})
+      (λ (z : {solve s n ≡ bottom : Reward}) → z)
+      (λ (r : {solve s n ≡ solved-reward : Reward}) →
+        matchEmpty (reward-apart
+          (sym Reward solved-reward bottom
+            (rewrite (sym Reward (solve s (suc n)) solved-reward (solve-mono s n r))
+              motive (λ z → {z ≡ bottom : Reward})
+            in h)))
+        motive (λ _ → {solve s n ≡ bottom : Reward}))
+
+-- A zero solve stays zero when the depth drops by k. k is first so the
+-- predecessor is the descent.
+def drop-zero : evidence Π (+ k : Nat) → Π (+ n : Nat) → Π (+ s : State) →
+                         Π (h : {solve s (plus n k) ≡ bottom : Reward}) →
+                         {solve s n ≡ bottom : Reward} :=
+  λ (+ k : Nat) → λ (+ n : Nat) → λ (+ s : State) →
+  λ (h : {solve s (plus n k) ≡ bottom : Reward}) →
+    (match k motive (λ j → {solve s (plus n j) ≡ bottom : Reward} →
+                            {solve s n ≡ bottom : Reward})
+      | 0 => λ (h0 : {solve s (plus n 0) ≡ bottom : Reward}) →
+          rewrite (sym Nat (plus n 0) n (plus-right-zero n))
+            motive (λ z → {solve s z ≡ bottom : Reward})
+          in h0
+      | suc k1 => λ (h1 : {solve s (plus n (suc k1)) ≡ bottom : Reward}) →
+          drop-zero k1 n s
+            (solve-0-backward s (plus n k1)
+              (rewrite (sym Nat (plus n (suc k1)) (suc (plus n k1)) (plus_suc n k1))
+                motive (λ z → {solve s z ≡ bottom : Reward})
+              in h1)))
+    h
+
+-- n ≤ m and solve s m bottom imply solve s n bottom.
+def solve-0-bwd : evidence Π (+ m : Nat) → Π (+ s : State) → Π (+ n : Nat) →
+                           Π (le : {leb n m ≡ true : Bool}) →
+                           Π (h : {solve s m ≡ bottom : Reward}) →
+                           {solve s n ≡ bottom : Reward} :=
+  λ (+ m : Nat) → λ (+ s : State) → λ (+ n : Nat) →
+  λ (le : {leb n m ≡ true : Bool}) →
+  λ (h : {solve s m ≡ bottom : Reward}) →
+    drop-zero (class-monus m n) n s
+      (rewrite (plus-monus-le n m le)
+        motive (λ z → {solve s z ≡ bottom : Reward})
+      in h)
+
+-- Fuel is the placements still allowed. At 0 the board is already long.
+-- At suc fuel' every successor has a smaller fuel, so solve is bottom
+-- at every depth. shs-succ is later and descends on the fuel.
+def shs-induct : evidence Π (fuel : Nat) → Π (+ c : Config) →
+                          Π (feq : {fuel ≡ class-monus horizon (class-length c) : Nat}) →
+                          Π (q : {solve (class-ongoing c) fuel ≡ bottom : Reward}) →
+                          Π (n : Nat) →
+                          {solve (class-ongoing c) n ≡ bottom : Reward} :=
+  λ (fuel : Nat) → λ (+ c : Config) →
+  λ (feq : {fuel ≡ class-monus horizon (class-length c) : Nat}) →
+  λ (q : {solve (class-ongoing c) fuel ≡ bottom : Reward}) →
+  λ (n : Nat) →
+    (match fuel motive (λ k →
+              {k ≡ class-monus horizon (class-length c) : Nat} →
+              {solve (class-ongoing c) k ≡ bottom : Reward} →
+              {solve (class-ongoing c) n ≡ bottom : Reward})
+      | 0 => λ (feq0 : {0 ≡ class-monus horizon (class-length c) : Nat}) →
+          λ (_ : {solve (class-ongoing c) 0 ≡ bottom : Reward}) →
+            long-zero n c
+              (monus-zero-leb horizon (class-length c)
+                (sym Nat 0 (class-monus horizon (class-length c)) feq0))
+      | suc fuel' => λ (feq1 : {suc fuel' ≡ class-monus horizon (class-length c) : Nat}) →
+          λ (q1 : {solve (class-ongoing c) (suc fuel') ≡ bottom : Reward}) →
+            match n motive (λ j → {solve (class-ongoing c) j ≡ bottom : Reward})
+              | 0 => solve-0-bwd (suc fuel') (class-ongoing c) 0 refl q1
+              | suc n' =>
+                  max-all-0 (λ (a : Action) → solve (fst (step (class-ongoing c) a)) n') all-actions
+                    (λ (a : Action) →
+                      shs-succ fuel' c feq1 a
+                        (solve-component-0 (class-ongoing c) fuel' q1 a) n'))
+    feq q
+
+-- One successor of a positive-fuel board solves to bottom at every depth.
+-- The ongoing arm calls shs-induct, which is earlier, at this same fuel.
+def shs-succ : evidence Π (fuel' : Nat) → Π (+ c : Config) →
+                        Π (feq : {suc fuel' ≡ class-monus horizon (class-length c) : Nat}) →
+                        Π (+ a : Action) →
+                        Π (comp : {solve (fst (step (class-ongoing c) a)) fuel' ≡ bottom : Reward}) →
+                        Π (n' : Nat) →
+                        {solve (fst (step (class-ongoing c) a)) n' ≡ bottom : Reward} :=
+  λ (fuel' : Nat) → λ (+ c : Config) →
+  λ (feq : {suc fuel' ≡ class-monus horizon (class-length c) : Nat}) →
+  λ (+ a : Action) →
+  λ (comp : {solve (fst (step (class-ongoing c) a)) fuel' ≡ bottom : Reward}) →
+  λ (n' : Nat) →
+    (rewrite step-ongoing c a
+      motive (λ p → {solve (fst p) fuel' ≡ bottom : Reward} → {solve (fst p) n' ≡ bottom : Reward})
+    in
+    (match (class-blocked (class-place c a))
+      motive (λ b → {solve (fst (judge-on b (class-full (class-place c a)) (class-place c a))) fuel' ≡ bottom : Reward} →
+                    {solve (fst (judge-on b (class-full (class-place c a)) (class-place c a))) n' ≡ bottom : Reward})
+      | true => λ (_ : {solve class-dead fuel' ≡ bottom : Reward}) → solve-dead-0 n'
+      | false =>
+          (match (class-full (class-place c a))
+            motive (λ f → {solve (fst (judge-on false f (class-place c a))) fuel' ≡ bottom : Reward} →
+                          {solve (fst (judge-on false f (class-place c a))) n' ≡ bottom : Reward})
+            | true => λ (compS : {solve (class-solved (class-place c a)) fuel' ≡ bottom : Reward}) →
+                matchEmpty (reward-apart
+                  (sym Reward solved-reward bottom
+                    (rewrite (sym Reward (solve (class-solved (class-place c a)) fuel') solved-reward
+                              (solve-solved-R (class-place c a) fuel'))
+                      motive (λ z → {z ≡ bottom : Reward})
+                    in compS)))
+                motive (λ _ → {solve (class-solved (class-place c a)) n' ≡ bottom : Reward})
+            | false => λ (compO : {solve (class-ongoing (class-place c a)) fuel' ≡ bottom : Reward}) →
+                shs-induct fuel' (class-place c a) (fuel-succ fuel' c a feq) compO n')))
+    comp
+
+-- The horizon reaches every later depth: a board whose solve is bottom
+-- at the horizon has solve bottom at every depth.
+def solve-horizon-suf : evidence Π (+ c : Config) →
+                                  Π (h : {solve (class-ongoing c) horizon ≡ bottom : Reward}) →
+                                  Π (n : Nat) →
+                                  {solve (class-ongoing c) n ≡ bottom : Reward} :=
+  λ (+ c : Config) →
+  λ (h : {solve (class-ongoing c) horizon ≡ bottom : Reward}) →
+  λ (n : Nat) →
+    shs-induct (class-monus horizon (class-length c)) c refl
+      (solve-0-bwd horizon (class-ongoing c) (class-monus horizon (class-length c))
+        (monus-le horizon (class-length c)) h)
+      n
+
+-- Pointwise reward order is dominance of the action-value streams.
+-- action-value is the tabulation of action-at, so the stream order is
+-- the pointwise order.
+def stream-le : evidence Π (+ s : State) → Π (+ a : Action) → Π (+ b : Action) →
+                         Π (+ pw : Π (n : Nat) → le (action-at s a n) (action-at s b n)) →
+                         Dom Reward le (action-value s a) (action-value s b) :=
+  λ (+ s : State) → λ (+ a : Action) → λ (+ b : Action) →
+  λ (+ pw : Π (n : Nat) → le (action-at s a n) (action-at s b n)) →
+    tabulate-dom Reward le
+      (λ (n : Nat) → action-at s a n)
+      (λ (n : Nat) → action-at s b n)
+      pw
+      0
+
+-- A binary reward is below another when an R on the left is an R on
+-- the right. bottom is below both, and R is below only R.
+def bin-le : evidence Π (q : Reward) → Π (r : Reward) →
+                      Π (bq : RewardBin q) → Π (br : RewardBin r) →
+                      Π (keep : {q ≡ solved-reward : Reward} → {r ≡ solved-reward : Reward}) →
+                      le q r :=
+  λ (q : Reward) → λ (r : Reward) →
+  λ (bq : RewardBin q) → λ (br : RewardBin r) →
+  λ (keep : {q ≡ solved-reward : Reward} → {r ≡ solved-reward : Reward}) →
+    reward-split q bq (le q r)
+      (λ (zq : {q ≡ bottom : Reward}) →
+        rewrite zq motive (λ z → le z r) in le-zero r)
+      (λ (rq : {q ≡ solved-reward : Reward}) →
+        rewrite rq motive (λ z → le z r) in
+        rewrite (keep rq) motive (λ z → le solved-reward z) in
+        le-refl solved-reward)
+
+-- Every binary reward is ≤ R.
+def below-R : evidence Π (q : Reward) → Π (b : RewardBin q) → le q solved-reward :=
+  λ (q : Reward) → λ (b : RewardBin q) →
+    bin-le q solved-reward b bin-R (λ (_ : {q ≡ solved-reward : Reward}) → refl)
+
+-- Paying R now means the placement solved the board.
+def pay-solved : evidence Π (+ c : Config) → Π (+ a : Action) →
+                          Π (h : {snd (step (class-ongoing c) a) ≡ solved-reward : Reward}) →
+                          {fst (step (class-ongoing c) a) ≡ class-solved (class-place c a) : State} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+  λ (h : {snd (step (class-ongoing c) a) ≡ solved-reward : Reward}) →
+    (rewrite step-ongoing c a
+      motive (λ p → {snd p ≡ solved-reward : Reward} →
+                    {fst p ≡ class-solved (class-place c a) : State})
+    in
+    (match (class-blocked (class-place c a))
+      motive (λ b → {snd (judge-on b (class-full (class-place c a)) (class-place c a)) ≡ solved-reward : Reward} →
+                    {fst (judge-on b (class-full (class-place c a)) (class-place c a)) ≡
+                     class-solved (class-place c a) : State})
+      | true => λ (p : {bottom ≡ solved-reward : Reward}) →
+          matchEmpty (reward-apart p)
+            motive (λ _ → {class-dead ≡ class-solved (class-place c a) : State})
+      | false =>
+          (match (class-full (class-place c a))
+            motive (λ f → {snd (judge-on false f (class-place c a)) ≡ solved-reward : Reward} →
+                          {fst (judge-on false f (class-place c a)) ≡
+                           class-solved (class-place c a) : State})
+            | true => λ (_ : {solved-reward ≡ solved-reward : Reward}) → refl
+            | false => λ (p : {bottom ≡ solved-reward : Reward}) →
+                matchEmpty (reward-apart p)
+                  motive (λ _ → {class-ongoing (class-place c a) ≡ class-solved (class-place c a) : State}))))
+    h
+
+-- An action that is paid R at the first index is paid R at every index.
+def stream-R : evidence Π (+ s : State) → Π (+ a : Action) →
+                        Π (h : {action-at s a 0 ≡ solved-reward : Reward}) →
+                        Π (n : Nat) →
+                        {action-at s a n ≡ solved-reward : Reward} :=
+  λ (+ s : State) → λ (+ a : Action) →
+  λ (h : {action-at s a 0 ≡ solved-reward : Reward}) →
+  λ (n : Nat) →
+    (match (state-view s) motive (λ t → λ (_ : StateView t) →
+              {action-at t a 0 ≡ solved-reward : Reward} →
+              {action-at t a n ≡ solved-reward : Reward})
+      | view-dead => λ (p : {snd (step class-dead a) ≡ solved-reward : Reward}) →
+          matchEmpty (reward-apart
+            (rewrite (sym Reward (snd (step class-dead a)) bottom
+                      (rewrite step-dead a motive (λ q → {snd q ≡ bottom : Reward}) in refl))
+              motive (λ z → {z ≡ solved-reward : Reward})
+            in p))
+          motive (λ _ → {action-at class-dead a n ≡ solved-reward : Reward})
+      | view-solved c => λ (_ : {action-at (class-solved c) a 0 ≡ solved-reward : Reward}) →
+          (match n motive (λ k → {action-at (class-solved c) a k ≡ solved-reward : Reward})
+            | 0 => rewrite step-solved c a motive (λ q → {snd q ≡ solved-reward : Reward}) in refl
+            | suc m => solve-solved-R c m)
+      | view-ongoing c => λ (p : {snd (step (class-ongoing c) a) ≡ solved-reward : Reward}) →
+          (match n motive (λ k → {action-at (class-ongoing c) a k ≡ solved-reward : Reward})
+            | 0 => p
+            | suc m =>
+                rewrite (pay-solved c a p)
+                  motive (λ t → {solve t m ≡ solved-reward : Reward})
+                in solve-solved-R (class-place c a) m))
+    h
+
+-- action-at is a binary reward at every index.
+def action-bin : evidence Π (+ s : State) → Π (+ a : Action) → Π (n : Nat) →
+                          RewardBin (action-at s a n) :=
+  λ (+ s : State) → λ (+ a : Action) → λ (n : Nat) →
+    match n motive (λ k → RewardBin (action-at s a k))
+      | 0 => step-reward-binary s a
+      | suc m => solve-binary (fst (step s a)) m
+
+-- The max of the immediate rewards is bottom, so this action's is bottom.
+def imm-zero : evidence Π (+ s : State) → Π (+ a : Action) →
+                        Π (h : {solve s 0 ≡ bottom : Reward}) →
+                        {snd (step s a) ≡ bottom : Reward} :=
+  λ (+ s : State) → λ (+ a : Action) →
+  λ (h : {solve s 0 ≡ bottom : Reward}) →
+    reward-split (snd (step s a)) (step-reward-binary s a)
+      ({snd (step s a) ≡ bottom : Reward})
+      (λ (z : {snd (step s a) ≡ bottom : Reward}) → z)
+      (λ (r : {snd (step s a) ≡ solved-reward : Reward}) →
+        matchEmpty (reward-apart
+          (sym Reward solved-reward bottom
+            (rewrite (sym Reward (solve s 0) solved-reward
+                      (any-R-max (λ (b : Action) → snd (step s b)) all-actions
+                        (λ (b : Action) → step-reward-binary s b)
+                        a (in-actions a) r))
+              motive (λ z → {z ≡ bottom : Reward})
+            in h)))
+        motive (λ _ → {snd (step s a) ≡ bottom : Reward}))
+
+-- solve at the horizon is bottom, so solve at every depth is bottom.
+def solve-all-zero : evidence Π (+ s : State) →
+                              Π (h : {solve s horizon ≡ bottom : Reward}) →
+                              Π (n : Nat) →
+                              {solve s n ≡ bottom : Reward} :=
+  λ (+ s : State) →
+  λ (h : {solve s horizon ≡ bottom : Reward}) →
+  λ (n : Nat) →
+    (match (state-view s) motive (λ t → λ (_ : StateView t) →
+              {solve t horizon ≡ bottom : Reward} →
+              {solve t n ≡ bottom : Reward})
+      | view-dead => λ (_ : {solve class-dead horizon ≡ bottom : Reward}) → solve-dead-0 n
+      | view-solved c => λ (p : {solve (class-solved c) horizon ≡ bottom : Reward}) →
+          matchEmpty (reward-apart
+            (sym Reward solved-reward bottom
+              (rewrite (sym Reward (solve (class-solved c) horizon) solved-reward
+                        (solve-solved-R c horizon))
+                motive (λ z → {z ≡ bottom : Reward})
+              in p)))
+          motive (λ _ → {solve (class-solved c) n ≡ bottom : Reward})
+      | view-ongoing c => λ (p : {solve (class-ongoing c) horizon ≡ bottom : Reward}) →
+          solve-horizon-suf c p n)
+    h
+
+-- No action reaches within the horizon, so this action's stream is zero.
+def action-all-zero : evidence Π (+ s : State) → Π (+ a : Action) →
+                               Π (h : {solve s horizon ≡ bottom : Reward}) →
+                               Π (n : Nat) →
+                               {action-at s a n ≡ bottom : Reward} :=
+  λ (+ s : State) → λ (+ a : Action) →
+  λ (h : {solve s horizon ≡ bottom : Reward}) →
+  λ (n : Nat) →
+    match n motive (λ k → {action-at s a k ≡ bottom : Reward})
+      | 0 => imm-zero s a (solve-all-zero s h 0)
+      | suc m => solve-component-0 s m (solve-all-zero s h (suc m)) a
+
+-- Two zero streams are ordered either way.
+def tie-at : evidence Π (+ s : State) → Π (+ a : Action) → Π (+ b : Action) →
+                      Π (h : {solve s horizon ≡ bottom : Reward}) →
+                      Π (n : Nat) →
+                      le (action-at s a n) (action-at s b n) :=
+  λ (+ s : State) → λ (+ a : Action) → λ (+ b : Action) →
+  λ (h : {solve s horizon ≡ bottom : Reward}) →
+  λ (n : Nat) →
+    rewrite (action-all-zero s a h n) motive (λ z → le z (action-at s b n)) in
+    rewrite (action-all-zero s b h n) motive (λ z → le bottom z) in
+    le-zero bottom
+
+def tie : evidence Π (+ s : State) → Π (+ a : Action) → Π (+ b : Action) →
+                   Π (h : {solve s horizon ≡ bottom : Reward}) →
+                   Dom Reward le (action-value s a) (action-value s b) :=
+  λ (+ s : State) → λ (+ a : Action) → λ (+ b : Action) →
+  λ (h : {solve s horizon ≡ bottom : Reward}) →
+    stream-le s a b (tie-at s a b h)
+
+-- Paid at index 0, so the stream is R from the start and dominates.
+def now-at : evidence Π (+ s : State) → Π (+ w : Action) → Π (+ a : Action) →
+                      Π (h : {action-at s w 0 ≡ solved-reward : Reward}) →
+                      Π (n : Nat) →
+                      le (action-at s a n) (action-at s w n) :=
+  λ (+ s : State) → λ (+ w : Action) → λ (+ a : Action) →
+  λ (h : {action-at s w 0 ≡ solved-reward : Reward}) →
+  λ (n : Nat) →
+    rewrite (stream-R s w h n) motive (λ z → le (action-at s a n) z) in
+    below-R (action-at s a n) (action-bin s a n)
+
+def now-dom : evidence Π (+ s : State) → Π (+ w : Action) → Π (+ a : Action) →
+                       Π (h : {action-at s w 0 ≡ solved-reward : Reward}) →
+                       Dom Reward le (action-value s a) (action-value s w) :=
+  λ (+ s : State) → λ (+ w : Action) → λ (+ a : Action) →
+  λ (h : {action-at s w 0 ≡ solved-reward : Reward}) →
+    stream-le s a w (now-at s w a h)
+
+-- Two steps of fuel remain, so one placement does not fill the board.
+def gap-not-next : evidence Π (n : Nat) → Π (m : Nat) →
+                            Π (h : {leb (suc (suc 0)) (class-monus m n) ≡ true : Bool}) →
+                            {nat-eq (suc n) m ≡ false : Bool} :=
+  λ (n : Nat) →
+    match n motive (λ i → Π (m : Nat) →
+                           Π (h : {leb (suc (suc 0)) (class-monus m i) ≡ true : Bool}) →
+                           {nat-eq (suc i) m ≡ false : Bool})
+      | 0 => λ (m : Nat) →
+          match m motive (λ x → Π (h : {leb (suc (suc 0)) x ≡ true : Bool}) →
+                                 {nat-eq (suc 0) x ≡ false : Bool})
+            | 0 => λ (h : {leb (suc (suc 0)) 0 ≡ true : Bool}) →
+                matchEmpty (class-ft h) motive (λ _ → {nat-eq (suc 0) 0 ≡ false : Bool})
+            | suc m1 => λ (h : {leb (suc (suc 0)) (suc m1) ≡ true : Bool}) →
+                (match m1 motive (λ y → Π (p : {leb (suc 0) y ≡ true : Bool}) →
+                                        {nat-eq (suc 0) (suc y) ≡ false : Bool})
+                  | 0 => λ (p : {leb (suc 0) 0 ≡ true : Bool}) →
+                      matchEmpty (class-ft p) motive (λ _ → {nat-eq (suc 0) (suc 0) ≡ false : Bool})
+                  | suc m2 => λ (_ : {leb (suc 0) (suc m2) ≡ true : Bool}) → refl)
+                h
+      | suc n1 => λ (m : Nat) →
+          match m motive (λ x → Π (h : {leb (suc (suc 0)) (class-monus x (suc n1)) ≡ true : Bool}) →
+                                 {nat-eq (suc (suc n1)) x ≡ false : Bool})
+            | 0 => λ (h : {leb (suc (suc 0)) (class-monus 0 (suc n1)) ≡ true : Bool}) →
+                matchEmpty (class-ft h) motive (λ _ → {nat-eq (suc (suc n1)) 0 ≡ false : Bool})
+            | suc m1 => λ (h : {leb (suc (suc 0)) (class-monus (suc m1) (suc n1)) ≡ true : Bool}) →
+                gap-not-next n1 m1 h
+
+-- Spending one placement leaves the same room, one step smaller.
+def leb-monus-step : evidence Π (n : Nat) → Π (m : Nat) → Π (k : Nat) →
+                              Π (h : {leb (suc k) (class-monus m n) ≡ true : Bool}) →
+                              {leb k (class-monus m (suc n)) ≡ true : Bool} :=
+  λ (n : Nat) →
+    match n motive (λ i → Π (m : Nat) → Π (k : Nat) →
+                           Π (h : {leb (suc k) (class-monus m i) ≡ true : Bool}) →
+                           {leb k (class-monus m (suc i)) ≡ true : Bool})
+      | 0 => λ (m : Nat) → λ (k : Nat) →
+          match m motive (λ x → Π (h : {leb (suc k) x ≡ true : Bool}) →
+                                 {leb k (class-monus x (suc 0)) ≡ true : Bool})
+            | 0 => λ (h : {leb (suc k) 0 ≡ true : Bool}) →
+                matchEmpty (class-ft h) motive (λ _ → {leb k (class-monus 0 (suc 0)) ≡ true : Bool})
+            | suc m1 => λ (h : {leb (suc k) (suc m1) ≡ true : Bool}) → h
+      | suc n1 => λ (m : Nat) → λ (k : Nat) →
+          match m motive (λ x → Π (h : {leb (suc k) (class-monus x (suc n1)) ≡ true : Bool}) →
+                                 {leb k (class-monus x (suc (suc n1))) ≡ true : Bool})
+            | 0 => λ (h : {leb (suc k) (class-monus 0 (suc n1)) ≡ true : Bool}) →
+                matchEmpty (class-ft h) motive (λ _ → {leb k 0 ≡ true : Bool})
+            | suc m1 => λ (h : {leb (suc k) (class-monus (suc m1) (suc n1)) ≡ true : Bool}) →
+                leb-monus-step n1 m1 k h
+
+def place-open : evidence Π (+ c : Config) → Π (+ a : Action) →
+                          Π (room : {leb (suc (suc 0)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+                          {class-full (class-place c a) ≡ false : Bool} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+  λ (room : {leb (suc (suc 0)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+    rewrite (full-is-length (class-place c a)) motive (λ b → {b ≡ false : Bool}) in
+    rewrite (length-place c a) motive (λ z → {nat-eq z horizon ≡ false : Bool}) in
+    gap-not-next (class-length c) horizon room
+
+-- solve is bottom while at least two placements remain after this index.
+-- The successor asks next-early, which is later and descends on the index.
+def solve-early : evidence Π (n : Nat) → Π (+ c : Config) →
+                           Π (room : {leb (suc (suc n)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+                           {solve (class-ongoing c) n ≡ bottom : Reward} :=
+  λ (n : Nat) → λ (+ c : Config) →
+  λ (room : {leb (suc (suc n)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+    (match n motive (λ k → Π (p : {leb (suc (suc k)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+                            {solve (class-ongoing c) k ≡ bottom : Reward})
+      | 0 => λ (p : {leb (suc (suc 0)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+          max-all-0 (λ (a : Action) → snd (step (class-ongoing c) a)) all-actions
+            (λ (a : Action) →
+              rewrite step-ongoing c a motive (λ q → {snd q ≡ bottom : Reward}) in
+              judge-snd-long (class-blocked (class-place c a)) (class-full (class-place c a))
+                (class-place c a) (place-open c a p))
+      | suc n1 => λ (p : {leb (suc (suc (suc n1))) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+          max-all-0 (λ (a : Action) → solve (fst (step (class-ongoing c) a)) n1) all-actions
+            (λ (a : Action) → next-early n1 c a p))
+    room
+
+-- A bound past two is still a bound past two.
+def leb-at-least-two : evidence Π (n : Nat) → Π (m : Nat) →
+                                Π (h : {leb (suc (suc (suc n))) m ≡ true : Bool}) →
+                                {leb (suc (suc 0)) m ≡ true : Bool} :=
+  λ (n : Nat) →
+    match n motive (λ i → Π (m : Nat) →
+                           Π (h : {leb (suc (suc (suc i))) m ≡ true : Bool}) →
+                           {leb (suc (suc 0)) m ≡ true : Bool})
+      | 0 => λ (m : Nat) → λ (h : {leb (suc (suc (suc 0))) m ≡ true : Bool}) →
+          leb-weaken (suc (suc 0)) m h
+      | suc n1 => λ (m : Nat) → λ (h : {leb (suc (suc (suc (suc n1)))) m ≡ true : Bool}) →
+          leb-at-least-two n1 m (leb-weaken (suc (suc (suc n1))) m h)
+
+def next-early : evidence Π (n : Nat) → Π (+ c : Config) → Π (+ a : Action) →
+                          Π (room : {leb (suc (suc (suc n))) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+                          {solve (fst (step (class-ongoing c) a)) n ≡ bottom : Reward} :=
+  λ (n : Nat) → λ (+ c : Config) → λ (+ a : Action) →
+  λ (room : {leb (suc (suc (suc n))) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+    rewrite step-ongoing c a motive (λ q → {solve (fst q) n ≡ bottom : Reward}) in
+    (match (class-blocked (class-place c a))
+      motive (λ b → {solve (fst (judge-on b (class-full (class-place c a)) (class-place c a))) n ≡ bottom : Reward})
+      | true => solve-dead-0 n
+      | false =>
+          (match (class-full (class-place c a))
+            motive (λ f → Π (hf : {f ≡ false : Bool}) →
+                           {solve (fst (judge-on false f (class-place c a))) n ≡ bottom : Reward})
+            | true => λ (hf : {true ≡ false : Bool}) →
+                matchEmpty (class-ft (sym Bool true false hf))
+                  motive (λ _ → {solve (class-solved (class-place c a)) n ≡ bottom : Reward})
+            | false => λ (_ : {false ≡ false : Bool}) →
+                solve-early n (class-place c a)
+                  (rewrite (length-place c a)
+                    motive (λ z → {leb (suc (suc n)) (class-monus horizon z) ≡ true : Bool})
+                  in leb-monus-step (class-length c) horizon (suc (suc n)) room))
+          (place-open c a (leb-at-least-two n (class-monus horizon (class-length c)) room)))
+
+-- A boolean that cannot be true is false.
+def refute-bool : evidence Π (b : Bool) →
+                           Π (no : {b ≡ true : Bool} → Empty) →
+                           {b ≡ false : Bool} :=
+  λ (b : Bool) →
+  λ (no : {b ≡ true : Bool} → Empty) →
+    (match b motive (λ x → ({x ≡ true : Bool} → Empty) → {x ≡ false : Bool})
+      | true => λ (noT : {true ≡ true : Bool} → Empty) →
+          matchEmpty (noT refl) motive (λ _ → {true ≡ false : Bool})
+      | false => λ (_ : {false ≡ true : Bool} → Empty) → refl)
+    no
+
+-- suc n ≠ m and m ≰ n, so m is at least n + 2 and m ∸ n is at least 2.
+def gap-from-open : evidence Π (n : Nat) → Π (m : Nat) →
+                             Π (ne : {nat-eq (suc n) m ≡ false : Bool}) →
+                             Π (nle : {leb m n ≡ false : Bool}) →
+                             {leb (suc (suc 0)) (class-monus m n) ≡ true : Bool} :=
+  λ (n : Nat) →
+    match n motive (λ i → Π (m : Nat) →
+                           Π (ne : {nat-eq (suc i) m ≡ false : Bool}) →
+                           Π (nle : {leb m i ≡ false : Bool}) →
+                           {leb (suc (suc 0)) (class-monus m i) ≡ true : Bool})
+      | 0 => λ (m : Nat) →
+          match m motive (λ x → Π (ne : {nat-eq (suc 0) x ≡ false : Bool}) →
+                                 Π (nle : {leb x 0 ≡ false : Bool}) →
+                                 {leb (suc (suc 0)) x ≡ true : Bool})
+            | 0 => λ (_ : {nat-eq (suc 0) 0 ≡ false : Bool}) →
+                λ (nle : {leb 0 0 ≡ false : Bool}) →
+                  matchEmpty (class-ft (sym Bool true false nle))
+                    motive (λ _ → {leb (suc (suc 0)) 0 ≡ true : Bool})
+            | suc m1 => λ (ne : {nat-eq (suc 0) (suc m1) ≡ false : Bool}) →
+                λ (_ : {leb (suc m1) 0 ≡ false : Bool}) →
+                  (match m1 motive (λ y → Π (p : {nat-eq 0 y ≡ false : Bool}) →
+                                         {leb (suc (suc 0)) (suc y) ≡ true : Bool})
+                    | 0 => λ (p : {nat-eq 0 0 ≡ false : Bool}) →
+                        matchEmpty (class-ft (sym Bool true false p))
+                          motive (λ _ → {leb (suc (suc 0)) (suc 0) ≡ true : Bool})
+                    | suc m2 => λ (_ : {nat-eq 0 (suc m2) ≡ false : Bool}) → refl)
+                  ne
+      | suc n1 => λ (m : Nat) →
+          match m motive (λ x → Π (ne : {nat-eq (suc (suc n1)) x ≡ false : Bool}) →
+                                 Π (nle : {leb x (suc n1) ≡ false : Bool}) →
+                                 {leb (suc (suc 0)) (class-monus x (suc n1)) ≡ true : Bool})
+            | 0 => λ (_ : {nat-eq (suc (suc n1)) 0 ≡ false : Bool}) →
+                λ (nle : {leb 0 (suc n1) ≡ false : Bool}) →
+                  matchEmpty (class-ft (sym Bool true false nle))
+                    motive (λ _ → {leb (suc (suc 0)) (class-monus 0 (suc n1)) ≡ true : Bool})
+            | suc m1 => λ (ne : {nat-eq (suc (suc n1)) (suc m1) ≡ false : Bool}) →
+                λ (nle : {leb (suc m1) (suc n1) ≡ false : Bool}) →
+                  gap-from-open n1 m1 ne nle
+
+-- A placed board that still pays R did not start out long.
+def reach-not-long : evidence Π (+ c : Config) → Π (+ a : Action) → Π (m : Nat) →
+                              Π (h : {solve (class-ongoing (class-place c a)) m ≡ solved-reward : Reward}) →
+                              {leb horizon (class-length c) ≡ false : Bool} :=
+  λ (+ c : Config) → λ (+ a : Action) → λ (m : Nat) →
+  λ (h : {solve (class-ongoing (class-place c a)) m ≡ solved-reward : Reward}) →
+    refute-bool (leb horizon (class-length c))
+      (λ (big : {leb horizon (class-length c) ≡ true : Bool}) →
+        reward-apart
+          (rewrite (sym Reward
+                     (solve (class-ongoing (class-place c a)) m)
+                     bottom
+                     (long-zero m (class-place c a)
+                       (leb-weaken horizon (class-length (class-place c a))
+                         (place-leb c a big))))
+            motive (λ z → {z ≡ solved-reward : Reward})
+          in h))
+
+-- Not full, and the child still pays R, so at least two placements remain.
+def open-room : evidence Π (+ c : Config) → Π (+ a : Action) → Π (m : Nat) →
+                         Π (open : {class-full (class-place c a) ≡ false : Bool}) →
+                         Π (hit : {solve (class-ongoing (class-place c a)) m ≡ solved-reward : Reward}) →
+                         {leb (suc (suc 0)) (class-monus horizon (class-length c)) ≡ true : Bool} :=
+  λ (+ c : Config) → λ (+ a : Action) → λ (m : Nat) →
+  λ (open : {class-full (class-place c a) ≡ false : Bool}) →
+  λ (hit : {solve (class-ongoing (class-place c a)) m ≡ solved-reward : Reward}) →
+    gap-from-open (class-length c) horizon
+      (rewrite (sym Nat (class-length (class-place c a)) (suc (class-length c)) (length-place c a))
+        motive (λ z → {nat-eq z horizon ≡ false : Bool})
+      in
+      rewrite (sym Bool (class-full (class-place c a))
+                     (nat-eq (class-length (class-place c a)) horizon)
+                     (full-is-length (class-place c a)))
+        motive (λ b → {b ≡ false : Bool})
+      in open)
+      (reach-not-long c a m hit)
+
+-- solve stays R after the index where it first holds.
+def solve-stays-R : evidence Π (+ s : State) → Π (+ n : Nat) → Π (k : Nat) →
+                             Π (h : {solve s n ≡ solved-reward : Reward}) →
+                             {solve s (plus n k) ≡ solved-reward : Reward} :=
+  λ (+ s : State) → λ (+ n : Nat) → λ (k : Nat) →
+  λ (h : {solve s n ≡ solved-reward : Reward}) →
+    match k motive (λ j → {solve s (plus n j) ≡ solved-reward : Reward})
+      | 0 =>
+          rewrite (plus-right-zero n)
+            motive (λ z → {solve s z ≡ solved-reward : Reward})
+          in h
+      | suc k1 =>
+          rewrite (plus_suc n k1)
+            motive (λ z → {solve s z ≡ solved-reward : Reward})
+          in solve-mono s (plus n k1) (solve-stays-R s n k1 h)
+
+-- From an R at n, every later depth is R.
+def solve-from-hit : evidence Π (+ s : State) → Π (n : Nat) → Π (j : Nat) →
+                              Π (le : {leb n j ≡ true : Bool}) →
+                              Π (h : {solve s n ≡ solved-reward : Reward}) →
+                              {solve s j ≡ solved-reward : Reward} :=
+  λ (+ s : State) → λ (n : Nat) → λ (j : Nat) →
+  λ (le : {leb n j ≡ true : Bool}) →
+  λ (h : {solve s n ≡ solved-reward : Reward}) →
+    rewrite (sym Nat (plus n (class-monus j n)) j (plus-monus-le n j le))
+      motive (λ z → {solve s z ≡ solved-reward : Reward})
+    in solve-stays-R s n (class-monus j n) h
+
+-- Before the pay index every action's reward is bottom.
+def at-early : evidence Π (n : Nat) → Π (+ c : Config) → Π (+ a : Action) →
+                        Π (room : {leb (suc (suc n)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+                        {action-at (class-ongoing c) a n ≡ bottom : Reward} :=
+  λ (n : Nat) → λ (+ c : Config) → λ (+ a : Action) →
+  λ (room : {leb (suc (suc n)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+    (match n motive (λ k → Π (p : {leb (suc (suc k)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+                            {action-at (class-ongoing c) a k ≡ bottom : Reward})
+      | 0 => λ (p : {leb (suc (suc 0)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+          imm-zero (class-ongoing c) a (solve-early 0 c p)
+      | suc n1 => λ (p : {leb (suc (suc (suc n1))) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+          solve-component-0 (class-ongoing c) n1 (solve-early (suc n1) c p) a)
+    room
+
+-- Two early rewards are bottom, so they are ordered.
+def early-le : evidence Π (n : Nat) → Π (+ c : Config) → Π (+ a : Action) → Π (+ w : Action) →
+                        Π (room : {leb (suc (suc n)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+                        le (action-at (class-ongoing c) a n) (action-at (class-ongoing c) w n) :=
+  λ (n : Nat) → λ (+ c : Config) → λ (+ a : Action) → λ (+ w : Action) →
+  λ (room : {leb (suc (suc n)) (class-monus horizon (class-length c)) ≡ true : Bool}) →
+    rewrite (at-early n c a room)
+      motive (λ z → le z (action-at (class-ongoing c) w n))
+    in
+    rewrite (at-early n c w room)
+      motive (λ z → le bottom z)
+    in le-zero bottom
+
+-- solve of the state an action steps to, at a fixed depth.
+def step-solve : run Π (+ s : State) → Π (+ n : Nat) → Π (a : Action) → Reward :=
+  λ (+ s : State) → λ (+ n : Nat) → λ (a : Action) → solve (fst (step s a)) n
+
+-- The max of step-solve over xs is R, so some listed action pays R.
+-- The witness goes to k. A constructor field that mentions solve does
+-- not pass the positivity check, so the proof is not stored.
+def find-on : evidence Π (xs : List Action) → Π (+ s : State) → Π (+ n : Nat) →
+                       Π (h : {max-list (map Action Reward (step-solve s n) xs) ≡ solved-reward : Reward}) →
+                       Π (- C : Type) →
+                       Π (k : Π (+ a : Action) → Π (e : Elem a xs) →
+                               {step-solve s n a ≡ solved-reward : Reward} → C) →
+                       C :=
+  λ (xs : List Action) → λ (+ s : State) → λ (+ n : Nat) →
+  λ (h : {max-list (map Action Reward (step-solve s n) xs) ≡ solved-reward : Reward}) →
+  λ (- C : Type) →
+  λ (k : Π (+ a : Action) → Π (e : Elem a xs) →
+          {step-solve s n a ≡ solved-reward : Reward} → C) →
+    (match xs motive (λ ys →
+            {max-list (map Action Reward (step-solve s n) ys) ≡ solved-reward : Reward} →
+            (Π (+ a : Action) → Π (e : Elem a ys) →
+               {step-solve s n a ≡ solved-reward : Reward} → C) →
+            C)
+      | nil => λ (hz : {max-list (map Action Reward (step-solve s n) nil) ≡ solved-reward : Reward}) →
+          λ (_ : Π (+ a : Action) → Π (e : Elem a nil) →
+                    {step-solve s n a ≡ solved-reward : Reward} → C) →
+            matchEmpty (reward-apart hz) motive (λ _ → C)
+      | cons x rest =>
+          λ (hc : {max-list (map Action Reward (step-solve s n) (cons x rest)) ≡ solved-reward : Reward}) →
+          λ (k1 : Π (+ a : Action) → Π (e : Elem a (cons x rest)) →
+                     {step-solve s n a ≡ solved-reward : Reward} → C) →
+            reward-split (step-solve s n x) (solve-binary (fst (step s x)) n) C
+              (λ (z : {step-solve s n x ≡ bottom : Reward}) →
+                find-on rest s n
+                  (rewrite (sym Reward
+                             (max bottom (max-list (map Action Reward (step-solve s n) rest)))
+                             (max-list (map Action Reward (step-solve s n) rest))
+                             (max-bottom-id (max-list (map Action Reward (step-solve s n) rest))))
+                    motive (λ w → {w ≡ solved-reward : Reward})
+                  in
+                  (rewrite (sym Reward (step-solve s n x) bottom z)
+                    motive (λ q → {max q (max-list (map Action Reward (step-solve s n) rest)) ≡ solved-reward : Reward})
+                  in
+                  (rewrite (sym Reward
+                             (max-list (map Action Reward (step-solve s n) (cons x rest)))
+                             (max (step-solve s n x) (max-list (map Action Reward (step-solve s n) rest)))
+                             (cons-max (step-solve s n) x rest))
+                    motive (λ t → {t ≡ solved-reward : Reward})
+                  in hc)))
+                  C
+                  (λ (+ a : Action) → λ (e : Elem a rest) →
+                    λ (p : {step-solve s n a ≡ solved-reward : Reward}) →
+                      k1 a (elem-there a x rest e) p))
+              (λ (r : {step-solve s n x ≡ solved-reward : Reward}) →
+                k1 x (elem-here x rest) r))
+    h k
+
+-- Placements still to make, and the index at which a live line pays R.
+-- Every live line from one board pays at this same index.
+def class-gap : run Π (c : Config) → Nat :=
+  λ (c : Config) → class-monus horizon (class-length c)
+
+def class-pay : run Π (c : Config) → Nat :=
+  λ (c : Config) → class-monus (class-gap c) (suc 0)
+
+-- A boolean that cannot be false is true.
+def bool-not-false : evidence Π (b : Bool) →
+                              Π (no : {b ≡ false : Bool} → Empty) →
+                              {b ≡ true : Bool} :=
+  λ (b : Bool) →
+  λ (no : {b ≡ false : Bool} → Empty) →
+    (match b motive (λ x → ({x ≡ false : Bool} → Empty) → {x ≡ true : Bool})
+      | true => λ (_ : {true ≡ false : Bool} → Empty) → refl
+      | false => λ (noF : {false ≡ false : Bool} → Empty) →
+          matchEmpty (noF refl) motive (λ _ → {false ≡ true : Bool}))
+    no
+
+-- nat-eq m 0 is true only for zero.
+def nat-eq-0-zero : evidence Π (m : Nat) →
+                             Π (h : {nat-eq m 0 ≡ true : Bool}) →
+                             {m ≡ 0 : Nat} :=
+  λ (m : Nat) →
+    match m motive (λ k → {nat-eq k 0 ≡ true : Bool} → {k ≡ 0 : Nat})
+      | 0 => λ (_ : {nat-eq 0 0 ≡ true : Bool}) → refl
+      | suc m1 => λ (bad : {nat-eq (suc m1) 0 ≡ true : Bool}) →
+          matchEmpty (class-ft bad) motive (λ _ → {suc m1 ≡ 0 : Nat})
+
+-- nat-eq is equality.
+def nat-eq-eq : evidence Π (m : Nat) → Π (n : Nat) →
+                         Π (h : {nat-eq m n ≡ true : Bool}) →
+                         {m ≡ n : Nat} :=
+  λ (m : Nat) →
+    match m motive (λ i → Π (n : Nat) → {nat-eq i n ≡ true : Bool} → {i ≡ n : Nat})
+      | 0 => λ (n : Nat) →
+          match n motive (λ j → {nat-eq 0 j ≡ true : Bool} → {0 ≡ j : Nat})
+            | 0 => λ (_ : {nat-eq 0 0 ≡ true : Bool}) → refl
+            | suc n1 => λ (bad : {nat-eq 0 (suc n1) ≡ true : Bool}) →
+                matchEmpty (class-ft bad) motive (λ _ → {0 ≡ suc n1 : Nat})
+      | suc m1 => λ (n : Nat) →
+          match n motive (λ j → {nat-eq (suc m1) j ≡ true : Bool} → {suc m1 ≡ j : Nat})
+            | 0 => λ (bad : {nat-eq (suc m1) 0 ≡ true : Bool}) →
+                matchEmpty (class-ft bad) motive (λ _ → {suc m1 ≡ 0 : Nat})
+            | suc n1 => λ (h : {nat-eq m1 n1 ≡ true : Bool}) →
+                rewrite (nat-eq-eq m1 n1 h) motive (λ z → {suc z ≡ suc n1 : Nat}) in refl
+
+-- pay is positive exactly when at least two placements remain.
+def pay-pos-room : evidence Π (m : Nat) →
+                            Π (ne : {nat-eq (class-monus m (suc 0)) 0 ≡ false : Bool}) →
+                            {leb (suc (suc 0)) m ≡ true : Bool} :=
+  λ (m : Nat) →
+    match m motive (λ x → {nat-eq (class-monus x (suc 0)) 0 ≡ false : Bool} →
+                          {leb (suc (suc 0)) x ≡ true : Bool})
+      | 0 => λ (ne : {nat-eq (class-monus 0 (suc 0)) 0 ≡ false : Bool}) →
+          matchEmpty (class-ft (sym Bool true false ne))
+            motive (λ _ → {leb (suc (suc 0)) 0 ≡ true : Bool})
+      | suc m1 => λ (ne : {nat-eq (class-monus (suc m1) (suc 0)) 0 ≡ false : Bool}) →
+          (match m1 motive (λ y → {nat-eq y 0 ≡ false : Bool} →
+                                  {leb (suc (suc 0)) (suc y) ≡ true : Bool})
+            | 0 => λ (p : {nat-eq 0 0 ≡ false : Bool}) →
+                matchEmpty (class-ft (sym Bool true false p))
+                  motive (λ _ → {leb (suc (suc 0)) (suc 0) ≡ true : Bool})
+            | suc m2 => λ (_ : {nat-eq (suc m2) 0 ≡ false : Bool}) → refl)
+          ne
+
+-- m ∸ n ≥ 2, so (m ∸ n) ∸ 1 is one more than (m ∸ suc n) ∸ 1.
+def monus-pay-shift : evidence Π (n : Nat) → Π (m : Nat) →
+                               Π (room : {leb (suc (suc 0)) (class-monus m n) ≡ true : Bool}) →
+                               {class-monus (class-monus m n) (suc 0) ≡
+                                suc (class-monus (class-monus m (suc n)) (suc 0)) : Nat} :=
+  λ (n : Nat) →
+    match n motive (λ i → Π (m : Nat) →
+                           Π (room : {leb (suc (suc 0)) (class-monus m i) ≡ true : Bool}) →
+                           {class-monus (class-monus m i) (suc 0) ≡
+                            suc (class-monus (class-monus m (suc i)) (suc 0)) : Nat})
+      | 0 => λ (m : Nat) →
+          match m motive (λ x → Π (room : {leb (suc (suc 0)) x ≡ true : Bool}) →
+                                 {class-monus x (suc 0) ≡
+                                  suc (class-monus (class-monus x (suc 0)) (suc 0)) : Nat})
+            | 0 => λ (room : {leb (suc (suc 0)) 0 ≡ true : Bool}) →
+                matchEmpty (class-ft room)
+                  motive (λ _ → {class-monus 0 (suc 0) ≡
+                                 suc (class-monus (class-monus 0 (suc 0)) (suc 0)) : Nat})
+            | suc m1 => λ (room : {leb (suc (suc 0)) (suc m1) ≡ true : Bool}) →
+                (match m1 motive (λ y → Π (p : {leb (suc 0) y ≡ true : Bool}) →
+                                        {class-monus (suc y) (suc 0) ≡
+                                         suc (class-monus (class-monus (suc y) (suc 0)) (suc 0)) : Nat})
+                  | 0 => λ (p : {leb (suc 0) 0 ≡ true : Bool}) →
+                      matchEmpty (class-ft p)
+                        motive (λ _ → {class-monus (suc 0) (suc 0) ≡
+                                       suc (class-monus (class-monus (suc 0) (suc 0)) (suc 0)) : Nat})
+                  | suc m2 => λ (_ : {leb (suc 0) (suc m2) ≡ true : Bool}) → refl)
+                room
+      | suc n1 => λ (m : Nat) →
+          match m motive (λ x → Π (room : {leb (suc (suc 0)) (class-monus x (suc n1)) ≡ true : Bool}) →
+                                 {class-monus (class-monus x (suc n1)) (suc 0) ≡
+                                  suc (class-monus (class-monus x (suc (suc n1))) (suc 0)) : Nat})
+            | 0 => λ (room : {leb (suc (suc 0)) (class-monus 0 (suc n1)) ≡ true : Bool}) →
+                matchEmpty (class-ft room)
+                  motive (λ _ → {class-monus (class-monus 0 (suc n1)) (suc 0) ≡
+                                 suc (class-monus (class-monus 0 (suc (suc n1))) (suc 0)) : Nat})
+            | suc m1 => λ (room : {leb (suc (suc 0)) (class-monus (suc m1) (suc n1)) ≡ true : Bool}) →
+                monus-pay-shift n1 m1 room
+
+-- suc n minus n is one.
+def monus-suc-self : evidence Π (n : Nat) → {class-monus (suc n) n ≡ suc 0 : Nat} :=
+  λ (n : Nat) →
+    match n motive (λ k → {class-monus (suc k) k ≡ suc 0 : Nat})
+      | 0 => refl
+      | suc n1 => monus-suc-self n1
+
+-- A completing placement leaves one step of fuel, so the pay index is 0.
+def full-gap-one : evidence Π (+ c : Config) → Π (+ a : Action) →
+                            Π (hf : {class-full (class-place c a) ≡ true : Bool}) →
+                            {class-gap c ≡ suc 0 : Nat} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+  λ (hf : {class-full (class-place c a) ≡ true : Bool}) →
+    rewrite (sym Nat (suc (class-length c)) horizon
+              (nat-eq-eq (suc (class-length c)) horizon
+                (rewrite (sym Nat (class-length (class-place c a)) (suc (class-length c))
+                           (length-place c a))
+                  motive (λ z → {nat-eq z horizon ≡ true : Bool})
+                in
+                rewrite (sym Bool (class-full (class-place c a))
+                               (nat-eq (class-length (class-place c a)) horizon)
+                               (full-is-length (class-place c a)))
+                  motive (λ b → {b ≡ true : Bool})
+                in hf)))
+      motive (λ z → {class-monus z (class-length c) ≡ suc 0 : Nat})
+    in monus-suc-self (class-length c)
+
+def full-pay-zero : evidence Π (+ c : Config) → Π (+ a : Action) →
+                             Π (hf : {class-full (class-place c a) ≡ true : Bool}) →
+                             {class-pay c ≡ 0 : Nat} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+  λ (hf : {class-full (class-place c a) ≡ true : Bool}) →
+    rewrite (full-gap-one c a hf)
+      motive (λ z → {class-monus z (suc 0) ≡ 0 : Nat})
+    in refl
+
+-- Not blocked, and the child is solved, so this action pays R now.
+def full-snd : evidence Π (+ c : Config) → Π (+ a : Action) →
+                        Π (hb : {class-blocked (class-place c a) ≡ false : Bool}) →
+                        Π (hf : {class-full (class-place c a) ≡ true : Bool}) →
+                        {snd (step (class-ongoing c) a) ≡ solved-reward : Reward} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+  λ (hb : {class-blocked (class-place c a) ≡ false : Bool}) →
+  λ (hf : {class-full (class-place c a) ≡ true : Bool}) →
+    rewrite step-ongoing c a
+      motive (λ q → {snd q ≡ solved-reward : Reward})
+    in
+    rewrite hb
+      motive (λ b → {snd (judge-on b (class-full (class-place c a)) (class-place c a)) ≡
+                     solved-reward : Reward})
+    in
+    rewrite hf
+      motive (λ f → {snd (judge-on false f (class-place c a)) ≡ solved-reward : Reward})
+    in refl
+
+def full-to-pay : evidence Π (+ c : Config) → Π (+ a : Action) →
+                           Π (e : Elem a all-actions) →
+                           Π (hb : {class-blocked (class-place c a) ≡ false : Bool}) →
+                           Π (hf : {class-full (class-place c a) ≡ true : Bool}) →
+                           {solve (class-ongoing c) (class-pay c) ≡ solved-reward : Reward} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+  λ (e : Elem a all-actions) →
+  λ (hb : {class-blocked (class-place c a) ≡ false : Bool}) →
+  λ (hf : {class-full (class-place c a) ≡ true : Bool}) →
+    rewrite (full-pay-zero c a hf)
+      motive (λ z → {solve (class-ongoing c) z ≡ solved-reward : Reward})
+    in
+    any-R-max (λ (b : Action) → snd (step (class-ongoing c) b)) all-actions
+      (λ (b : Action) → step-reward-binary (class-ongoing c) b)
+      a e
+      (full-snd c a hb hf)
+
+-- Paying at depth 0 is paying at the pay index: a later gap would make
+-- depth 0 bottom.
+def solve-pays-zero : evidence Π (+ c : Config) →
+                               Π (hit : {solve (class-ongoing c) 0 ≡ solved-reward : Reward}) →
+                               {solve (class-ongoing c) (class-pay c) ≡ solved-reward : Reward} :=
+  λ (+ c : Config) →
+  λ (hit : {solve (class-ongoing c) 0 ≡ solved-reward : Reward}) →
+    rewrite (nat-eq-0-zero (class-pay c)
+              (bool-not-false (nat-eq (class-pay c) 0)
+                (λ (ne : {nat-eq (class-pay c) 0 ≡ false : Bool}) →
+                  reward-apart
+                    (rewrite (sym Reward (solve (class-ongoing c) 0) bottom
+                               (solve-early 0 c (pay-pos-room (class-gap c) ne)))
+                      motive (λ z → {z ≡ solved-reward : Reward})
+                    in hit))))
+      motive (λ z → {solve (class-ongoing c) z ≡ solved-reward : Reward})
+    in hit
+
+-- solve at a successor is the max of step-solve.
+def solve-suc-max : evidence Π (+ s : State) → Π (+ n : Nat) →
+                             {solve s (suc n) ≡
+                              max-list (map Action Reward (step-solve s n) all-actions) : Reward} :=
+  λ (+ s : State) → λ (+ n : Nat) → refl
+
+-- Two steps of fuel remain, so the parent's pay index is one past the child's.
+def pay-shift-place : evidence Π (+ c : Config) → Π (+ a : Action) →
+                               Π (room : {leb (suc (suc 0)) (class-gap c) ≡ true : Bool}) →
+                               {class-pay c ≡ suc (class-pay (class-place c a)) : Nat} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+  λ (room : {leb (suc (suc 0)) (class-gap c) ≡ true : Bool}) →
+    rewrite (length-place c a)
+      motive (λ z → {class-pay c ≡
+                     suc (class-monus (class-monus horizon z) (suc 0)) : Nat})
+    in monus-pay-shift (class-length c) horizon room
+
+-- An open placement steps to the longer ongoing board.
+def open-child : evidence Π (+ c : Config) → Π (+ a : Action) →
+                          Π (hb : {class-blocked (class-place c a) ≡ false : Bool}) →
+                          Π (hf : {class-full (class-place c a) ≡ false : Bool}) →
+                          {fst (step (class-ongoing c) a) ≡
+                           class-ongoing (class-place c a) : State} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+  λ (hb : {class-blocked (class-place c a) ≡ false : Bool}) →
+  λ (hf : {class-full (class-place c a) ≡ false : Bool}) →
+    rewrite step-ongoing c a
+      motive (λ q → {fst q ≡ class-ongoing (class-place c a) : State})
+    in
+    rewrite hb
+      motive (λ b → {fst (judge-on b (class-full (class-place c a)) (class-place c a)) ≡
+                     class-ongoing (class-place c a) : State})
+    in
+    rewrite hf
+      motive (λ f → {fst (judge-on false f (class-place c a)) ≡
+                     class-ongoing (class-place c a) : State})
+    in refl
+
+-- A hit at any depth is a hit at the pay index. The successor asks the
+-- child, which is earlier in the book at the same smaller depth.
+def solve-pays : evidence Π (n : Nat) → Π (+ c : Config) →
+                          Π (hit : {solve (class-ongoing c) n ≡ solved-reward : Reward}) →
+                          {solve (class-ongoing c) (class-pay c) ≡ solved-reward : Reward} :=
+  λ (n : Nat) → λ (+ c : Config) →
+  λ (hit : {solve (class-ongoing c) n ≡ solved-reward : Reward}) →
+    (match n motive (λ k → {solve (class-ongoing c) k ≡ solved-reward : Reward} →
+                           {solve (class-ongoing c) (class-pay c) ≡ solved-reward : Reward})
+      | 0 => λ (h0 : {solve (class-ongoing c) 0 ≡ solved-reward : Reward}) →
+          solve-pays-zero c h0
+      | suc n1 => λ (h1 : {solve (class-ongoing c) (suc n1) ≡ solved-reward : Reward}) →
+          find-on all-actions (class-ongoing c) n1
+            (rewrite (sym Reward
+                       (solve (class-ongoing c) (suc n1))
+                       (max-list (map Action Reward (step-solve (class-ongoing c) n1) all-actions))
+                       (solve-suc-max (class-ongoing c) n1))
+              motive (λ z → {z ≡ solved-reward : Reward})
+            in h1)
+            ({solve (class-ongoing c) (class-pay c) ≡ solved-reward : Reward})
+            (λ (+ a : Action) → λ (e : Elem a all-actions) →
+              λ (p : {step-solve (class-ongoing c) n1 a ≡ solved-reward : Reward}) →
+                ((rewrite step-ongoing c a
+                   motive (λ q → {solve (fst q) n1 ≡ solved-reward : Reward} →
+                                 {solve (class-ongoing c) (class-pay c) ≡ solved-reward : Reward})
+                 in
+                 ((match (class-blocked (class-place c a))
+                    motive (λ b → {class-blocked (class-place c a) ≡ b : Bool} →
+                                  {solve (fst (judge-on b (class-full (class-place c a))
+                                               (class-place c a))) n1 ≡
+                                   solved-reward : Reward} →
+                                  {solve (class-ongoing c) (class-pay c) ≡ solved-reward : Reward})
+                    | true => λ (_ : {class-blocked (class-place c a) ≡ true : Bool}) →
+                        λ (bad : {solve class-dead n1 ≡ solved-reward : Reward}) →
+                          matchEmpty (reward-apart
+                            (rewrite (sym Reward (solve class-dead n1) bottom (solve-dead-0 n1))
+                              motive (λ z → {z ≡ solved-reward : Reward})
+                            in bad))
+                          motive (λ _ → {solve (class-ongoing c) (class-pay c) ≡ solved-reward : Reward})
+                    | false => λ (hb : {class-blocked (class-place c a) ≡ false : Bool}) →
+                        λ (hs : {solve (fst (judge-on false (class-full (class-place c a))
+                                                      (class-place c a))) n1 ≡
+                                 solved-reward : Reward}) →
+                          ((match (class-full (class-place c a))
+                             motive (λ f → {class-full (class-place c a) ≡ f : Bool} →
+                                           {solve (fst (judge-on false f (class-place c a))) n1 ≡
+                                            solved-reward : Reward} →
+                                           {solve (class-ongoing c) (class-pay c) ≡
+                                            solved-reward : Reward})
+                             | true => λ (hf : {class-full (class-place c a) ≡ true : Bool}) →
+                                 λ (_ : {solve (class-solved (class-place c a)) n1 ≡
+                                         solved-reward : Reward}) →
+                                   full-to-pay c a e hb hf
+                             | false => λ (hf : {class-full (class-place c a) ≡ false : Bool}) →
+                                 λ (hitc : {solve (class-ongoing (class-place c a)) n1 ≡
+                                            solved-reward : Reward}) →
+                                   open-to-pay n1 c a e hb hf hitc)
+                           refl hs))
+                  refl))
+                p)))
+    hit
+
+-- The open child pays at its own index, so the parent pays one step later.
+def open-to-pay : evidence Π (n : Nat) → Π (+ c : Config) → Π (+ a : Action) →
+                           Π (e : Elem a all-actions) →
+                           Π (hb : {class-blocked (class-place c a) ≡ false : Bool}) →
+                           Π (hf : {class-full (class-place c a) ≡ false : Bool}) →
+                           Π (hit : {solve (class-ongoing (class-place c a)) n ≡ solved-reward : Reward}) →
+                           {solve (class-ongoing c) (class-pay c) ≡ solved-reward : Reward} :=
+  λ (n : Nat) → λ (+ c : Config) → λ (+ a : Action) →
+  λ (e : Elem a all-actions) →
+  λ (hb : {class-blocked (class-place c a) ≡ false : Bool}) →
+  λ (hf : {class-full (class-place c a) ≡ false : Bool}) →
+  λ (hit : {solve (class-ongoing (class-place c a)) n ≡ solved-reward : Reward}) →
+    rewrite (pay-shift-place c a (open-room c a n hf hit))
+      motive (λ z → {solve (class-ongoing c) z ≡ solved-reward : Reward})
+    in
+    any-R-max (λ (b : Action) → solve (fst (step (class-ongoing c) b)) (class-pay (class-place c a)))
+      all-actions
+      (λ (b : Action) → solve-binary (fst (step (class-ongoing c) b)) (class-pay (class-place c a)))
+      a e
+      (rewrite (open-child c a hb hf)
+        motive (λ t → {solve t (class-pay (class-place c a)) ≡ solved-reward : Reward})
+      in solve-pays n (class-place c a) hit)
+
+-- Once action-at hits R, every later index is R. Index 0 stays by
+-- stream-R. A later index is solve of the next state, and solve stays R.
+def action-from : evidence Π (+ s : State) → Π (+ w : Action) → Π (p : Nat) → Π (k : Nat) →
+                           Π (hit : {action-at s w p ≡ solved-reward : Reward}) →
+                           Π (late : {leb p k ≡ true : Bool}) →
+                           {action-at s w k ≡ solved-reward : Reward} :=
+  λ (+ s : State) → λ (+ w : Action) → λ (p : Nat) → λ (k : Nat) →
+  λ (hit : {action-at s w p ≡ solved-reward : Reward}) →
+  λ (late : {leb p k ≡ true : Bool}) →
+    (match p motive (λ i → {action-at s w i ≡ solved-reward : Reward} →
+                           {leb i k ≡ true : Bool} →
+                           {action-at s w k ≡ solved-reward : Reward})
+      | 0 => λ (h0 : {action-at s w 0 ≡ solved-reward : Reward}) →
+          λ (_ : {leb 0 k ≡ true : Bool}) →
+            stream-R s w h0 k
+      | suc p1 => λ (h1 : {action-at s w (suc p1) ≡ solved-reward : Reward}) →
+          λ (late1 : {leb (suc p1) k ≡ true : Bool}) →
+            (match k motive (λ i → {leb (suc p1) i ≡ true : Bool} →
+                                   {action-at s w i ≡ solved-reward : Reward})
+              | 0 => λ (bad : {leb (suc p1) 0 ≡ true : Bool}) →
+                  matchEmpty (class-ft bad)
+                    motive (λ _ → {action-at s w 0 ≡ solved-reward : Reward})
+              | suc k1 => λ (le1 : {leb (suc p1) (suc k1) ≡ true : Bool}) →
+                  solve-from-hit (fst (step s w)) p1 k1 le1 h1)
+            late1)
+    hit late
+
+-- suc m ≰ k means k ≤ m.
+def leb-suc-flip : evidence Π (m : Nat) → Π (k : Nat) →
+                            Π (h : {leb (suc m) k ≡ false : Bool}) →
+                            {leb k m ≡ true : Bool} :=
+  λ (m : Nat) → λ (k : Nat) →
+  λ (h : {leb (suc m) k ≡ false : Bool}) →
+    (match k motive (λ i → {leb (suc m) i ≡ false : Bool} → {leb i m ≡ true : Bool})
+      | 0 => λ (_ : {leb (suc m) 0 ≡ false : Bool}) → refl
+      | suc k1 => λ (hs : {leb (suc m) (suc k1) ≡ false : Bool}) →
+          (match m motive (λ j → {leb (suc j) (suc k1) ≡ false : Bool} →
+                                 {leb (suc k1) j ≡ true : Bool})
+            | 0 => λ (bad : {leb (suc 0) (suc k1) ≡ false : Bool}) →
+                matchEmpty (class-ft (sym Bool true false bad))
+                  motive (λ _ → {leb (suc k1) 0 ≡ true : Bool})
+            | suc m1 => λ (h1 : {leb (suc (suc m1)) (suc k1) ≡ false : Bool}) →
+                leb-suc-flip m1 k1 h1)
+          hs)
+    h
+
+-- The pay index is past k, so k is still in the early-zero band.
+def before-pay : evidence Π (k : Nat) → Π (g : Nat) →
+                          Π (h : {leb (class-monus g (suc 0)) k ≡ false : Bool}) →
+                          {leb (suc (suc k)) g ≡ true : Bool} :=
+  λ (k : Nat) → λ (g : Nat) →
+  λ (h : {leb (class-monus g (suc 0)) k ≡ false : Bool}) →
+    (match g motive (λ x → {leb (class-monus x (suc 0)) k ≡ false : Bool} →
+                           {leb (suc (suc k)) x ≡ true : Bool})
+      | 0 => λ (bad : {leb (class-monus 0 (suc 0)) k ≡ false : Bool}) →
+          matchEmpty (class-ft (sym Bool true false bad))
+            motive (λ _ → {leb (suc (suc k)) 0 ≡ true : Bool})
+      | suc g1 => λ (h1 : {leb (class-monus (suc g1) (suc 0)) k ≡ false : Bool}) →
+          (match g1 motive (λ y → {leb y k ≡ false : Bool} →
+                                  {leb (suc (suc k)) (suc y) ≡ true : Bool})
+            | 0 => λ (bad : {leb 0 k ≡ false : Bool}) →
+                matchEmpty (class-ft (sym Bool true false bad))
+                  motive (λ _ → {leb (suc (suc k)) (suc 0) ≡ true : Bool})
+            | suc g2 => λ (h2 : {leb (suc g2) k ≡ false : Bool}) →
+                leb-suc-flip g2 k h2)
+          h1)
+    h
+
+-- Pointwise order once w pays at the pay index.
+def pay-le-at : evidence Π (k : Nat) → Π (+ c : Config) → Π (+ w : Action) → Π (+ a : Action) →
+                         Π (hit : {action-at (class-ongoing c) w (class-pay c) ≡ solved-reward : Reward}) →
+                         le (action-at (class-ongoing c) a k) (action-at (class-ongoing c) w k) :=
+  λ (k : Nat) → λ (+ c : Config) → λ (+ w : Action) → λ (+ a : Action) →
+  λ (hit : {action-at (class-ongoing c) w (class-pay c) ≡ solved-reward : Reward}) →
+    (match (leb (class-pay c) k)
+      motive (λ b → {leb (class-pay c) k ≡ b : Bool} →
+                    le (action-at (class-ongoing c) a k) (action-at (class-ongoing c) w k))
+      | true => λ (late : {leb (class-pay c) k ≡ true : Bool}) →
+          rewrite (action-from (class-ongoing c) w (class-pay c) k hit late)
+            motive (λ z → le (action-at (class-ongoing c) a k) z)
+          in below-R (action-at (class-ongoing c) a k) (action-bin (class-ongoing c) a k)
+      | false => λ (early : {leb (class-pay c) k ≡ false : Bool}) →
+          early-le k c a w (before-pay k (class-gap c) early))
+    refl
+
+-- A head that is already R is R at the pay index, which then has to be 0.
+def head-hit-pay : evidence Π (+ c : Config) → Π (+ w : Action) →
+                            Π (hit : {action-at (class-ongoing c) w 0 ≡ solved-reward : Reward}) →
+                            {action-at (class-ongoing c) w (class-pay c) ≡ solved-reward : Reward} :=
+  λ (+ c : Config) → λ (+ w : Action) →
+  λ (hit : {action-at (class-ongoing c) w 0 ≡ solved-reward : Reward}) →
+    rewrite (nat-eq-0-zero (class-pay c)
+              (bool-not-false (nat-eq (class-pay c) 0)
+                (λ (ne : {nat-eq (class-pay c) 0 ≡ false : Bool}) →
+                  reward-apart
+                    (rewrite (sym Reward (action-at (class-ongoing c) w 0) bottom
+                               (at-early 0 c w (pay-pos-room (class-gap c) ne)))
+                      motive (λ z → {z ≡ solved-reward : Reward})
+                    in hit))))
+      motive (λ z → {action-at (class-ongoing c) w z ≡ solved-reward : Reward})
+    in hit
+
+-- Dead pays nothing.
+def action-dead-bottom : evidence Π (+ a : Action) → Π (n : Nat) →
+                                  {action-at class-dead a n ≡ bottom : Reward} :=
+  λ (+ a : Action) → λ (n : Nat) →
+    match n motive (λ k → {action-at class-dead a k ≡ bottom : Reward})
+      | 0 => rewrite step-dead a motive (λ q → {snd q ≡ bottom : Reward}) in refl
+      | suc m =>
+          rewrite step-dead a motive (λ q → {solve (fst q) m ≡ bottom : Reward}) in
+          solve-dead-0 m
+
+-- Solved pays R at the first index, for every action.
+def solved-head : evidence Π (+ c : Config) → Π (+ a : Action) →
+                           {action-at (class-solved c) a 0 ≡ solved-reward : Reward} :=
+  λ (+ c : Config) → λ (+ a : Action) →
+    rewrite step-solved c a motive (λ q → {snd q ≡ solved-reward : Reward}) in refl
+
+-- An open child that hits pays the parent at the parent's pay index.
+def open-hit-pay : evidence Π (m : Nat) → Π (+ c : Config) → Π (+ w : Action) →
+                            Π (hb : {class-blocked (class-place c w) ≡ false : Bool}) →
+                            Π (hf : {class-full (class-place c w) ≡ false : Bool}) →
+                            Π (hit : {solve (class-ongoing (class-place c w)) m ≡ solved-reward : Reward}) →
+                            {action-at (class-ongoing c) w (class-pay c) ≡ solved-reward : Reward} :=
+  λ (m : Nat) → λ (+ c : Config) → λ (+ w : Action) →
+  λ (hb : {class-blocked (class-place c w) ≡ false : Bool}) →
+  λ (hf : {class-full (class-place c w) ≡ false : Bool}) →
+  λ (hit : {solve (class-ongoing (class-place c w)) m ≡ solved-reward : Reward}) →
+    rewrite (pay-shift-place c w (open-room c w m hf hit))
+      motive (λ z → {action-at (class-ongoing c) w z ≡ solved-reward : Reward})
+    in
+    rewrite (open-child c w hb hf)
+      motive (λ t → {solve t (class-pay (class-place c w)) ≡ solved-reward : Reward})
+    in solve-pays m (class-place c w) hit
+
+-- Any hit of w on an ongoing board is a hit at the pay index.
+def ongoing-hit-pay : evidence Π (j : Nat) → Π (+ c : Config) → Π (+ w : Action) →
+                               Π (hit : {action-at (class-ongoing c) w j ≡ solved-reward : Reward}) →
+                               {action-at (class-ongoing c) w (class-pay c) ≡ solved-reward : Reward} :=
+  λ (j : Nat) → λ (+ c : Config) → λ (+ w : Action) →
+  λ (hit : {action-at (class-ongoing c) w j ≡ solved-reward : Reward}) →
+    (match j motive (λ i → {action-at (class-ongoing c) w i ≡ solved-reward : Reward} →
+                           {action-at (class-ongoing c) w (class-pay c) ≡ solved-reward : Reward})
+      | 0 => λ (h0 : {action-at (class-ongoing c) w 0 ≡ solved-reward : Reward}) →
+          head-hit-pay c w h0
+      | suc m => λ (h1 : {action-at (class-ongoing c) w (suc m) ≡ solved-reward : Reward}) →
+          ((rewrite step-ongoing c w
+             motive (λ q → {solve (fst q) m ≡ solved-reward : Reward} →
+                           {action-at (class-ongoing c) w (class-pay c) ≡ solved-reward : Reward})
+           in
+           ((match (class-blocked (class-place c w))
+              motive (λ b → {class-blocked (class-place c w) ≡ b : Bool} →
+                            {solve (fst (judge-on b (class-full (class-place c w))
+                                         (class-place c w))) m ≡
+                             solved-reward : Reward} →
+                            {action-at (class-ongoing c) w (class-pay c) ≡ solved-reward : Reward})
+              | true => λ (_ : {class-blocked (class-place c w) ≡ true : Bool}) →
+                  λ (bad : {solve class-dead m ≡ solved-reward : Reward}) →
+                    matchEmpty (reward-apart
+                      (rewrite (sym Reward (solve class-dead m) bottom (solve-dead-0 m))
+                        motive (λ z → {z ≡ solved-reward : Reward})
+                      in bad))
+                    motive (λ _ → {action-at (class-ongoing c) w (class-pay c) ≡
+                                   solved-reward : Reward})
+              | false => λ (hb : {class-blocked (class-place c w) ≡ false : Bool}) →
+                  λ (hs : {solve (fst (judge-on false (class-full (class-place c w))
+                                                (class-place c w))) m ≡
+                           solved-reward : Reward}) →
+                    ((match (class-full (class-place c w))
+                       motive (λ f → {class-full (class-place c w) ≡ f : Bool} →
+                                     {solve (fst (judge-on false f (class-place c w))) m ≡
+                                      solved-reward : Reward} →
+                                     {action-at (class-ongoing c) w (class-pay c) ≡
+                                      solved-reward : Reward})
+                       | true => λ (hf : {class-full (class-place c w) ≡ true : Bool}) →
+                           λ (_ : {solve (class-solved (class-place c w)) m ≡
+                                   solved-reward : Reward}) →
+                             head-hit-pay c w (full-snd c w hb hf)
+                       | false => λ (hf : {class-full (class-place c w) ≡ false : Bool}) →
+                           λ (hitc : {solve (class-ongoing (class-place c w)) m ≡
+                                      solved-reward : Reward}) →
+                             open-hit-pay m c w hb hf hitc)
+                     refl hs))
+            refl))
+          h1))
+    hit
+
+-- (b) for a hit at any index. The stream of w dominates every action.
+def reaches-dom : evidence Π (+ s : State) → Π (+ w : Action) → Π (+ a : Action) →
+                           Π (j : Nat) →
+                           Π (hit : {action-at s w j ≡ solved-reward : Reward}) →
+                           Dom Reward le (action-value s a) (action-value s w) :=
+  λ (+ s : State) → λ (+ w : Action) → λ (+ a : Action) →
+  λ (j : Nat) →
+  λ (hit : {action-at s w j ≡ solved-reward : Reward}) →
+    (match (state-view s) motive (λ t → λ (_ : StateView t) →
+              {action-at t w j ≡ solved-reward : Reward} →
+              Dom Reward le (action-value t a) (action-value t w))
+      | view-dead => λ (bad : {action-at class-dead w j ≡ solved-reward : Reward}) →
+          matchEmpty (reward-apart
+            (rewrite (sym Reward (action-at class-dead w j) bottom (action-dead-bottom w j))
+              motive (λ z → {z ≡ solved-reward : Reward})
+            in bad))
+          motive (λ _ → Dom Reward le (action-value class-dead a) (action-value class-dead w))
+      | view-solved c => λ (_ : {action-at (class-solved c) w j ≡ solved-reward : Reward}) →
+          now-dom (class-solved c) w a (solved-head c w)
+      | view-ongoing c => λ (h : {action-at (class-ongoing c) w j ≡ solved-reward : Reward}) →
+          (λ (hpay : {action-at (class-ongoing c) w (class-pay c) ≡ solved-reward : Reward}) →
+            stream-le (class-ongoing c) a w
+              (λ (k : Nat) → pay-le-at k c w a hpay))
+          (ongoing-hit-pay j c w h))
+    hit
+
+-- (a) The reach recurrence. It copies the one-action / some-action
+-- equations: an action hits within k when its immediate reward is the
+-- solved reward, or, past the first index, some action from the next
+-- state hits within the remaining indices. The list walk is not part
+-- of that recursion.
+def hit-fold : run Π (+ ask : Π (+ x : Action) → Bool) → Π (xs : List Action) → Bool :=
+  λ (+ ask : Π (+ x : Action) → Bool) → λ (xs : List Action) →
+    match xs motive (λ _ → Bool)
+      | nil => false
+      | cons x rest =>
+          (match (ask x) motive (λ _ → Bool)
+            | true => true
+            | false => hit-fold ask rest)
+
+def hit-best : run Π (+ s : State) → Π (+ k : Nat) → Bool :=
+  λ (+ s : State) → λ (+ k : Nat) →
+    match k motive (λ _ → Bool)
+      | 0 => false
+      | suc j => hit-any s j
+
+def hit : run Π (+ s : State) → Π (+ a : Action) → Π (+ k : Nat) → Bool :=
+  λ (+ s : State) → λ (+ a : Action) → λ (+ k : Nat) →
+    (match (class-pos (snd (step s a))) motive (λ _ → Bool)
+      | true => true
+      | false => hit-best (fst (step s a)) k)
+
+def hit-any : run Π (+ s : State) → Π (+ j : Nat) → Bool :=
+  λ (+ s : State) → λ (+ j : Nat) →
+    hit-fold (λ (+ a : Action) → hit s a j) all-actions
+
+def hit-eq : evidence Π (+ s : State) → Π (+ a : Action) → Π (+ k : Nat) →
+                      {hit s a k ≡
+                       (match (class-pos (snd (step s a))) motive (λ _ → Bool)
+                         | true => true
+                         | false => hit-best (fst (step s a)) k) : Bool} :=
+  λ (+ s : State) → λ (+ a : Action) → λ (+ k : Nat) → refl
+
+def fold-nil-eq : evidence Π (+ ask : Π (+ x : Action) → Bool) →
+                           {hit-fold ask nil ≡ false : Bool} :=
+  λ (+ ask : Π (+ x : Action) → Bool) → refl
+
+def fold-cons-eq : evidence Π (+ ask : Π (+ x : Action) → Bool) → Π (+ x : Action) →
+                            Π (rest : List Action) →
+                            {hit-fold ask (cons x rest) ≡
+                             (match (ask x) motive (λ _ → Bool)
+                               | true => true
+                               | false => hit-fold ask rest) : Bool} :=
+  λ (+ ask : Π (+ x : Action) → Bool) → λ (+ x : Action) → λ (rest : List Action) → refl
+
+-- class-pos true on a binary reward is the solved reward.
+def pos-is-R : evidence Π (q : Reward) → Π (b : RewardBin q) →
+                        Π (h : {class-pos q ≡ true : Bool}) →
+                        {q ≡ solved-reward : Reward} :=
+  λ (q : Reward) → λ (b : RewardBin q) →
+  λ (h : {class-pos q ≡ true : Bool}) →
+    reward-split q b ({q ≡ solved-reward : Reward})
+      (λ (z : {q ≡ bottom : Reward}) →
+        matchEmpty (class-ft
+          (rewrite (sym Reward q bottom z)
+            motive (λ t → {class-pos t ≡ true : Bool})
+          in h))
+        motive (λ _ → {q ≡ solved-reward : Reward}))
+      (λ (r : {q ≡ solved-reward : Reward}) → r)
+
+-- class-pos false on a binary reward is bottom.
+def pos-is-bottom : evidence Π (q : Reward) → Π (b : RewardBin q) →
+                             Π (h : {class-pos q ≡ false : Bool}) →
+                             {q ≡ bottom : Reward} :=
+  λ (q : Reward) → λ (b : RewardBin q) →
+  λ (h : {class-pos q ≡ false : Bool}) →
+    reward-split q b ({q ≡ bottom : Reward})
+      (λ (z : {q ≡ bottom : Reward}) → z)
+      (λ (r : {q ≡ solved-reward : Reward}) →
+        matchEmpty (class-ft
+          (sym Bool true false
+            (rewrite (sym Reward q solved-reward r)
+              motive (λ t → {class-pos t ≡ false : Bool})
+            in h)))
+        motive (λ _ → {q ≡ bottom : Reward}))
+
+-- A positive immediate reward is a hit at every horizon, including 0.
+-- The motive rewrites the scrutinee of hit's match, so refl is checked
+-- at the true arm, where that match is the constant true.
+def pos-hit : evidence Π (+ s : State) → Π (+ a : Action) → Π (k : Nat) →
+                       Π (h : {class-pos (snd (step s a)) ≡ true : Bool}) →
+                       {hit s a k ≡ true : Bool} :=
+  λ (+ s : State) → λ (+ a : Action) → λ (k : Nat) →
+  λ (h : {class-pos (snd (step s a)) ≡ true : Bool}) →
+    rewrite (hit-eq s a k)
+      motive (λ z → {z ≡ true : Bool})
+    in
+    rewrite h
+      motive (λ b →
+        {(match b motive (λ _ → Bool)
+           | true => true
+           | false => hit-best (fst (step s a)) k) ≡ true : Bool})
+    in refl
+
+-- The immediate reward is the solved reward when class-pos says so.
+def imm-at : evidence Π (+ s : State) → Π (+ a : Action) →
+                      Π (h : {class-pos (snd (step s a)) ≡ true : Bool}) →
+                      {action-at s a 0 ≡ solved-reward : Reward} :=
+  λ (+ s : State) → λ (+ a : Action) →
+  λ (h : {class-pos (snd (step s a)) ≡ true : Bool}) →
+    pos-is-R (snd (step s a)) (step-reward-binary s a) h
+
+-- hit's false arm is the best of the next state.
+def hit-to-best : evidence Π (+ s : State) → Π (+ a : Action) → Π (k : Nat) →
+                           Π (np : {class-pos (snd (step s a)) ≡ false : Bool}) →
+                           Π (ht : {hit s a k ≡ true : Bool}) →
+                           {hit-best (fst (step s a)) k ≡ true : Bool} :=
+  λ (+ s : State) → λ (+ a : Action) → λ (k : Nat) →
+  λ (np : {class-pos (snd (step s a)) ≡ false : Bool}) →
+  λ (ht : {hit s a k ≡ true : Bool}) →
+    rewrite (sym Bool (class-pos (snd (step s a))) false np)
+      motive (λ b →
+        {(match b motive (λ _ → Bool)
+           | true => true
+           | false => hit-best (fst (step s a)) k) ≡ true : Bool})
+    in
+    rewrite (sym Bool
+              (hit s a k)
+              (match (class-pos (snd (step s a))) motive (λ _ → Bool)
+                | true => true
+                | false => hit-best (fst (step s a)) k)
+              (hit-eq s a k))
+      motive (λ z → {z ≡ true : Bool})
+    in ht
+
+def hit-to-best-false : evidence Π (+ s : State) → Π (+ a : Action) → Π (k : Nat) →
+                                 Π (np : {class-pos (snd (step s a)) ≡ false : Bool}) →
+                                 Π (ht : {hit s a k ≡ false : Bool}) →
+                                 {hit-best (fst (step s a)) k ≡ false : Bool} :=
+  λ (+ s : State) → λ (+ a : Action) → λ (k : Nat) →
+  λ (np : {class-pos (snd (step s a)) ≡ false : Bool}) →
+  λ (ht : {hit s a k ≡ false : Bool}) →
+    rewrite (sym Bool (class-pos (snd (step s a))) false np)
+      motive (λ b →
+        {(match b motive (λ _ → Bool)
+           | true => true
+           | false => hit-best (fst (step s a)) k) ≡ false : Bool})
+    in
+    rewrite (sym Bool
+              (hit s a k)
+              (match (class-pos (snd (step s a))) motive (λ _ → Bool)
+                | true => true
+                | false => hit-best (fst (step s a)) k)
+              (hit-eq s a k))
+      motive (λ z → {z ≡ false : Bool})
+    in ht
+
+-- A hit of the best at a successor is a hit of some action.
+def best-to-any : evidence Π (+ s : State) → Π (j : Nat) →
+                           Π (h : {hit-best s (suc j) ≡ true : Bool}) →
+                           {hit-any s j ≡ true : Bool} :=
+  λ (+ s : State) → λ (j : Nat) →
+  λ (h : {hit-best s (suc j) ≡ true : Bool}) → h
+
+def best-to-any-false : evidence Π (+ s : State) → Π (j : Nat) →
+                                 Π (h : {hit-best s (suc j) ≡ false : Bool}) →
+                                 {hit-any s j ≡ false : Bool} :=
+  λ (+ s : State) → λ (j : Nat) →
+  λ (h : {hit-best s (suc j) ≡ false : Bool}) → h
+
+def any-fold : evidence Π (+ s : State) → Π (j : Nat) →
+                        {hit-any s j ≡
+                         hit-fold (λ (+ a : Action) → hit s a j) all-actions : Bool} :=
+  λ (+ s : State) → λ (j : Nat) → refl
+-- ask false on the head leaves the tail fold with the same answer.
+def fold-tail : evidence Π (+ ask : Π (+ y : Action) → Bool) → Π (+ x : Action) →
+                         Π (rest : List Action) → Π (bit : Bool) →
+                         Π (hf : {ask x ≡ false : Bool}) →
+                         Π (hc : {hit-fold ask (cons x rest) ≡ bit : Bool}) →
+                         {hit-fold ask rest ≡ bit : Bool} :=
+  λ (+ ask : Π (+ y : Action) → Bool) → λ (+ x : Action) →
+  λ (rest : List Action) → λ (bit : Bool) →
+  λ (hf : {ask x ≡ false : Bool}) →
+  λ (hc : {hit-fold ask (cons x rest) ≡ bit : Bool}) →
+    rewrite (sym Bool (ask x) false hf)
+      motive (λ b →
+        {(match b motive (λ _ → Bool)
+           | true => true
+           | false => hit-fold ask rest) ≡ bit : Bool})
+    in
+    rewrite (sym Bool
+              (hit-fold ask (cons x rest))
+              (match (ask x) motive (λ _ → Bool)
+                | true => true
+                | false => hit-fold ask rest)
+              (fold-cons-eq ask x rest))
+      motive (λ z → {z ≡ bit : Bool})
+    in hc
+
+-- One listed action makes the fold true. The head is reusable inside
+-- the cons step, so the caller spends it once.
+def fold-cons : evidence Π (+ ask : Π (+ y : Action) → Bool) → Π (+ x : Action) →
+                         Π (rest : List Action) →
+                         Π (hc : {hit-fold ask (cons x rest) ≡ true : Bool}) →
+                         Π (- C : Type) →
+                         Π (on-tail : Π (hr : {hit-fold ask rest ≡ true : Bool}) → C) →
+                         Π (kont : Π (+ y : Action) → Π (_ : {ask y ≡ true : Bool}) → C) →
+                         C :=
+  λ (+ ask : Π (+ y : Action) → Bool) → λ (+ x : Action) →
+  λ (rest : List Action) →
+  λ (hc : {hit-fold ask (cons x rest) ≡ true : Bool}) →
+  λ (- C : Type) →
+  λ (on-tail : Π (hr : {hit-fold ask rest ≡ true : Bool}) → C) →
+  λ (kont : Π (+ y : Action) → Π (_ : {ask y ≡ true : Bool}) → C) →
+    (match (ask x)
+      motive (λ b → {ask x ≡ b : Bool} → {hit-fold ask (cons x rest) ≡ true : Bool} → C)
+      | true => λ (yt : {ask x ≡ true : Bool}) →
+          λ (_ : {hit-fold ask (cons x rest) ≡ true : Bool}) →
+            kont x yt
+      | false => λ (hf : {ask x ≡ false : Bool}) →
+          λ (hr : {hit-fold ask (cons x rest) ≡ true : Bool}) →
+            on-tail (fold-tail ask x rest true hf hr))
+    refl hc
+
+def fold-true : evidence Π (+ ask : Π (+ y : Action) → Bool) → Π (xs : List Action) →
+                         Π (h : {hit-fold ask xs ≡ true : Bool}) →
+                         Π (- C : Type) →
+                         Π (kont : Π (+ y : Action) → Π (_ : {ask y ≡ true : Bool}) → C) →
+                         C :=
+  λ (+ ask : Π (+ y : Action) → Bool) → λ (xs : List Action) →
+  λ (h : {hit-fold ask xs ≡ true : Bool}) →
+  λ (- C : Type) →
+  λ (kont : Π (+ y : Action) → Π (_ : {ask y ≡ true : Bool}) → C) →
+    (match xs motive (λ ys → {hit-fold ask ys ≡ true : Bool} → C)
+      | nil => λ (bad : {hit-fold ask nil ≡ true : Bool}) →
+          matchEmpty (class-ft
+            (rewrite (sym Bool (hit-fold ask nil) false (fold-nil-eq ask))
+              motive (λ z → {z ≡ true : Bool})
+            in bad))
+          motive (λ _ → C)
+      | cons x rest => λ (hc : {hit-fold ask (cons x rest) ≡ true : Bool}) →
+          fold-cons ask x rest hc C
+            (λ (hr : {hit-fold ask rest ≡ true : Bool}) →
+              fold-true ask rest hr C kont)
+            kont)
+    h
+
+-- One action's hit makes solve pay R at that same index.
+def at-gives-solve : evidence Π (+ t : State) → Π (+ b : Action) → Π (i : Nat) →
+                              Π (h : {action-at t b i ≡ solved-reward : Reward}) →
+                              {solve t i ≡ solved-reward : Reward} :=
+  λ (+ t : State) → λ (+ b : Action) → λ (i : Nat) →
+  λ (h : {action-at t b i ≡ solved-reward : Reward}) →
+    (match i motive (λ n → {action-at t b n ≡ solved-reward : Reward} →
+                           {solve t n ≡ solved-reward : Reward})
+      | 0 => λ (h0 : {action-at t b 0 ≡ solved-reward : Reward}) →
+          any-R-max (λ (c : Action) → snd (step t c)) all-actions
+            (λ (c : Action) → step-reward-binary t c)
+            b (in-actions b) h0
+      | suc m => λ (h1 : {action-at t b (suc m) ≡ solved-reward : Reward}) →
+          any-R-max (λ (c : Action) → solve (fst (step t c)) m) all-actions
+            (λ (c : Action) → solve-binary (fst (step t c)) m)
+            b (in-actions b) h1)
+    h
+
+-- hit true yields an index at most k where action-at pays R.
+def hit-sound : evidence Π (+ s : State) → Π (+ a : Action) → Π (+ k : Nat) →
+                         Π (h : {hit s a k ≡ true : Bool}) →
+                         Π (- C : Type) →
+                         Π (kont : Π (j : Nat) →
+                                   Π (_ : {leb j k ≡ true : Bool}) →
+                                   Π (_ : {action-at s a j ≡ solved-reward : Reward}) →
+                                   C) →
+                         C :=
+  λ (+ s : State) → λ (+ a : Action) → λ (+ k : Nat) →
+  λ (h : {hit s a k ≡ true : Bool}) →
+  λ (- C : Type) →
+  λ (kont : Π (j : Nat) →
+            Π (_ : {leb j k ≡ true : Bool}) →
+            Π (_ : {action-at s a j ≡ solved-reward : Reward}) →
+            C) →
+    (match (class-pos (snd (step s a)))
+      motive (λ b → {class-pos (snd (step s a)) ≡ b : Bool} →
+                    {hit s a k ≡ true : Bool} → C)
+      | true => λ (yp : {class-pos (snd (step s a)) ≡ true : Bool}) →
+          λ (_ : {hit s a k ≡ true : Bool}) →
+            kont 0 refl (imm-at s a yp)
+      | false => λ (np : {class-pos (snd (step s a)) ≡ false : Bool}) →
+          λ (ht : {hit s a k ≡ true : Bool}) →
+            (match k motive (λ i → {k ≡ i : Nat} →
+                                   {class-pos (snd (step s a)) ≡ false : Bool} →
+                                   {hit s a i ≡ true : Bool} → C)
+              | 0 => λ (_ : {k ≡ 0 : Nat}) →
+                  λ (np0 : {class-pos (snd (step s a)) ≡ false : Bool}) →
+                  λ (ht0 : {hit s a 0 ≡ true : Bool}) →
+                    matchEmpty (class-ft (hit-to-best s a 0 np0 ht0))
+                      motive (λ _ → C)
+              | suc j => λ (hk : {k ≡ suc j : Nat}) →
+                  λ (np1 : {class-pos (snd (step s a)) ≡ false : Bool}) →
+                  λ (ht1 : {hit s a (suc j) ≡ true : Bool}) →
+                    fold-true (λ (+ b : Action) → hit (fst (step s a)) b j) all-actions
+                      (rewrite (sym Bool
+                                 (hit-any (fst (step s a)) j)
+                                 (hit-fold (λ (+ b : Action) → hit (fst (step s a)) b j) all-actions)
+                                 (any-fold (fst (step s a)) j))
+                        motive (λ z → {z ≡ true : Bool})
+                      in best-to-any (fst (step s a)) j
+                           (hit-to-best s a (suc j) np1 ht1))
+                      C
+                      (λ (+ b : Action) →
+                        λ (hb : {hit (fst (step s a)) b j ≡ true : Bool}) →
+                          hit-sound (fst (step s a)) b j hb C
+                            (λ (i : Nat) →
+                              λ (leh : {leb i j ≡ true : Bool}) →
+                              λ (eq : {action-at (fst (step s a)) b i ≡ solved-reward : Reward}) →
+                                kont (suc i)
+                                  (rewrite hk
+                                    motive (λ z → {leb (suc i) z ≡ true : Bool})
+                                  in leb-suc-both i j leh)
+                                  (at-gives-solve (fst (step s a)) b i eq))))
+            refl np ht)
+    refl h
+
+-- The fold is false, so every head it meets is false, and the max of
+-- those rewards is bottom. miss-walk is first: its cons arm calls
+-- miss-cons, which is later, on the tail.
+def miss-walk : evidence Π (- f : Action → Reward) →
+                         Π (+ ask : Π (+ y : Action) → Bool) →
+                         Π (xs : List Action) →
+                         Π (h : {hit-fold ask xs ≡ false : Bool}) →
+                         Π (+ each : Π (+ y : Action) →
+                                    Π (_ : {ask y ≡ false : Bool}) →
+                                    {f y ≡ bottom : Reward}) →
+                         {max-list (map Action Reward f xs) ≡ bottom : Reward} :=
+  λ (- f : Action → Reward) →
+  λ (+ ask : Π (+ y : Action) → Bool) →
+  λ (xs : List Action) →
+  λ (h : {hit-fold ask xs ≡ false : Bool}) →
+  λ (+ each : Π (+ y : Action) → Π (_ : {ask y ≡ false : Bool}) → {f y ≡ bottom : Reward}) →
+    (match xs motive (λ ys → {hit-fold ask ys ≡ false : Bool} →
+                             {max-list (map Action Reward f ys) ≡ bottom : Reward})
+      | nil => λ (_ : {hit-fold ask nil ≡ false : Bool}) → refl
+      | cons x rest => λ (hc : {hit-fold ask (cons x rest) ≡ false : Bool}) →
+          miss-cons f ask x rest hc each)
+    h
+
+def miss-cons : evidence Π (- f : Action → Reward) →
+                         Π (+ ask : Π (+ y : Action) → Bool) →
+                         Π (+ x : Action) → Π (rest : List Action) →
+                         Π (hc : {hit-fold ask (cons x rest) ≡ false : Bool}) →
+                         Π (+ each : Π (+ y : Action) →
+                                    Π (_ : {ask y ≡ false : Bool}) →
+                                    {f y ≡ bottom : Reward}) →
+                         {max-list (map Action Reward f (cons x rest)) ≡ bottom : Reward} :=
+  λ (- f : Action → Reward) →
+  λ (+ ask : Π (+ y : Action) → Bool) →
+  λ (+ x : Action) → λ (rest : List Action) →
+  λ (hc : {hit-fold ask (cons x rest) ≡ false : Bool}) →
+  λ (+ each : Π (+ y : Action) → Π (_ : {ask y ≡ false : Bool}) → {f y ≡ bottom : Reward}) →
+    (match (ask x)
+      motive (λ b → {ask x ≡ b : Bool} →
+                    {hit-fold ask (cons x rest) ≡ false : Bool} →
+                    {max (f x) (max-list (map Action Reward f rest)) ≡ bottom : Reward})
+      | true => λ (yt : {ask x ≡ true : Bool}) →
+          λ (bad : {hit-fold ask (cons x rest) ≡ false : Bool}) →
+            matchEmpty (class-ft
+              (sym Bool true false
+                (rewrite (sym Bool (ask x) true yt)
+                  motive (λ b →
+                    {(match b motive (λ _ → Bool)
+                       | true => true
+                       | false => hit-fold ask rest) ≡ false : Bool})
+                in
+                rewrite (sym Bool
+                          (hit-fold ask (cons x rest))
+                          (match (ask x) motive (λ _ → Bool)
+                            | true => true
+                            | false => hit-fold ask rest)
+                          (fold-cons-eq ask x rest))
+                  motive (λ z → {z ≡ false : Bool})
+                in bad)))
+            motive (λ _ → {max (f x) (max-list (map Action Reward f rest)) ≡ bottom : Reward})
+      | false => λ (hf : {ask x ≡ false : Bool}) →
+          λ (hr : {hit-fold ask (cons x rest) ≡ false : Bool}) →
+            rewrite (each x hf)
+              motive (λ z → {max z (max-list (map Action Reward f rest)) ≡ bottom : Reward})
+            in
+            rewrite (miss-walk f ask rest (fold-tail ask x rest false hf hr) each)
+              motive (λ z → {max bottom z ≡ bottom : Reward})
+            in refl)
+    refl hc
+
+-- hit at horizon 0 is false only when the immediate reward is bottom.
+def pos-from-hit0 : evidence Π (+ s : State) → Π (+ a : Action) →
+                             Π (h : {hit s a 0 ≡ false : Bool}) →
+                             {class-pos (snd (step s a)) ≡ false : Bool} :=
+  λ (+ s : State) → λ (+ a : Action) →
+  λ (h : {hit s a 0 ≡ false : Bool}) →
+    (match (class-pos (snd (step s a)))
+      motive (λ b → {class-pos (snd (step s a)) ≡ b : Bool} →
+                    {hit s a 0 ≡ false : Bool} →
+                    {class-pos (snd (step s a)) ≡ false : Bool})
+      | true => λ (yp : {class-pos (snd (step s a)) ≡ true : Bool}) →
+          λ (bad : {hit s a 0 ≡ false : Bool}) →
+            matchEmpty (class-ft
+              (sym Bool true false
+                (rewrite (sym Bool (hit s a 0) true (pos-hit s a 0 yp))
+                  motive (λ z → {z ≡ false : Bool})
+                in bad)))
+              motive (λ _ → {class-pos (snd (step s a)) ≡ false : Bool})
+      | false => λ (np : {class-pos (snd (step s a)) ≡ false : Bool}) →
+          λ (_ : {hit s a 0 ≡ false : Bool}) → np)
+    refl h
+
+-- hit false at k means action-at at k is bottom. The successor asks
+-- any-false-solve, which is later, at the smaller index.
+def hit-false-at : evidence Π (+ s : State) → Π (+ a : Action) → Π (+ k : Nat) →
+                            Π (h : {hit s a k ≡ false : Bool}) →
+                            {action-at s a k ≡ bottom : Reward} :=
+  λ (+ s : State) → λ (+ a : Action) → λ (+ k : Nat) →
+  λ (h : {hit s a k ≡ false : Bool}) →
+    (match k motive (λ i → {hit s a i ≡ false : Bool} → {action-at s a i ≡ bottom : Reward})
+      | 0 => λ (h0 : {hit s a 0 ≡ false : Bool}) →
+          pos-is-bottom (snd (step s a)) (step-reward-binary s a) (pos-from-hit0 s a h0)
+      | suc j => λ (hs : {hit s a (suc j) ≡ false : Bool}) →
+          (match (class-pos (snd (step s a)))
+            motive (λ b → {class-pos (snd (step s a)) ≡ b : Bool} →
+                          {hit s a (suc j) ≡ false : Bool} →
+                          {action-at s a (suc j) ≡ bottom : Reward})
+            | true => λ (yp : {class-pos (snd (step s a)) ≡ true : Bool}) →
+                λ (bad : {hit s a (suc j) ≡ false : Bool}) →
+                  matchEmpty (class-ft
+                    (sym Bool true false
+                      (rewrite (sym Bool (hit s a (suc j)) true (pos-hit s a (suc j) yp))
+                        motive (λ z → {z ≡ false : Bool})
+                      in bad)))
+                  motive (λ _ → {action-at s a (suc j) ≡ bottom : Reward})
+            | false => λ (np : {class-pos (snd (step s a)) ≡ false : Bool}) →
+                λ (hf : {hit s a (suc j) ≡ false : Bool}) →
+                  any-false-solve j (fst (step s a))
+                    (best-to-any-false (fst (step s a)) j
+                      (hit-to-best-false s a (suc j) np hf)))
+          refl hs)
+    h
+
+-- No action hits within k, so solve at k is bottom. The index comes
+-- first so the descent is that Nat. A successor does not ask
+-- hit-false-at: that would tie the two together, and the equation
+-- {k ≡ suc m} cannot be captured by the reusable action walk. The walk
+-- sees the literal index, and the false arm calls this lemma at m.
+def any-false-solve : evidence Π (+ k : Nat) → Π (+ s : State) →
+                               Π (h : {hit-any s k ≡ false : Bool}) →
+                               {solve s k ≡ bottom : Reward} :=
+  λ (+ k : Nat) → λ (+ s : State) →
+  λ (h : {hit-any s k ≡ false : Bool}) →
+    (match k motive (λ i → {k ≡ i : Nat} →
+                           {hit-any s k ≡ false : Bool} →
+                           {solve s i ≡ bottom : Reward})
+      | 0 => λ (hk0 : {k ≡ 0 : Nat}) →
+          λ (h0 : {hit-any s k ≡ false : Bool}) →
+            miss-walk (λ (c : Action) → snd (step s c))
+              (λ (+ c : Action) → hit s c 0) all-actions
+              (rewrite (sym Bool
+                         (hit-any s 0)
+                         (hit-fold (λ (+ c : Action) → hit s c 0) all-actions)
+                         (any-fold s 0))
+                motive (λ z → {z ≡ false : Bool})
+              in
+              rewrite (sym Nat k 0 hk0)
+                motive (λ z → {hit-any s z ≡ false : Bool})
+              in h0)
+              (λ (+ c : Action) → λ (hf : {hit s c 0 ≡ false : Bool}) →
+                pos-is-bottom (snd (step s c)) (step-reward-binary s c) (pos-from-hit0 s c hf))
+      | suc m => λ (hk : {k ≡ suc m : Nat}) →
+          λ (hs : {hit-any s k ≡ false : Bool}) →
+            miss-walk (λ (c : Action) → solve (fst (step s c)) m)
+              (λ (+ c : Action) → hit s c (suc m)) all-actions
+              (rewrite (sym Bool
+                         (hit-any s (suc m))
+                         (hit-fold (λ (+ c : Action) → hit s c (suc m)) all-actions)
+                         (any-fold s (suc m)))
+                motive (λ z → {z ≡ false : Bool})
+              in
+              rewrite (sym Nat k (suc m) hk)
+                motive (λ z → {hit-any s z ≡ false : Bool})
+              in hs)
+              (λ (+ c : Action) → λ (hf : {hit s c (suc m) ≡ false : Bool}) →
+                (match (class-pos (snd (step s c)))
+                  motive (λ b → {class-pos (snd (step s c)) ≡ b : Bool} →
+                                {hit s c (suc m) ≡ false : Bool} →
+                                {solve (fst (step s c)) m ≡ bottom : Reward})
+                  | true => λ (yp : {class-pos (snd (step s c)) ≡ true : Bool}) →
+                      λ (bad : {hit s c (suc m) ≡ false : Bool}) →
+                        matchEmpty (class-ft
+                          (sym Bool true false
+                            (rewrite (sym Bool (hit s c (suc m)) true (pos-hit s c (suc m) yp))
+                              motive (λ z → {z ≡ false : Bool})
+                            in bad)))
+                        motive (λ _ → {solve (fst (step s c)) m ≡ bottom : Reward})
+                  | false => λ (np : {class-pos (snd (step s c)) ≡ false : Bool}) →
+                      λ (hf2 : {hit s c (suc m) ≡ false : Bool}) →
+                        any-false-solve m (fst (step s c))
+                          (best-to-any-false (fst (step s c)) m
+                            (hit-to-best-false s c (suc m) np hf2)))
+                refl hf)
+    )
+    refl h
+
+-- Two folds agree when their asks agree at every listed action.
+def fold-cong : evidence Π (xs : List Action) →
+                         Π (+ ask : Π (+ y : Action) → Bool) →
+                         Π (+ bsk : Π (+ y : Action) → Bool) →
+                         Π (+ h : Π (+ y : Action) → {ask y ≡ bsk y : Bool}) →
+                         {hit-fold ask xs ≡ hit-fold bsk xs : Bool} :=
+  λ (xs : List Action) →
+  λ (+ ask : Π (+ y : Action) → Bool) →
+  λ (+ bsk : Π (+ y : Action) → Bool) →
+  λ (+ h : Π (+ y : Action) → {ask y ≡ bsk y : Bool}) →
+    (match xs motive (λ ys → {hit-fold ask ys ≡ hit-fold bsk ys : Bool})
+      | nil => refl
+      | cons y rest =>
+          rewrite (fold-cons-eq ask y rest)
+            motive (λ z → {z ≡ hit-fold bsk (cons y rest) : Bool})
+          in
+          rewrite (sym Bool
+                    (hit-fold bsk (cons y rest))
+                    (match (bsk y) motive (λ _ → Bool)
+                      | true => true
+                      | false => hit-fold bsk rest)
+                    (fold-cons-eq bsk y rest))
+            motive (λ z →
+              {(match (ask y) motive (λ _ → Bool)
+                 | true => true
+                 | false => hit-fold ask rest) ≡ z : Bool})
+          in
+          rewrite (sym Bool (ask y) (bsk y) (h y))
+            motive (λ b →
+              {(match (ask y) motive (λ _ → Bool)
+                 | true => true
+                 | false => hit-fold ask rest) ≡
+               (match b motive (λ _ → Bool)
+                 | true => true
+                 | false => hit-fold bsk rest) : Bool})
+          in
+          (match (ask y)
+            motive (λ b →
+              {(match b motive (λ _ → Bool)
+                 | true => true
+                 | false => hit-fold ask rest) ≡
+               (match b motive (λ _ → Bool)
+                 | true => true
+                 | false => hit-fold bsk rest) : Bool})
+            | true => refl
+            | false => fold-cong rest ask bsk h))
+
+-- Every ask on the list is false, so the fold is false.
+def folds-false : evidence Π (xs : List Action) →
+                           Π (+ ask : Π (+ y : Action) → Bool) →
+                           Π (+ each : Π (+ y : Action) → {ask y ≡ false : Bool}) →
+                           {hit-fold ask xs ≡ false : Bool} :=
+  λ (xs : List Action) →
+  λ (+ ask : Π (+ y : Action) → Bool) →
+  λ (+ each : Π (+ y : Action) → {ask y ≡ false : Bool}) →
+    (match xs motive (λ ys → {hit-fold ask ys ≡ false : Bool})
+      | nil => refl
+      | cons y rest =>
+          rewrite (fold-cons-eq ask y rest)
+            motive (λ z → {z ≡ false : Bool})
+          in
+          rewrite (each y)
+            motive (λ b →
+              {(match b motive (λ _ → Bool)
+                 | true => true
+                 | false => hit-fold ask rest) ≡ false : Bool})
+          in
+          folds-false rest ask each)
+
+-- hit-best is the match the recurrence copies.
+def best-unfold : evidence Π (+ s : State) → Π (+ k : Nat) →
+                           {hit-best s k ≡
+                            (match k motive (λ _ → Bool)
+                              | 0 => false
+                              | suc j => hit-any s j) : Bool} :=
+  λ (+ s : State) → λ (+ k : Nat) → refl
+
+-- A run that unfolds as hit does is hit. The index is first, and the
+-- copy is not a table: a table's successor does not unfold to its any.
+def rec-is-hit : evidence Π (+ k : Nat) →
+                          Π (+ rpos : Π (q : Reward) → Bool) →
+                          Π (+ rone : Π (+ t : State) → Π (+ b : Action) → Π (+ n : Nat) → Bool) →
+                          Π (+ rbest : Π (+ t : State) → Π (+ n : Nat) → Bool) →
+                          Π (+ rany : Π (+ t : State) → Π (+ n : Nat) → Bool) →
+                          Π (+ pos-eq : Π (q : Reward) → {rpos q ≡ class-pos q : Bool}) →
+                          Π (+ best-eq : Π (+ t : State) → Π (+ n : Nat) →
+                                  {rbest t n ≡
+                                   (match n motive (λ _ → Bool)
+                                     | 0 => false
+                                     | suc j => rany t j) : Bool}) →
+                          Π (+ one-eq : Π (+ t : State) → Π (+ b : Action) → Π (+ n : Nat) →
+                                  {rone t b n ≡
+                                   (match (rpos (snd (step t b))) motive (λ _ → Bool)
+                                     | true => true
+                                     | false => rbest (fst (step t b)) n) : Bool}) →
+                          Π (+ any-eq : Π (+ t : State) → Π (+ n : Nat) →
+                                  {rany t n ≡
+                                   hit-fold (λ (+ b : Action) → rone t b n) all-actions : Bool}) →
+                          Π (+ s : State) → Π (+ a : Action) →
+                          {rone s a k ≡ hit s a k : Bool} :=
+  λ (+ k : Nat) →
+  λ (+ rpos : Π (q : Reward) → Bool) →
+  λ (+ rone : Π (+ t : State) → Π (+ b : Action) → Π (+ n : Nat) → Bool) →
+  λ (+ rbest : Π (+ t : State) → Π (+ n : Nat) → Bool) →
+  λ (+ rany : Π (+ t : State) → Π (+ n : Nat) → Bool) →
+  λ (+ pos-eq : Π (q : Reward) → {rpos q ≡ class-pos q : Bool}) →
+  λ (+ best-eq : Π (+ t : State) → Π (+ n : Nat) →
+          {rbest t n ≡
+           (match n motive (λ _ → Bool)
+             | 0 => false
+             | suc j => rany t j) : Bool}) →
+  λ (+ one-eq : Π (+ t : State) → Π (+ b : Action) → Π (+ n : Nat) →
+          {rone t b n ≡
+           (match (rpos (snd (step t b))) motive (λ _ → Bool)
+             | true => true
+             | false => rbest (fst (step t b)) n) : Bool}) →
+  λ (+ any-eq : Π (+ t : State) → Π (+ n : Nat) →
+          {rany t n ≡
+           hit-fold (λ (+ b : Action) → rone t b n) all-actions : Bool}) →
+  λ (+ s : State) → λ (+ a : Action) →
+    rewrite (one-eq s a k)
+      motive (λ z → {z ≡ hit s a k : Bool})
+    in
+    rewrite (hit-eq s a k)
+      motive (λ z →
+        {(match (rpos (snd (step s a))) motive (λ _ → Bool)
+           | true => true
+           | false => rbest (fst (step s a)) k) ≡ z : Bool})
+    in
+    rewrite (sym Bool (rpos (snd (step s a))) (class-pos (snd (step s a)))
+              (pos-eq (snd (step s a))))
+      motive (λ b →
+        {(match (rpos (snd (step s a))) motive (λ _ → Bool)
+           | true => true
+           | false => rbest (fst (step s a)) k) ≡
+         (match b motive (λ _ → Bool)
+           | true => true
+           | false => hit-best (fst (step s a)) k) : Bool})
+    in
+    (match (rpos (snd (step s a)))
+      motive (λ b →
+        {(match b motive (λ _ → Bool)
+           | true => true
+           | false => rbest (fst (step s a)) k) ≡
+         (match b motive (λ _ → Bool)
+           | true => true
+           | false => hit-best (fst (step s a)) k) : Bool})
+      | true => refl
+      | false =>
+          rewrite (best-eq (fst (step s a)) k)
+            motive (λ z → {z ≡ hit-best (fst (step s a)) k : Bool})
+          in
+          rewrite (sym Bool
+                    (hit-best (fst (step s a)) k)
+                    (match k motive (λ _ → Bool)
+                      | 0 => false
+                      | suc j => hit-any (fst (step s a)) j)
+                    (best-unfold (fst (step s a)) k))
+            motive (λ z →
+              {(match k motive (λ _ → Bool)
+                 | 0 => false
+                 | suc j => rany (fst (step s a)) j) ≡ z : Bool})
+          in
+          (match k
+            motive (λ i →
+              {(match i motive (λ _ → Bool)
+                 | 0 => false
+                 | suc j => rany (fst (step s a)) j) ≡
+               (match i motive (λ _ → Bool)
+                 | 0 => false
+                 | suc j => hit-any (fst (step s a)) j) : Bool})
+            | 0 => refl
+            | suc j =>
+                rewrite (any-eq (fst (step s a)) j)
+                  motive (λ z → {z ≡ hit-any (fst (step s a)) j : Bool})
+                in
+                rewrite (sym Bool
+                          (hit-any (fst (step s a)) j)
+                          (hit-fold (λ (+ b : Action) → hit (fst (step s a)) b j) all-actions)
+                          (any-fold (fst (step s a)) j))
+                  motive (λ z →
+                    {hit-fold (λ (+ b : Action) → rone (fst (step s a)) b j) all-actions ≡
+                     z : Bool})
+                in
+                fold-cong all-actions
+                  (λ (+ b : Action) → rone (fst (step s a)) b j)
+                  (λ (+ b : Action) → hit (fst (step s a)) b j)
+                  (λ (+ b : Action) →
+                    rec-is-hit j rpos rone rbest rany pos-eq best-eq one-eq any-eq
+                      (fst (step s a)) b)))
+
+-- No listed action hits, so the any-fold is false.
+def hits-false : evidence Π (+ s : State) → Π (+ k : Nat) →
+                          Π (+ each : Π (+ b : Action) → {hit s b k ≡ false : Bool}) →
+                          {hit-any s k ≡ false : Bool} :=
+  λ (+ s : State) → λ (+ k : Nat) →
+  λ (+ each : Π (+ b : Action) → {hit s b k ≡ false : Bool}) →
+    rewrite (sym Bool
+              (hit-any s k)
+              (hit-fold (λ (+ b : Action) → hit s b k) all-actions)
+              (any-fold s k))
+      motive (λ z → {z ≡ false : Bool})
+    in
+    folds-false all-actions (λ (+ b : Action) → hit s b k) each
+
+-- The winner's reach bit is true, and that bit is hit.
+def class-from-true : evidence Π (+ s : State) → Π (+ w : Action) → Π (+ a : Action) →
+                               Π (+ reach : Π (+ b : Action) → Bool) →
+                               Π (+ eq : Π (+ b : Action) → {reach b ≡ hit s b horizon : Bool}) →
+                               Π (h : {reach w ≡ true : Bool}) →
+                               Dom Reward le (action-value s a) (action-value s w) :=
+  λ (+ s : State) → λ (+ w : Action) → λ (+ a : Action) →
+  λ (+ reach : Π (+ b : Action) → Bool) →
+  λ (+ eq : Π (+ b : Action) → {reach b ≡ hit s b horizon : Bool}) →
+  λ (h : {reach w ≡ true : Bool}) →
+    class-from-hit s w a horizon
+      (rewrite (sym Bool (reach w) (hit s w horizon) (eq w))
+        motive (λ z → {z ≡ true : Bool})
+      in h)
+
+-- Every reach bit is false, so every hit is false, and the actions tie.
+def class-from-false : evidence Π (+ s : State) → Π (+ a : Action) → Π (+ b : Action) →
+                                Π (+ reach : Π (+ c : Action) → Bool) →
+                                Π (+ eq : Π (+ c : Action) → {reach c ≡ hit s c horizon : Bool}) →
+                                Π (+ each : Π (+ c : Action) → {reach c ≡ false : Bool}) →
+                                Dom Reward le (action-value s a) (action-value s b) :=
+  λ (+ s : State) → λ (+ a : Action) → λ (+ b : Action) →
+  λ (+ reach : Π (+ c : Action) → Bool) →
+  λ (+ eq : Π (+ c : Action) → {reach c ≡ hit s c horizon : Bool}) →
+  λ (+ each : Π (+ c : Action) → {reach c ≡ false : Bool}) →
+    class-from-miss s a b
+      (hits-false s horizon
+        (λ (+ c : Action) →
+          rewrite (sym Bool (reach c) (hit s c horizon) (eq c))
+            motive (λ z → {z ≡ false : Bool})
+          in each c))
+
+-- (d) A hit of the preferred action dominates. A miss of every action ties.
+def class-from-hit : evidence Π (+ s : State) → Π (+ w : Action) → Π (+ a : Action) →
+                              Π (k : Nat) →
+                              Π (h : {hit s w k ≡ true : Bool}) →
+                              Dom Reward le (action-value s a) (action-value s w) :=
+  λ (+ s : State) → λ (+ w : Action) → λ (+ a : Action) → λ (k : Nat) →
+  λ (h : {hit s w k ≡ true : Bool}) →
+    hit-sound s w k h
+      (Dom Reward le (action-value s a) (action-value s w))
+      (λ (j : Nat) → λ (_ : {leb j k ≡ true : Bool}) →
+        λ (eq : {action-at s w j ≡ solved-reward : Reward}) →
+          reaches-dom s w a j eq)
+
+def class-from-miss : evidence Π (+ s : State) → Π (+ a : Action) → Π (+ b : Action) →
+                               Π (h : {hit-any s horizon ≡ false : Bool}) →
+                               Dom Reward le (action-value s a) (action-value s b) :=
+  λ (+ s : State) → λ (+ a : Action) → λ (+ b : Action) →
+  λ (h : {hit-any s horizon ≡ false : Bool}) →
+    tie s a b (any-false-solve horizon s h)
+
+-- The two actions are the same action, so the streams are the same stream.
+def class-same : evidence Π (+ s : State) → Π (+ a : Action) →
+                          Dom Reward le (action-value s a) (action-value s a) :=
+  λ (+ s : State) → λ (+ a : Action) →
+    dom-refl Reward le le-refl (action-value s a)
+
+-- A positive immediate reward and a miss at the horizon cannot both hold.
+def reach-conflict : evidence Π (+ s : State) → Π (+ a : Action) →
+                              Π (yp : {class-pos (snd (step s a)) ≡ true : Bool}) →
+                              Π (hn : {hit s a horizon ≡ false : Bool}) →
+                              Empty :=
+  λ (+ s : State) → λ (+ a : Action) →
+  λ (yp : {class-pos (snd (step s a)) ≡ true : Bool}) →
+  λ (hn : {hit s a horizon ≡ false : Bool}) →
+    class-ft
+      (sym Bool true false
+        (rewrite (sym Bool (hit s a horizon) true (pos-hit s a horizon yp))
+          motive (λ z → {z ≡ false : Bool})
+        in hn))
+
+def class-step : evidence Π (rank : State → Action → Action → Type) →
+                          Π (ok : Π (+ s : State) → Π (+ a : Action) → Π (+ b : Action) →
+                                  Π (r : rank s a b) →
+                                  Π (- C : Type) →
+                                  Π (won : Π (k : Nat) →
+                                           Π (_ : {hit s b k ≡ true : Bool}) → C) →
+                                  Π (none : Π (_ : {hit-any s horizon ≡ false : Bool}) → C) →
+                                  C) →
+                          Π (+ s : State) → Π (+ a : Action) → Π (+ b : Action) →
+                          Π (r : rank s a b) →
+                          Dom Reward le (action-value s a) (action-value s b) :=
+  λ (rank : State → Action → Action → Type) →
+  λ (ok : Π (+ s : State) → Π (+ a : Action) → Π (+ b : Action) →
+          Π (r : rank s a b) →
+          Π (- C : Type) →
+          Π (won : Π (k : Nat) → Π (_ : {hit s b k ≡ true : Bool}) → C) →
+          Π (none : Π (_ : {hit-any s horizon ≡ false : Bool}) → C) →
+          C) →
+  λ (+ s : State) → λ (+ a : Action) → λ (+ b : Action) →
+  λ (r : rank s a b) →
+    ok s a b r
+      (Dom Reward le (action-value s a) (action-value s b))
+      (λ (k : Nat) → λ (hw : {hit s b k ≡ true : Bool}) →
+        class-from-hit s b a k hw)
+      (λ (hn : {hit-any s horizon ≡ false : Bool}) →
+        class-from-miss s a b hn)
+
+-- A rank whose every preference is a hit of the preferred action, or a
+-- miss of every action, is a CoindHomo. The preference proof is the
+-- truth table of that rank. This book does not build the rank.
+def class-homo : evidence Π (rank : State → Action → Action → Type) →
+                          Π (ok : Π (+ s : State) → Π (+ a : Action) → Π (+ b : Action) →
+                                  Π (r : rank s a b) →
+                                  Π (- C : Type) →
+                                  Π (won : Π (k : Nat) →
+                                           Π (_ : {hit s b k ≡ true : Bool}) → C) →
+                                  Π (none : Π (_ : {hit-any s horizon ≡ false : Bool}) → C) →
+                                  C) →
+                          CoindHomo rank :=
+  λ (rank : State → Action → Action → Type) →
+  λ (ok : Π (+ s : State) → Π (+ a : Action) → Π (+ b : Action) →
+          Π (r : rank s a b) →
+          Π (- C : Type) →
+          Π (won : Π (k : Nat) → Π (_ : {hit s b k ≡ true : Bool}) → C) →
+          Π (none : Π (_ : {hit-any s horizon ≡ false : Bool}) → C) →
+          C) →
+    λ (a : Action) → λ (b : Action) → λ (s : State) → λ (r : rank s a b) →
+      class-step rank ok s a b r

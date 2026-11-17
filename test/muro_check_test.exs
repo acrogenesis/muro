@@ -2868,6 +2868,7 @@ defmodule Muro.CheckTest do
              [1, 2, 3, 5, 5]
 
     assert Muro.check_file("examples/cshrl/envs/optimal.muro") == :ok
+    assert Muro.check_file("examples/cshrl/envs/class_probe.muro", fuel: 8_000) == :ok
     assert Muro.check_file("examples/cshrl/envs/placement.muro") == :ok
     assert Muro.check_file("examples/cshrl/envs/nested_bit.muro") == :ok
     assert Muro.check_file("examples/cshrl/envs/list_cover.muro") == :ok

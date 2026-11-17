@@ -335,8 +335,9 @@ defmodule Muro.SynthLoopTest do
     assert Enum.map(goals, & &1.name) == ["len-is-4"]
   end
 
-  # The certificate reduces the tabulated reachability runs.
-  # Locally that check took 53 seconds. Before the table it took 169 seconds.
+  # The certificate is the placement class lemma. The 18-state table stays.
+  # Locally that check took 9860 ms.
+  # The survivor is size 4. Enumeration of that size took under a second.
   # Default `mix test` excludes `:slow`. CI runs this with `mix test --only slow`.
   @tag timeout: 720_000
   @tag :slow
@@ -346,14 +347,10 @@ defmodule Muro.SynthLoopTest do
     refute src =~ "eval-feature"
 
     pred = %{
-      "c0" =>
-        "(orp (feat has-pos-reward-c0) (notp (orp (orp (feat has-pos-reward-c1) (feat reaches-pos-c2)) (feat reaches-pos-c3))))",
-      "c1" =>
-        "(orp (feat has-pos-reward-c0) (notp (orp (orp (feat has-pos-reward-c2) (feat reaches-pos-c0)) (feat reaches-pos-c3))))",
-      "c2" =>
-        "(orp (feat has-pos-reward-c0) (notp (orp (orp (feat has-pos-reward-c1) (feat reaches-pos-c0)) (feat reaches-pos-c3))))",
-      "c3" =>
-        "(orp (feat has-pos-reward-c0) (notp (orp (orp (feat has-pos-reward-c1) (feat reaches-pos-c0)) (feat reaches-pos-c2))))"
+      "c0" => "(orp (feat has-pos-reward-c0) (notp (otherp reaches-pos c0)))",
+      "c1" => "(orp (feat reaches-pos-c1) (notp (otherp reaches-pos c1)))",
+      "c2" => "(orp (feat reaches-pos-c2) (notp (otherp reaches-pos c2)))",
+      "c3" => "(orp (feat has-pos-reward-c0) (notp (otherp reaches-pos c3)))"
     }
 
     assert {:ok, result} = Muro.Synth.cegis_loop(@queens4)
@@ -365,43 +362,31 @@ defmodule Muro.SynthLoopTest do
              0,
              1056,
              0,
-             20,
+             26,
              0,
-             36,
+             46,
              0,
-             128,
+             171,
              0,
-             312,
-             0,
-             412,
-             0,
-             934,
-             0,
-             997,
-             0,
-             1499,
+             454,
              1,
-             1499,
+             454,
              1,
-             1499,
+             454,
              1,
-             1499,
+             454,
              1
            ]
 
     assert result.sizes == [
-             [1, 20],
-             [2, 16],
-             [3, 92],
-             [4, 184],
-             [5, 100],
-             [6, 522],
-             [7, 63],
-             [8, 502]
+             [1, 26],
+             [2, 20],
+             [3, 125],
+             [4, 283]
            ]
 
-    assert result.considered == 94_970
-    assert result.distinct == 1_499
+    assert result.considered == 8_138
+    assert result.distinct == 454
     assert result.enum_ms < 120_000
     assert Enum.map(result.program, &Muro.Synth.render/1) == Enum.map(~w(c0 c1 c2 c3), &pred[&1])
 
@@ -414,6 +399,11 @@ defmodule Muro.SynthLoopTest do
     assert result.book =~ "match eval survivor-c3 s"
     assert result.book =~ "| reaches-pos-c0 => dyn-one c c0 horizon"
     assert result.book =~ "| reaches-pos-c3 => dyn-one c c3 horizon"
+    assert result.book =~ "data Stem : Type where"
+    assert result.book =~ "reaches-pos : Stem"
+    assert result.book =~ "def stem-at "
+    assert result.book =~ "def other-at "
+    assert result.book =~ "(orb (stem-at "
     assert result.book =~ "def dyn-best-pos "
     assert result.book =~ "def dyn-one "
     assert result.book =~ "def dyn-any "
@@ -428,8 +418,12 @@ defmodule Muro.SynthLoopTest do
     assert result.book =~ "dyn-best-pos dead 1 ≡ dyn-any dead 0 : Bool"
     refute result.book =~ "dyn-reach-agrees"
     assert result.book =~ "evidence CoindHomo rank"
+    assert result.book =~ "import \"../lib/placement.muro\""
+    assert result.book =~ "rec-is-hit"
     assert result.cert_ms < 180_000
+    refute result.book =~ "cert-cover-miss"
     refute result.book =~ "find-policy"
+    refute result.book =~ "find-ranking"
     refute result.book =~ "placed-find-policy"
 
     text = joined(result)
@@ -437,9 +431,13 @@ defmodule Muro.SynthLoopTest do
     assert text =~ "certificate CoindHomo"
     assert text =~ "program: #{pred["c0"]}"
     assert text =~ "enumeration"
-    assert text =~ "considered 94970"
-    assert text =~ "distinct 1499"
+    assert text =~ "considered 8138"
+    assert text =~ "distinct 454"
     assert text =~ "predicate size bound 18"
+    assert text =~ "book open"
+    assert text =~ "reach table"
+    assert text =~ "cover 18"
+    assert text =~ "policy render"
     assert text =~ "certificate check"
     assert text =~ "at (ongoing nil) the program prefers c1"
     assert text =~ "at (ongoing (cons (suc 0) nil)) the program prefers c3"
@@ -447,7 +445,7 @@ defmodule Muro.SynthLoopTest do
     assert text =~ "at dead the program prefers c0"
     assert text =~ "version space 16"
     assert text =~ "version space 1056"
-    assert text =~ "version space 1499"
+    assert text =~ "version space 454"
     refute text =~ "empty version space"
     refute text =~ "features insufficient"
     refute text =~ "homomorphism is not derivable"
