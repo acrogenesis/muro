@@ -2,9 +2,9 @@
 
 ## 0.21.16
 
-`mix muro.synth` ranks a recursive `State` that does not declare `all-states`. `init` is the state the walk starts from, or a list of them. The cover is every state reached from `init` under `step` of every action in `all-actions`, when that set closes within 256 states. The predicate that survives is certified on that cover by the same ranking as a declared cover. A walk that meets a fresh state at the bound does not certify a prefix of it. A book that declares `all-states` is unchanged.
+`mix muro.synth` ranks a recursive `State` that does not declare `all-states`. `init` is the state the walk starts from, or a list of them. The cover is every state reached from `init` under `step` of every action in `all-actions`, when that set closes within 256 states. A cover of 256 states is accepted. A successor that would exceed 256 states is refused, and no prefix of that set is certified. The closure is computed in Elixir. It is not an Agda theorem. The predicate that survives is certified on that cover by the same ranking as a declared cover. A book that declares `all-states` is unchanged. Recursion under a product, with no `all-states`, is refused when the environment is opened. A value `step` returns that is not a `State` is refused before any ranking.
 
-`examples/cshrl/envs/reachable_bin.muro` declares no feature and no `all-states`. The cover is two trees. `trace` checks `CoindHomo` for `(feat ctor-is-p0-0-bin-bin-bin)`, which prefers `stay` at the first and `move` at the second.
+`examples/cshrl/envs/reachable_bin.muro` declares no feature and no `all-states`. The cover is two trees. `trace` checks `CoindHomo` for `(feat ctor-is-p0-0-bin-bin-bin)`, which prefers `stay` at the first and `move` at the second. `examples/cshrl/envs/reachable_fork.muro` is three trees. `move` and `stay` reach different states. `trace` checks `CoindHomo` for `(feat ctor-is-p0-bin-bin)`, which prefers `stay` at the first, `move` at the second, and `stay` at the third.
 
 ### Manual
 

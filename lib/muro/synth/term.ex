@@ -63,6 +63,34 @@ defmodule Muro.Synth.Term do
 
   def self_referential?(_schema), do: false
 
+  @doc """
+  Whether a field of this datatype is exactly `{:rec, name}`.
+
+  A back-edge under `List` or a product is not this. `refers_opening?`
+  walks into those, so `self_referential?/1` is true there too.
+  """
+  def direct_rec?({:data, name, rows}) do
+    Enum.any?(rows, fn row ->
+      Enum.any?(row.fields, &(field_schema(&1) == {:rec, name}))
+    end)
+  end
+
+  def direct_rec?(_schema), do: false
+
+  @doc """
+  Whether a missing `all-states` is the closure of `init`.
+
+  A direct `{:rec, name}` field is that closure, including a linear
+  field the certificate later refuses. A self-reference the certificate
+  can rank is the same walk. A back-edge under `List` or a product is
+  neither: the certificate skips it, and the book names `all-states`
+  or is refused at open.
+  """
+  def reachable?(schema) do
+    self_referential?(schema) and
+      (direct_rec?(schema) or is_nil(cert_refusal(schema)))
+  end
+
   def decode(raw, schema) do
     case pack(schema, raw) do
       {:ok, value, spell, label} ->

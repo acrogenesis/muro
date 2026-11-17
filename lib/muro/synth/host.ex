@@ -209,11 +209,13 @@ defmodule Muro.Synth.Host do
         )
 
       :open ->
-        # A self-reference has no inhabitant list. The cover is the
-        # closure of `init` under `step`, computed once `step` can be
-        # called. A declared `all-states` stays that list. Any other
-        # open constructor still has to name its cover.
-        if Muro.Synth.Term.self_referential?(schema) and not named?(book, "all-states") do
+        # A direct self-reference has no inhabitant list. The cover is
+        # the closure of `init` under `step`, computed once `step` can
+        # be called. A declared `all-states` stays that list. Recursion
+        # under `List` or a product is not that walk: `self_referential?`
+        # is true there, and the certificate skips it, so the book is
+        # refused here when it does not name `all-states`.
+        if Muro.Synth.Term.reachable?(schema) and not named?(book, "all-states") do
           {:ok, {:structured, schema, nil}}
         else
           open_or(book, schema, "State constructors take arguments; declare all-states")
@@ -222,9 +224,10 @@ defmodule Muro.Synth.Host do
   end
 
   # A declared cover is not rebuilt. `init` is the start only when
-  # `State` refers to itself and the book does not define `all-states`.
+  # `State` refers to itself in a direct field and the book does not
+  # define `all-states`. List and product recursion stay out of this walk.
   defp install_reachable(%{structured: true, all_states: nil, schema: schema} = host) do
-    if Muro.Synth.Term.self_referential?(schema) do
+    if Muro.Synth.Term.reachable?(schema) do
       case initial_states(host) do
         {:error, _, _} = err ->
           throw(err)
@@ -240,8 +243,11 @@ defmodule Muro.Synth.Host do
             {:error, :bound} ->
               throw({:error, :usage, Muro.Synth.Oracle.reachable_bound_message()})
 
+            {:error, :not_state} ->
+              throw({:error, :usage, Muro.Synth.Oracle.step_not_state_message()})
+
             {:error, :left} ->
-              throw({:error, :usage, "step left the reachable cover"})
+              throw({:error, :usage, Muro.Synth.Oracle.step_left_message()})
           end
       end
     else
