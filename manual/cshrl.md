@@ -22,6 +22,7 @@ In brief: `examples/cshrl/` is [CSHRL](https://github.com/doctorcorral/csh-rl) i
 | `envs/optimal.muro` | The return theorem: `agent` goes, and its reward stream dominates every other policy |
 | `envs/binary_sacrifice.muro` | `BinarySacrifice` |
 | `envs/skill_investment.muro` | `SkillInvestment` |
+| `lib/placement.muro` | A binary placement: `hit` copies the reach recurrence, and a reach-family ranking is a `CoindHomo`. It does not call the Finder |
 | `lib/synth.muro` | A predicate program: `eval`, `propagation`, `vs-shrinks`, `sufficient-cegis` |
 | `envs/synth_bit.muro` | Two carriers, one feature, one representative |
 | `envs/maze_auto.muro` | A corridor with no declared feature. `trace` checks `CoindHomo` for the reward of `go` |
@@ -30,8 +31,9 @@ In brief: `examples/cshrl/` is [CSHRL](https://github.com/doctorcorral/csh-rl) i
 | `envs/nested_bit.muro` | A bit under two constructors, no declared feature. `trace` checks `CoindHomo` for the constructor of that bit |
 | `envs/list_cover.muro` | Two lists of Nat, no declared feature. `trace` checks `CoindHomo` for the reward of `go` |
 | `envs/nested_bin.muro` | A constructor under a recursive child, no declared feature. `trace` checks `CoindHomo` for that constructor |
-| `envs/queens4.muro` | Four rows, no declared feature. Depth 0 and 1 are empty. Size 8 enumerates a survivor. `trace` checks `CoindHomo` |
-| `envs/queens8.muro` | Eight rows, no declared feature. An earlier size walk had considered 3766542 programs by the end of size 7, above the considered budget. That stopped walk was not re-run, and it is outside `mix test` |
+| `envs/queens4.muro` | Four rows, no declared feature. Depth 0 and 1 are empty. Size 4 enumerates a survivor. `trace` checks `CoindHomo` |
+| `envs/queens8.muro` | Eight rows, no declared feature. The sized search checks `CoindHomo` by the placement class lemma, outside `mix test` |
+| `envs/class_probe.muro` | Four queens supplying the placement hypotheses, so the class library checks |
 | `std/` | Bool, Nat order and `maxN`, List, Stream with `Dom` |
 
 A library file does not check on its own: `mix muro.check examples/cshrl/lib/core.muro` refuses with `param State is supplied by a file that imports this one`. Check an environment instead:
@@ -73,7 +75,7 @@ The Finder adds `leb`, `default-action` and `horizon`. `successor_sum.muro` adds
 
 **SkillInvestment.** `train` moves from novice to apprentice to expert to master and earns 0 each time. `work` earns 1, 2 or 3 and stays put. Master earns 5. `value novice` is 1, 2, 3, 5, 5, …. `skill-homomorphism` ranks `train` above `work` below master. Three impossibilities refute a `CoindHomo` ranking `work` at or below `train` at novice, apprentice and expert. The Finder works and the successor Finder trains.
 
-**Queens.** Four rows, and no declared feature. The cover is the safe boards and `dead`. Depth 0 and depth 1 name no predicate. `reaches-pos` holds when an action pays a positive reward now or within the horizon. The search then enumerates by size. The survivor for each action is size 8, and the book checks `CoindHomo`. `policy` is `eval` of that predicate. Eight rows is the same dynamics. The search reads 76 features. An earlier size walk had considered 3766542 programs by the end of size 7, above the considered budget, so a walk under the bound stops and names `considered budget`. That stopped walk was not re-run. No predicate is certified. The subset budget does not build a disjunction of eight actions on that feature set. The paper certifies this MDP with the class-level homomorphism of `CombinatorialPlacementMDP` and `WithTraceBridge`, over predicates that are the step. That homomorphism is not in this search.
+**Queens.** Four rows, and no declared feature. The cover is the safe boards and `dead`. Depth 0 and depth 1 name no predicate. `reaches-pos` holds when an action pays a positive reward now or within the horizon. The search then enumerates by size. `otherp` is the disjunction of that test at the other actions, and it is one constructor. `selfp` and `otherp` are a muro extension, not in the paper's grammar. The survivor for each action is size 4, and the book checks `CoindHomo`. `policy` is `eval` of that predicate. Eight rows is the same dynamics. The search reads 76 features and keeps one size-4 program per action, `(orp (feat reaches-pos-cN) (notp (otherp reaches-pos cN)))`. The book checks `CoindHomo` by the class lemma in `lib/placement.muro`. The proof does not use the Finder. The paper proves that class-level homomorphism for the Finder's ranking. Muro proves it for the synthesized predicate, from `solve` and `step`, in its own checker. `envs/class_probe.muro` supplies the four-queens hypotheses and checks the library. The eight-queens search took 2114 seconds and is not part of `mix test`.
 
 ## The agents
 

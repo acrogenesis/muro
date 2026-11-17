@@ -1,0 +1,27 @@
+-- One action. go pays 1 at s0 and nothing at s1, so has-pos-reward-go
+-- is a column, and otherp at go has no other action: it is false.
+import "../../examples/cshrl/std/nat.muro"
+import "../../examples/cshrl/lib/agent.muro"
+
+data State : Type where
+  s0 : State
+  s1 : State
+
+data Action : Type where
+  go : Action
+
+def Reward : spec Type := Nat
+
+def step : run Π (s : State) → Π (act : Action) → State × Reward :=
+  λ (s : State) → λ (act : Action) →
+    match s motive (λ _ → State × Reward)
+      | s0 => (match act motive (λ _ → State × Reward) | go => (s1, suc 0))
+      | s1 => (match act motive (λ _ → State × Reward) | go => (s0, 0))
+
+def le : spec Π (r : Reward) → Π (q : Reward) → Type := Le
+def max : run Π (r : Reward) → Π (q : Reward) → Reward := maxN
+def bottom : run Reward := 0
+def all-actions : run List Action := cons go nil
+def default-action : run Action := go
+def horizon : run Nat := 0
+def all-states : run List State := cons s0 (cons s1 nil)

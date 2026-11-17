@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.21.13
+
+`mix muro.synth` searches action-quantified predicates. An action-indexed feature family (`reaches-pos`, `has-pos-reward`, `is-self-loop`, `leads-terminal`) adds two PredProg constructors per action: `selfp stem a` is that action's column, and `otherp stem a` is the disjunction of the same stem at every other action. An action whose test the cover filter dropped has no column, and that column is false. With one action, `otherp` is false. Each constructor has size 1, so the size does not grow with the number of actions. The sized walk adds them as atoms under the existing negation and pairing rules. The subset chains stay feature tests. The book defines `Stem`, `stem-at`, and `other-at`, `eval` calls them, and `policy` is `eval` of the programs the checker accepted. `selfp` and `otherp` are a muro extension of the grammar. The CSHRL paper does not have them.
+
+The book declares every column of a stem a survivor quantifies over, so `stem-at` reads an action no survivor names from its column, not as false. A column the plan did not declare refuses the book. A family column with no signature refuses the sized walk instead of dropping that action. A test checks the generated `stem-at`, `other-at`, and `eval` against `Muro.Synth.eval` at every state, including a one-action environment.
+
+Four queens: 8138 programs considered (was 94970), 454 distinct signatures, stops at size 4 (was size 8), enumeration 448 ms (was 5065 ms). The book checks `CoindHomo` in 9860 ms (was about 53 seconds). The book is 167389 bytes. Peak resident set 388349952 bytes (was 999456768). The preferences are unchanged. The certificate is the placement class lemma. It does not use the Finder.
+
+Eight queens keeps that search. Each action's survivor is `(orp (feat reaches-pos-cN) (notp (otherp reaches-pos cN)))`. The book checks `CoindHomo` by the same lemma, not by a split over the 2058 states. The proof does not use the Finder. 71492 programs considered, 20958 distinct signatures. The certificate check took 7717 ms. The book is 244700 bytes. Opening the book took 232 s, the reachability table 501 s, enumeration 29 s, and the whole run 2114 s. Peak resident set 719929344 bytes. The search is not part of `mix test`. `nice mix muro.synth examples/cshrl/envs/queens8.muro` repeats it.
+
+A source location in a large book is a line and a column. The report does not scan the whole prefix for every token.
+
+### Manual
+
+- Action-quantified predicates in the synthesis and CSHRL chapters, with the new four-queens numbers, their size, and the departure from the paper.
+- Eight queens is certified by the placement class lemma. The proof does not use the Finder.
+
+### Package
+
+- Version 0.21.13.
+
 ## 0.21.12
 
 A family names one buffered meeting and one closed kind, with one rule for each constructor. `c never held` opens that kind when the instance arrives. `c held while earlier unresolved` opens it once every earlier instance of its key is resolved. The declaration is spec, and every emitter skips it. `mix muro.check` prints `family <name>: <meeting> per key of <kind>`.
@@ -12,7 +33,7 @@ A temporal formula over that family may quantify `forall (k : key)` and name `op
 
 ### Package
 
-- Version 0.21.13.
+- Version 0.21.12.
 
 ## 0.21.11
 

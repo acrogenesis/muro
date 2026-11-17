@@ -27,6 +27,22 @@ defmodule Muro.Synth.Cert do
   `{:skip, reason}` leaves the policy book without a ranking.
   """
   def render(host, arms, oracle, bound) do
+    case Muro.Synth.ClassCert.render(host, arms, oracle, bound) do
+      :fallthrough -> render_cover(host, arms, oracle, bound)
+      other -> other
+    end
+  end
+
+  @doc false
+  def cascade(bound, arms, actions), do: rank_match(bound, arms, actions)
+
+  # Same term as `prefer/2`, with the two action variables named.
+  @doc false
+  def preference(actions, winner, left \\ "a", right \\ "b") do
+    prefer(actions, winner, left, right)
+  end
+
+  defp render_cover(host, arms, oracle, bound) do
     needed = [target(oracle) | support(oracle)]
 
     case missing(host, needed) do
@@ -853,7 +869,9 @@ defmodule Muro.Synth.Cert do
     """
   end
 
-  defp prefer(actions, winner) do
+  defp prefer(actions, winner), do: prefer(actions, winner, "a", "b")
+
+  defp prefer(actions, winner, left_var, right_var) do
     branches =
       Enum.map_join(actions, "\n", fn left ->
         rights =
@@ -864,13 +882,13 @@ defmodule Muro.Synth.Cert do
 
         """
         | #{Term.spell(left)} =>
-            (match b motive (λ _ → Type)
+            (match #{right_var} motive (λ _ → Type)
         #{rights})
         """
       end)
 
     """
-    (match a motive (λ _ → Type)
+    (match #{left_var} motive (λ _ → Type)
     #{branches})
     """
   end

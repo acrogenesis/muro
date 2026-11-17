@@ -340,25 +340,25 @@ defmodule MuroVisor.LayoutTest do
   defp assert_distinct_paths(paths, label) do
     assert length(paths) == length(Enum.uniq(paths)), "#{label} reuses a path"
 
-    segs = Enum.map(paths, &segments/1)
+    tagged =
+      paths
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {d, i} ->
+        for seg <- segments(d), do: {i, seg}
+      end)
 
-    for {a, i} <- Enum.with_index(segs), {b, j} <- Enum.with_index(segs), i < j do
-      for s1 <- a, s2 <- b do
-        refute share?(s1, s2), "#{label} edges share a line"
-      end
+    for {_line, spans} <- axis_spans(tagged, fn {i, _} -> i end) do
+      refute_shared_span(spans, label, fn _a, _b -> "#{label} edges share a line" end)
     end
   end
 
   defp assert_no_collinear_overlap(edges, label) do
-    indexed = Enum.map(edges, fn edge -> {edge, segments(edge.d)} end)
+    tagged = for edge <- edges, seg <- segments(edge.d), do: {edge, seg}
 
-    for {{e1, s1}, i} <- Enum.with_index(indexed),
-        {{e2, s2}, j} <- Enum.with_index(indexed),
-        i < j,
-        not shares_node?(e1, e2),
-        s1 <- s1,
-        s2 <- s2 do
-      refute share?(s1, s2), "#{label} #{e1.id} overlaps #{e2.id}"
+    for {_line, spans} <- axis_spans(tagged, fn {edge, _} -> edge end) do
+      refute_shared_span(spans, label, fn e1, e2 ->
+        if shares_node?(e1, e2), do: nil, else: "#{label} #{e1.id} overlaps #{e2.id}"
+      end)
     end
   end
 
@@ -374,30 +374,98 @@ defmodule MuroVisor.LayoutTest do
   defp assert_track_spacing(edges, nodes, label) do
     indexed = for edge <- edges, seg <- segments(edge.d), do: {edge.id, seg}
 
-    for {{id1, s1}, i} <- Enum.with_index(indexed),
-        {{id2, s2}, j} <- Enum.with_index(indexed),
-        i < j,
-        id1 != id2,
-        gap = parallel_gap(s1, s2),
-        is_integer(gap) and gap > 0 and gap < 6,
-        not same_node_stubs?(s1, s2, nodes) do
-      flunk("#{label} #{id1} and #{id2} run #{gap}px apart")
-    end
+    indexed
+    |> axis_groups()
+    |> Enum.each(fn groups -> refute_close_tracks(groups, nodes, label) end)
   end
 
-  defp parallel_gap({{x1, y1}, {x2, y2}}, {{x3, y3}, {x4, y4}}) do
-    cond do
-      y1 == y2 and y3 == y4 and y1 != y3 and
-          ranges_overlap?(min(x1, x2), max(x1, x2), min(x3, x4), max(x3, x4)) ->
-        abs(y1 - y3)
+  # Segments that can share a line, grouped by that line. The owner is
+  # whatever `owner` reads off the tagged pair. A sweep on one line
+  # replaces the pairs of every edge.
+  defp axis_spans(tagged, owner) do
+    {horiz, vert} = split_axes(tagged)
 
-      x1 == x2 and x3 == x4 and x1 != x3 and
-          ranges_overlap?(min(y1, y2), max(y1, y2), min(y3, y4), max(y3, y4)) ->
-        abs(x1 - x3)
+    Enum.concat(
+      group_line(horiz, owner, fn {{x1, _y1}, {x2, _y2}} -> {min(x1, x2), max(x1, x2)} end),
+      group_line(vert, owner, fn {{_x1, y1}, {_x2, y2}} -> {min(y1, y2), max(y1, y2)} end)
+    )
+  end
 
-      true ->
-        nil
-    end
+  defp axis_groups(tagged) do
+    {horiz, vert} = split_axes(tagged)
+
+    [
+      group_tracks(horiz, fn {{x1, y}, {x2, _}} -> {y, min(x1, x2), max(x1, x2)} end),
+      group_tracks(vert, fn {{x, y1}, {_, y2}} -> {x, min(y1, y2), max(y1, y2)} end)
+    ]
+  end
+
+  defp split_axes(tagged) do
+    Enum.reduce(tagged, {[], []}, fn {_owner, {{x1, y1}, {x2, y2}}} = item, {h, v} ->
+      cond do
+        y1 == y2 and x1 != x2 -> {[item | h], v}
+        x1 == x2 and y1 != y2 -> {h, [item | v]}
+        true -> {h, v}
+      end
+    end)
+  end
+
+  defp group_line(items, owner, span) do
+    items
+    |> Enum.group_by(
+      fn {_tag, {{x1, y1}, {_x2, y2}}} -> if y1 == y2, do: y1, else: x1 end,
+      fn item ->
+        {lo, hi} = span.(elem(item, 1))
+        {owner.(item), lo, hi}
+      end
+    )
+  end
+
+  defp group_tracks(items, pack) do
+    Enum.group_by(items, fn {_id, seg} -> elem(pack.(seg), 0) end, fn {id, seg} ->
+      {_line, lo, hi} = pack.(seg)
+      {id, lo, hi, seg}
+    end)
+  end
+
+  defp refute_shared_span(spans, _label, message) do
+    spans
+    |> Enum.sort_by(fn {_owner, lo, _hi} -> lo end)
+    |> Enum.reduce([], fn {owner, lo, hi}, active ->
+      active = Enum.reject(active, fn {_owner, end_} -> end_ <= lo end)
+
+      Enum.each(active, fn {other, _end} ->
+        if owner != other do
+          case message.(owner, other) do
+            nil -> :ok
+            text -> flunk(text)
+          end
+        end
+      end)
+
+      [{owner, hi} | active]
+    end)
+  end
+
+  defp refute_close_tracks(groups, nodes, label) do
+    groups
+    |> Enum.sort_by(fn {line, _spans} -> line end)
+    |> Enum.reduce([], fn {line, spans}, earlier ->
+      window = Enum.filter(earlier, fn {prev, _} -> line - prev < 6 end)
+
+      for {prev, old} <- window,
+          gap = line - prev,
+          gap > 0,
+          {id1, lo1, hi1, s1} <- spans,
+          {id2, lo2, hi2, s2} <- old,
+          id1 != id2,
+          ranges_overlap?(lo1, hi1, lo2, hi2),
+          not same_node_stubs?(s1, s2, nodes) do
+        flunk("#{label} #{id1} and #{id2} run #{gap}px apart")
+      end
+
+      [{line, spans} | window]
+    end)
   end
 
   defp same_node_stubs?(s1, s2, nodes) do
@@ -464,19 +532,6 @@ defmodule MuroVisor.LayoutTest do
 
   defp walk(["C", _a, _b, _c, _d, x, y | rest], _cur, acc) do
     walk(rest, {int(x), int(y)}, acc)
-  end
-
-  defp share?({{x1, y1}, {x2, y2}}, {{x3, y3}, {x4, y4}}) do
-    cond do
-      y1 == y2 and y3 == y4 and y1 == y3 ->
-        ranges_overlap?(min(x1, x2), max(x1, x2), min(x3, x4), max(x3, x4))
-
-      x1 == x2 and x3 == x4 and x1 == x3 ->
-        ranges_overlap?(min(y1, y2), max(y1, y2), min(y3, y4), max(y3, y4))
-
-      true ->
-        false
-    end
   end
 
   defp ranges_overlap?(a1, a2, b1, b2), do: max(a1, b1) < min(a2, b2)

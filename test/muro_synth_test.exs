@@ -267,6 +267,272 @@ defmodule Muro.SynthTest do
     assert {true, 1, _ord} = Map.fetch!(index, Synth.signature(true, states, feat))
   end
 
+  test "self reads one column and other reads the rest" do
+    feat = fn
+      "fa", :s -> true
+      "fb", :s -> false
+      _, _ -> false
+    end
+
+    assert Synth.eval({:self, "reaches-pos", "a", "fa"}, feat, :s)
+    refute Synth.eval({:self, "reaches-pos", "a", nil}, feat, :s)
+    assert Synth.eval({:other, "reaches-pos", "a", ["fb", "fa"]}, feat, :s)
+    refute Synth.eval({:other, "reaches-pos", "a", ["fb"]}, feat, :s)
+    assert Synth.size({:self, "reaches-pos", "a", "fa"}) == 1
+    assert Synth.size({:other, "reaches-pos", "a", ["fb", "fa"]}) == 1
+    assert Synth.size({:or, {:feat, "fa"}, {:not, {:other, "reaches-pos", "a", ["fb"]}}}) == 4
+
+    assert Synth.render({:self, "reaches-pos", "a", "fa"}) == "(selfp reaches-pos a)"
+
+    assert Synth.render({:or, {:feat, "fa"}, {:not, {:other, "reaches-pos", "a", ["fb"]}}}) ==
+             "(orp (feat fa) (notp (otherp reaches-pos a)))"
+  end
+
+  test "an action family groups the columns that survived" do
+    specs = [
+      %{name: "reaches-pos-a", kind: :reaches_pos, action: "a"},
+      %{name: "reaches-pos-b", kind: :reaches_pos, action: "b"},
+      %{name: "has-pos-reward-a", kind: :has_pos_reward, action: "a"},
+      %{name: "len-is-0", kind: :len_is, action: nil}
+    ]
+
+    [reward, reach] = Muro.Synth.Feature.families(specs, ["b", "a"])
+    assert reward.stem == "has-pos-reward"
+    assert reward.actions == ["a"]
+    assert reach.stem == "reaches-pos"
+    assert reach.actions == ["b", "a"]
+    assert reach.by_action["b"] == "reaches-pos-b"
+  end
+
+  test "sized enumeration finds the action quantifier by size 4" do
+    features = ["reaches-pos-a", "reaches-pos-b", "reaches-pos-c", "reaches-pos-d"]
+    states = [:none, :only_b, :only_a, :a_and_b, :only_c]
+
+    feat = fn
+      "reaches-pos-a", state when state in [:only_a, :a_and_b] -> true
+      "reaches-pos-b", state when state in [:only_b, :a_and_b] -> true
+      "reaches-pos-c", :only_c -> true
+      _, _ -> false
+    end
+
+    family = %{
+      stem: "reaches-pos",
+      kind: :reaches_pos,
+      actions: ["a", "b", "c", "d"],
+      by_action: %{
+        "a" => "reaches-pos-a",
+        "b" => "reaches-pos-b",
+        "c" => "reaches-pos-c",
+        "d" => "reaches-pos-d"
+      }
+    }
+
+    target =
+      {:or, {:feat, "reaches-pos-a"},
+       {:not, {:other, "reaches-pos", "a", ["reaches-pos-b", "reaches-pos-c", "reaches-pos-d"]}}}
+
+    sig = Synth.signature(target, states, feat)
+    assert Synth.pack_bits([true, false, true, true, false]) == sig
+    assert Synth.size(target) == 4
+
+    {:ok, plain, _} =
+      Synth.enumerate_sized(features, 4, &Synth.signature(&1, states, feat), 5)
+
+    refute Map.has_key?(plain, sig)
+
+    {:ok, index, meta} =
+      Synth.enumerate_sized(
+        features,
+        4,
+        &Synth.signature(&1, states, feat),
+        5,
+        MapSet.new([sig]),
+        families: [family]
+      )
+
+    assert {prog, 4, _ord} = Map.fetch!(index, sig)
+    assert prog == target
+    assert Synth.eval(prog, feat, :none)
+    refute Synth.eval(prog, feat, :only_b)
+    assert Synth.eval(prog, feat, :only_a)
+    assert Synth.eval(prog, feat, :a_and_b)
+    refute Synth.eval(prog, feat, :only_c)
+    assert [[1, _], [2, _], [3, _], [4, _]] = meta.sizes
+  end
+
+  test "the checker reduces self and other" do
+    assert Muro.check_file("test/fixtures/synth_quant.muro") == :ok
+  end
+
+  test "a family column with no signature is refused, not dropped" do
+    family = %{
+      stem: "reaches-pos",
+      kind: :reaches_pos,
+      actions: ["a", "b"],
+      by_action: %{"a" => "reaches-pos-a", "b" => "reaches-pos-b"}
+    }
+
+    feat = fn _, state -> state == :on end
+
+    assert_raise ArgumentError,
+                 ~r/reaches-pos has columns with no signature: reaches-pos-b/,
+                 fn ->
+                   Synth.enumerate_sized(
+                     ["reaches-pos-a"],
+                     2,
+                     &Synth.signature(&1, [:on, :off], feat),
+                     2,
+                     nil,
+                     families: [family]
+                   )
+                 end
+
+    listed = %{family | by_action: %{"a" => "reaches-pos-a"}}
+
+    assert_raise ArgumentError, ~r/reaches-pos lists b with no column/, fn ->
+      Synth.enumerate_sized(
+        ["reaches-pos-a", "reaches-pos-b"],
+        2,
+        &Synth.signature(&1, [:on, :off], feat),
+        2,
+        nil,
+        families: [listed]
+      )
+    end
+  end
+
+  test "the policy term for other tests the columns in order" do
+    pred = {:other, "reaches-pos", "a", ["fb", "fc"]}
+    text = Synth.policy([{pred, :go}], :stay, & &1)
+    assert :binary.match(text, "fb") < :binary.match(text, "fc")
+  end
+
+  test "one action: other has no column and is false" do
+    path = "test/fixtures/synth_quant_one.muro"
+    assert {:ok, host} = Muro.Synth.Host.open(path)
+    assert [family] = Muro.Synth.Feature.families(host.feature_specs, host.actions)
+    assert family.actions == ["go"]
+    column = Map.fetch!(family.by_action, "go")
+    feat = fn feature, state -> host.eval_feature.(feature, state) end
+    states = host.all_states
+
+    self = {:self, family.stem, "go", column}
+    other = {:other, family.stem, "go", []}
+    preds = [self, other, {:not, other}, {:or, self, other}, {:and, self, {:not, other}}]
+
+    assert Synth.size(other) == 1
+    assert Synth.render(other) == "(otherp #{family.stem} go)"
+    for state <- states, do: refute(Synth.eval(other, feat, state))
+    assert Enum.any?(states, &Synth.eval(self, feat, &1))
+    assert Enum.any?(states, &(not Synth.eval(self, feat, &1)))
+
+    {:ok, index, _meta} =
+      Synth.enumerate_sized(
+        host.features,
+        2,
+        &Synth.signature(&1, states, feat),
+        length(states),
+        nil,
+        families: [family]
+      )
+
+    assert {false, 1, _} = Map.fetch!(index, Synth.signature(other, states, feat))
+
+    {_dir, text} = book = quant_book(host, [self])
+    assert text =~ "| go => false"
+    assert_book_agrees(book, host, family_list(host), preds, feat)
+  end
+
+  test "the generated book agrees with Synth.eval on stem-at, other-at, and eval" do
+    path = "test/fixtures/synth_quant_env.muro"
+    assert {:ok, host} = Muro.Synth.Host.open(path)
+    [family] = families = family_list(host)
+    assert family.actions == ["up", "left", "right"]
+    feat = fn feature, state -> host.eval_feature.(feature, state) end
+    col = family.by_action
+    self = fn a -> {:self, family.stem, a, col[a]} end
+    other = fn a -> {:other, family.stem, a, for(x <- family.actions, x != a, do: col[x])} end
+
+    preds =
+      Enum.flat_map(family.actions, fn a ->
+        [self.(a), other.(a), {:or, self.(a), {:not, other.(a)}}, {:and, other.(a), self.(a)}]
+      end)
+
+    # The survivor names only `up`. `stem-at` still reads `left` and
+    # `right` from their columns, not as missing columns.
+    {_dir, text} = book = quant_book(host, [self.("up")])
+    assert text =~ "| left => eval-feature #{col["left"]} car"
+    assert text =~ "| right => eval-feature #{col["right"]} car"
+    assert_book_agrees(book, host, families, preds, feat)
+  end
+
+  defp family_list(host), do: Muro.Synth.Feature.families(host.feature_specs, host.actions)
+
+  # The policy book up to `policy`, as `Muro.Synth.Book.render/4` wrote
+  # it. The certificate after it ranks these arms and is not the subject.
+  defp quant_book(host, preds) do
+    arms =
+      preds
+      |> Enum.with_index()
+      |> Enum.map(fn {pred, i} ->
+        %{
+          name: "survivor-#{i}",
+          pred: pred,
+          action: hd(host.actions),
+          else: hd(host.actions),
+          observations: []
+        }
+      end)
+
+    dir = tmp_quant_dir()
+    assert {:ok, src, _meta} = Muro.Synth.Book.render(host, arms, dir, "trace")
+    [head, _rest] = String.split(src, "\ndef policy ", parts: 2)
+    assert head =~ "def stem-at "
+    assert head =~ "def other-at "
+    assert head =~ "data Stem : Type where"
+    {dir, head}
+  end
+
+  defp assert_book_agrees({dir, head}, host, families, preds, feat) do
+    stems =
+      for family <- families, action <- host.actions, state <- host.all_states do
+        expected = action in family.actions and feat.(family.by_action[action], state)
+        others = for a <- family.actions, a != action, do: family.by_action[a]
+        other_expected = Enum.any?(others, &feat.(&1, state))
+
+        [
+          "{stem-at #{family.stem} #{action} #{state} ≡ #{expected} : Bool}",
+          "{other-at #{family.stem} #{action} #{state} ≡ #{other_expected} : Bool}"
+        ]
+      end
+
+    evals =
+      for pred <- preds, state <- host.all_states do
+        "{eval #{Synth.render(pred)} #{state} ≡ #{Synth.eval(pred, feat, state)} : Bool}"
+      end
+
+    claims =
+      (List.flatten(stems) ++ evals)
+      |> Enum.with_index()
+      |> Enum.map_join("\n", fn {claim, i} -> "def agree-#{i} : evidence #{claim} := refl" end)
+
+    path = Path.join(dir, "agree.muro")
+    File.write!(path, head <> "\n" <> claims <> "\n")
+    assert Muro.check_file(path) == :ok
+  end
+
+  defp tmp_quant_dir do
+    dir =
+      Path.join(
+        System.tmp_dir!(),
+        "muro_synth_quant_#{System.unique_integer([:positive])}_#{System.system_time(:nanosecond)}"
+      )
+
+    File.rm_rf!(dir)
+    File.mkdir_p!(dir)
+    dir
+  end
+
   test "the subset budget covers a nine-feature subset of thirty-six features" do
     # Size 18 asks for a subset of nine. C(36, 9) is 94143280.
     # C(40, 8) is 76904685. Both are built. C(40, 9) stays above the budget.

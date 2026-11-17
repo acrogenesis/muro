@@ -10,7 +10,10 @@ defmodule Muro.Synth.Reach do
   When the cover is finite, closed under `step`, and `cover_match`
   can split it, the book tabulates `dyn-best-pos` for every cover
   state and every horizon up to the environment's. The table is a
-  match in the book. The checker does not trust the fill.
+  match in the book. The checker does not trust the fill. `dyn-any`
+  reads that table. `dyn-one`, the run `eval` calls, is the
+  recurrence, so a proof can induct on the horizon. The table is
+  not that recurrence.
 
   Soundness inside the table is an inductive family of `refl`s.
   `dyn-best-pos s 0` agrees with `false`. `dyn-best-pos s (j + 1)`
@@ -43,29 +46,32 @@ defmodule Muro.Synth.Reach do
 
   `best`, `one`, and `any` are the runs `eval` calls.
   """
-  def sources(host, best, one, any, pos, taken) do
+  def sources(host, best, one, any, pos, taken, rec \\ nil) do
     actions = actions_of(host)
     states = cover(host)
 
-    if tabulate?(host, states, actions) do
+    # A class proof on a large cover inducts on the recurrence. The
+    # per-state table is not part of that certificate.
+    if Process.get(:muro_synth_class_recur) != true and tabulate?(host, states, actions) do
       case prepare(host, states) do
         :recur ->
           {recursive(best, one, any, pos, actions), taken}
 
         {:ok, bits} ->
-          tabulated(host, states, bits, best, one, any, pos, actions, taken)
+          tabulated(host, states, bits, best, one, any, pos, actions, taken, rec)
       end
     else
       {recursive(best, one, any, pos, actions), taken}
     end
   end
 
-  defp tabulated(host, states, bits, best, one, any, pos, actions, taken) do
+  defp tabulated(host, states, bits, best, one, any, pos, actions, taken, rec) do
     saved = taken
     {known, taken} = Book.reserve("dyn-known", taken)
-    {best_rec, taken} = Book.reserve("dyn-best-rec", taken)
-    {one_rec, taken} = Book.reserve("dyn-one-rec", taken)
-    {any_rec, taken} = Book.reserve("dyn-any-rec", taken)
+    {best_rec, taken} = pick_rec(rec, :best, "dyn-best-rec", taken)
+    {one_rec, taken} = pick_rec(rec, :one, "dyn-one-rec", taken)
+    {any_rec, taken} = pick_rec(rec, :any, "dyn-any-rec", taken)
+    {one_tab, taken} = Book.reserve("dyn-one-tab", taken)
 
     case known_match(host, states, bits, any_rec) do
       :open ->
@@ -78,7 +84,7 @@ defmodule Muro.Synth.Reach do
           Enum.join(
             [
               recursive(best_rec, one_rec, any_rec, pos, actions),
-              front(best, known, one, any, pos, actions, known_text),
+              front(best, known, one, one_tab, any, pos, actions, known_text, best_rec),
               evidence
             ],
             "\n"
@@ -86,6 +92,14 @@ defmodule Muro.Synth.Reach do
 
         {text, taken}
     end
+  end
+
+  # The caller reserved the recurrence names when it needs to mention
+  # them. Otherwise this block reserves them, as it always did.
+  defp pick_rec(nil, _key, base, taken), do: Book.reserve(base, taken)
+
+  defp pick_rec(rec, key, _base, taken) when is_map(rec) do
+    {Map.fetch!(rec, key), taken}
   end
 
   defp known_match(host, states, bits, any_rec) do
@@ -134,7 +148,10 @@ defmodule Muro.Synth.Reach do
   defp apply_sucs(var, 1), do: "suc #{var}"
   defp apply_sucs(var, n) when n > 1, do: "suc (" <> apply_sucs(var, n - 1) <> ")"
 
-  defp front(best, known, one, any, pos, actions, known_text) do
+  # `one` is the recurrence `eval` calls. `one_tab` is the same
+  # match reading the table, and `any` calls that, so the agreement
+  # stays a chain of closed bits.
+  defp front(best, known, one, one_tab, any, pos, actions, known_text, best_rec) do
     """
     def #{best} : run Π (+ s : State) → Π (+ k : Nat) → Bool :=
       λ (+ s : State) → λ (+ k : Nat) →
@@ -150,11 +167,17 @@ defmodule Muro.Synth.Reach do
       λ (+ s : State) → λ (+ a : Action) → λ (+ k : Nat) →
         (match (#{pos} (snd (step s a))) motive (λ _ → Bool)
           | true => true
+          | false => #{best_rec} (fst (step s a)) k)
+
+    def #{one_tab} : run Π (+ s : State) → Π (+ a : Action) → Π (+ k : Nat) → Bool :=
+      λ (+ s : State) → λ (+ a : Action) → λ (+ k : Nat) →
+        (match (#{pos} (snd (step s a))) motive (λ _ → Bool)
+          | true => true
           | false => #{best} (fst (step s a)) k)
 
     def #{any} : run Π (+ s : State) → Π (+ j : Nat) → Bool :=
       λ (+ s : State) → λ (+ j : Nat) →
-        #{any_body(one, actions)}
+        #{any_body(one_tab, actions)}
     """
   end
 
@@ -182,8 +205,15 @@ defmodule Muro.Synth.Reach do
     """
   end
 
+  # The last action is the false-to-false match, the same term a
+  # fold over the action list reduces to. A bare call is the same
+  # bool and is not that term.
   defp any_body(one, [action]) do
-    "#{one} s #{action} j"
+    """
+    (match (#{one} s #{action} j) motive (λ _ → Bool)
+      | true => true
+      | false => false)
+    """
   end
 
   defp any_body(one, [action | rest]) do
