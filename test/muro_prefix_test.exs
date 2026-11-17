@@ -141,7 +141,7 @@ defmodule MuroPrefixTest do
              )
 
     assert msg =~
-             "later: move 2 is not a legal continuation of conn at #{id}: move 2 has the wrong direction: expected send pick, wrote recv piece-req"
+             "later: move 2 is not a legal continuation of conn at #{id}: has the wrong direction: expected send pick, wrote recv piece-req"
   end
 
   test "zero and another session's state are not positions" do
@@ -263,6 +263,34 @@ defmodule MuroPrefixTest do
              """)
 
     assert msg =~ "admit is a prefix, not a definition"
+  end
+
+  test "dual of a session that continues is the other end" do
+    assert check("""
+           #{@proto}
+           prefix dual-start : dual conn :=
+             recv pick b1
+
+           prefix dual-ack : dual conn at ack :=
+             recv b0
+           """) == :ok
+  end
+
+  test "dual of a dual session is that session at the continuation" do
+    assert check("""
+           #{@proto}
+           prefix dual-peer-ack : dual peer at ack :=
+             send b0
+           """) == :ok
+
+    assert {:error, msg} =
+             check("""
+             #{@proto}
+             prefix dual-peer-ack : dual peer at ack :=
+               recv b0
+             """)
+
+    assert msg =~ "has the wrong direction: expected send Bit, wrote recv b0"
   end
 
   test "a session argument stops before at, and dual of an applied session is a use" do

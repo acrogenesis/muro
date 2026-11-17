@@ -8,6 +8,10 @@ The finite forms `end`, `send`, `recv`, `choose`, and `branch` are proved in Agd
 
 `examples/prefix.muro` is the worked book.
 
+A `dual` use is the other end of that session, including from a session the protocol continues as. Two `dual`s cancel.
+
+The judgment does not check muro-http's `admit.muro`. That book has no `prefix` declarations. Checking its offers means adding `prefix` declarations there, on `conn` and `peer`.
+
 ### Manual
 
 - Sessions, Grammar, Examples, and Limits: a legal prefix, how to write it, and what is proved.

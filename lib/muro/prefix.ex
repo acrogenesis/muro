@@ -33,9 +33,9 @@ defmodule Muro.Prefix do
   end
 
   defp open_prefix(book, use) do
-    case open_use(book, use) do
-      {:ok, session} -> {:ok, session, source_proto(book, use)}
-      {:error, _} = err -> err
+    with {:ok, session} <- open_use(book, use),
+         {:ok, source} <- source_proto(book, use) do
+      {:ok, session, source}
     end
   end
 
@@ -53,26 +53,24 @@ defmodule Muro.Prefix do
 
   defp source_proto(book, name) when is_binary(name) do
     case decl(book, name) do
-      %{proto: proto} -> proto
-      nil -> :end
+      %{proto: proto} -> {:ok, proto}
+      nil -> {:error, "unknown session #{name}"}
     end
   end
 
   defp source_proto(book, {:sess, name, _}) do
     case decl(book, name) do
-      %{proto: proto} -> proto
-      nil -> :end
+      %{proto: proto} -> {:ok, proto}
+      nil -> {:error, "unknown session #{name}"}
     end
   end
 
-  defp source_proto(book, {:dual, ref}) do
-    case source_proto(book, ref) do
-      {:dual, inner} -> Session.dual(source_proto(book, inner))
-      proto -> Session.dual(proto)
-    end
-  end
+  # The declaration still names a continuation as `{:sess, _, _}`.
+  # Dualising that text crashes. The position search opens the
+  # continuation and dualises that.
+  defp source_proto(_book, {:dual, ref}), do: {:ok, {:dual, ref}}
 
-  defp source_proto(_book, _), do: :end
+  defp source_proto(_book, _), do: {:error, "unknown session"}
 
   defp decl(book, name) when is_binary(name) do
     Enum.find(book, &(Map.get(&1, :kind) == :session and &1.name == name))
@@ -403,7 +401,8 @@ defmodule Muro.Prefix do
   defp blame(st, detail) do
     body =
       if st.n > 1 do
-        "move #{st.n} is not a legal continuation of #{st.session} at #{st.origin}: #{detail}"
+        inner = String.replace_prefix(detail, "move #{st.n} ", "")
+        "move #{st.n} is not a legal continuation of #{st.session} at #{st.origin}: #{inner}"
       else
         detail
       end
@@ -493,49 +492,58 @@ defmodule Muro.Prefix do
   end
 
   defp find_call_pos(book, {:dual, ref}, name, seen) do
-    case underlying(book, ref, seen) do
-      {:ok, proto} ->
-        case find_call(proto, name) do
-          {:ok, target, args} ->
-            with {:ok, opened} <- open_jump(book, target, args) do
-              {:ok, Session.dual(opened)}
-            end
-
-          :no ->
-            :no
-        end
-
-      {:error, _} = err ->
-        err
+    case reveal(book, ref, seen, 1) do
+      {:ok, proto, flips} -> take_call(book, proto, name, flips)
+      {:error, _} = err -> err
     end
   end
 
   defp find_call_pos(book, source, name, _seen) do
-    case find_call(source, name) do
-      {:ok, target, args} -> open_jump(book, target, args)
-      :no -> :no
+    take_call(book, source, name, 0)
+  end
+
+  defp take_call(book, proto, name, flips) do
+    case find_call(proto, name) do
+      {:ok, target, args} ->
+        with {:ok, opened} <- open_jump(book, target, args) do
+          {:ok, flip_opened(opened, flips)}
+        end
+
+      :no ->
+        :no
     end
   end
 
-  defp underlying(book, name, seen) when is_binary(name) do
+  defp flip_opened(proto, flips) when rem(flips, 2) == 1, do: Session.dual(proto)
+  defp flip_opened(proto, _flips), do: proto
+
+  # Each `dual` flips. `dual` of a session declared `dual` cancels.
+  defp reveal(book, {:dual, ref}, seen, flips) do
+    reveal(book, ref, seen, flips + 1)
+  end
+
+  defp reveal(book, {:sess, name, _}, seen, flips) do
+    reveal(book, name, seen, flips)
+  end
+
+  defp reveal(book, name, seen, flips) when is_binary(name) do
     if MapSet.member?(seen, name) do
       {:error, "dual cycle"}
     else
       case decl(book, name) do
-        %{proto: {:dual, ref}} -> underlying_ref(book, ref, MapSet.put(seen, name))
-        %{proto: proto} -> {:ok, proto}
+        %{proto: proto} -> reveal_body(book, proto, MapSet.put(seen, name), flips)
         nil -> {:error, "unknown session #{name}"}
       end
     end
   end
 
-  defp underlying_ref(book, name, seen) when is_binary(name), do: underlying(book, name, seen)
+  defp reveal(_book, _other, _seen, _flips), do: {:error, "unknown session"}
 
-  defp underlying_ref(book, {:sess, name, _}, seen), do: underlying(book, name, seen)
+  defp reveal_body(book, {:dual, ref}, seen, flips) do
+    reveal(book, ref, seen, flips + 1)
+  end
 
-  defp underlying_ref(book, {:dual, ref}, seen), do: underlying_ref(book, ref, seen)
-
-  defp underlying_ref(_book, _, _), do: {:error, "unknown session"}
+  defp reveal_body(_book, proto, _seen, flips), do: {:ok, proto, flips}
 
   defp find_rec(proto, name), do: find_rec(bare(proto), to_string(name), MapSet.new())
 
