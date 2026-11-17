@@ -115,6 +115,9 @@ defmodule Muro.Check do
       %{kind: :relay} ->
         {:skip, "#{name} is an endpoint function, not a definition"}
 
+      %{kind: :prefix} ->
+        {:skip, "#{name} is a prefix, not a definition"}
+
       d ->
         {:ok, d}
     end
@@ -182,7 +185,8 @@ defmodule Muro.Check do
               :link,
               :relay,
               :import,
-              :param
+              :param,
+              :prefix
             ],
        do: false
 
@@ -3944,6 +3948,15 @@ defmodule Muro.Check do
   # once. An affine endpoint is used at most once. The body is not a term.
   def check_def(book, %{kind: :relay} = d, _fuel), do: check_relay(book, d)
 
+  # A list of directed moves is a legal prefix of a session from a
+  # position. The message already names the prefix and the move.
+  def check_def(book, %{kind: :prefix} = d, _fuel) do
+    case Muro.Prefix.judge(book, d) do
+      :ok -> :ok
+      {:error, msg} -> {:error, msg}
+    end
+  end
+
   # An open param is an assumption: the type is checked, and there is no
   # body to unfold. `params: :open` is the only way one reaches this clause.
   def check_def(book, %{kind: :param, mode: mode, type: ty} = d, k) do
@@ -4630,7 +4643,8 @@ defmodule Muro.Check do
           :seat,
           :link,
           :relay,
-          :param
+          :param,
+          :prefix
         ],
         do: name
   end

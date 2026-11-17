@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.21.18
+
+`prefix` names a list of directed moves and says that list is a legal prefix of a session from a position. The position is the start, a recursion variable, a session the protocol continues as, or the number `--backend c` assigns to a node of that session. An empty list is legal. A move in the wrong direction, a constructor the payload does not have, and a move the protocol does not allow there are refused.
+
+The finite forms `end`, `send`, `recv`, `choose`, and `branch` are proved in Agda. A derivation is a legal prefix, and the decision procedure accepts a list only when that list has one. Recursion, a named continuation, a dependent payload, an evidence bound, an indexed bit, a case, and the numeric position are decided by the checker. They are not that theorem. The generated C program is not proved.
+
+`examples/prefix.muro` is the worked book.
+
+### Manual
+
+- Sessions, Grammar, Examples, and Limits: a legal prefix, how to write it, and what is proved.
+
+### Package
+
+- Version 0.21.18.
+
 ## 0.21.16
 
 `mix muro.synth` ranks a recursive `State` that does not declare `all-states`. `init` is the state the walk starts from, or a list of them. The cover is every state reached from `init` under `step` of every action in `all-actions`, when that set closes within 256 states. A cover of 256 states is accepted. A successor that would exceed 256 states is refused, and no prefix of that set is certified. The closure is computed in Elixir. It is not an Agda theorem. The predicate that survives is certified on that cover by the same ranking as a declared cover. A book that declares `all-states` is unchanged. Recursion under a product, with no `all-states`, is refused when the environment is opened. A value `step` returns that is not a `State` is refused before any ranking.

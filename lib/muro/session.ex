@@ -6469,7 +6469,8 @@ defmodule Muro.Session do
               :link,
               :relay,
               :import,
-              :param
+              :param,
+              :prefix
             ],
        do: false
 

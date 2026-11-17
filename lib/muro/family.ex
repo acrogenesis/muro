@@ -306,7 +306,8 @@ defmodule Muro.Family do
               :link,
               :relay,
               :import,
-              :param
+              :param,
+              :prefix
             ],
        do: false
 

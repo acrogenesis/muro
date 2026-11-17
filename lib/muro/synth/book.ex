@@ -558,7 +558,7 @@ defmodule Muro.Synth.Book do
 
   defp find_def(book, name) do
     Enum.find(book, fn d ->
-      Map.get(d, :name) == name and Map.get(d, :kind) not in [:data, :import]
+      Map.get(d, :name) == name and Map.get(d, :kind) not in [:data, :import, :prefix]
     end)
   end
 
