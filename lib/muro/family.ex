@@ -3,10 +3,11 @@ defmodule Muro.Family do
   Checks a keyed family.
 
   The declaration is spec. It names one buffered meeting and a closed
-  kind, and one rule for each constructor. `always` is decided on the
-  fixed script in `Muro.Family.Graph`. `eventually` and `leads_to` are
-  `not yet decided`. A formula over a family that does not check is
+  kind, and one rule for each constructor. `always`, `eventually`, and
+  `leads_to` are decided on the fixed script in `Muro.Family.Graph`.
+  A formula over a family that does not check is
   `skipped because <family> does not check`, and the formula is not walked.
+  The decision is the Elixir graph. It is not an Agda proof.
   """
 
   @run_msg "temporal formulas do not mention run definitions"
@@ -40,12 +41,13 @@ defmodule Muro.Family do
   end
 
   @doc """
-  `{:ok, states, transitions}` when `always` holds on the family graph.
-  `{:error, "not yet decided"}` when the formula is `eventually` or
-  `leads_to`. `{:error, "skipped because <family> does not check"}` when
-  `status` is the family's refusal: the formula is not walked.
-  `{:error, message}` when a binder or an atom is not, or `always`
-  fails. The message has no location and no declaration name.
+  `{:ok, states, transitions}` when `always`, `eventually`, or
+  `leads_to` holds on the family graph. `{:error, "skipped because
+  <family> does not check"}` when `status` is the family's refusal: the
+  formula is not walked. `{:error, message}` when a binder or an atom
+  is not, or the formula fails. The message has no location and no
+  declaration name. A liveness failure is the path to the cycle, then
+  `then forever`.
 
   `status` is `check/3` or `check_decl/3`. The three-argument form
   checks the declaration, including its meeting. `prep` is a
@@ -71,40 +73,41 @@ defmodule Muro.Family do
     {:error, "skipped because #{name} does not check"}
   end
 
-  defp decide(book, family, formula, prep) do
-    if always?(formula) do
-      decide_always(book, family, formula, prep)
-    else
-      {:error, "not yet decided"}
-    end
-  end
-
-  defp always?({:forall, _, _, body}), do: always?(body)
-  defp always?({:always, _}), do: true
-  defp always?(_), do: false
-
-  defp decide_always(book, family, formula, :auto) do
+  defp decide(book, family, formula, :auto) do
     case Muro.Family.Graph.prepare(book, family) do
       {:ok, search} -> Muro.Family.Graph.decide(search, formula)
       {:error, _} = err -> err
     end
   end
 
-  defp decide_always(_book, _family, formula, {:ok, search}) do
+  defp decide(_book, _family, formula, {:ok, search}) do
     Muro.Family.Graph.decide(search, formula)
   end
 
-  defp decide_always(book, family, formula, :skip),
-    do: decide_always(book, family, formula, :auto)
+  defp decide(book, family, formula, :skip), do: decide(book, family, formula, :auto)
 
-  defp decide_always(_book, _family, _formula, {:error, msg}), do: {:error, msg}
+  defp decide(_book, _family, _formula, {:error, msg}), do: {:error, msg}
+
+  defp formula?(formula), do: always?(formula) or eventually?(formula) or leads_to?(formula)
+
+  defp always?({:forall, _, _, body}), do: always?(body)
+  defp always?({:always, _}), do: true
+  defp always?(_), do: false
+
+  defp eventually?({:forall, _, _, body}), do: eventually?(body)
+  defp eventually?({:eventually, _}), do: true
+  defp eventually?(_), do: false
+
+  defp leads_to?({:forall, _, _, body}), do: leads_to?(body)
+  defp leads_to?({:leads_to, _, _}), do: true
+  defp leads_to?(_), do: false
 
   @doc false
   def needs_graph?(book, %{key: key}, formulas) when is_list(book) and is_list(formulas) do
     case closed_kind(book, key) do
       {:ok, data} ->
         Enum.any?(formulas, fn formula ->
-          always?(formula) and walk_formula(book, data, %{}, formula) == :ok
+          formula?(formula) and walk_formula(book, data, %{}, formula) == :ok
         end)
 
       _ ->

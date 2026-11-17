@@ -48,7 +48,14 @@ defmodule Muro.Family.GraphTest do
              {:error,
               "always (false) fails in slots: a init 0: absent; a signal 1: absent; a signal 2: absent; b init 0: absent"}
 
-    assert Graph.decide(search, {:eventually, true}) == {:error, "not yet decided"}
+    assert Graph.decide(search, {:eventually, true}) == {:ok, 171_649, 729_184}
+
+    assert Graph.decide(search, {
+             :forall,
+             "k",
+             {:dat, "key", []},
+             {:leads_to, {:held, "k", "signal"}, {:opened, "k", "signal"}}
+           }) == {:ok, 171_649, 729_184}
 
     never = String.replace(src, "signal held while earlier unresolved", "signal never held")
     assert {:error, msg} = check(never)
@@ -92,6 +99,29 @@ defmodule Muro.Family.GraphTest do
 
     assert Graph.respects?(g, hd(search.states))
     assert Enum.all?(search.states, &Graph.respects?(g, &1))
+  end
+
+  @lasso "(held a signal) leads_to (opened a signal) fails in slots after a init 0 opens, a signal 1 held, a init 0 task died, a init 0 server fail stop, a signal 2 held, b init 0 opens, b init 0 task put ok, b init 0 server get (r : Report), b init 0 resolves; then forever: the family has finished"
+
+  test "fail stop refuses no-starve and keeps the keys independent" do
+    src =
+      File.read!("examples/keyed-slots.muro")
+      |> String.replace("fail\n    done", "fail\n    stop")
+
+    {:ok, book} = Parser.parse(src)
+    family = Enum.find(book, &(&1.kind == :family))
+    assert {:ok, search} = Graph.prepare(book, family)
+    assert length(search.states) == 171_649
+    assert search.transitions == 631_164
+
+    assert Graph.decide(search, @formula) == {:ok, 171_649, 631_164}
+
+    assert Graph.decide(search, {
+             :forall,
+             "k",
+             {:dat, "key", []},
+             {:leads_to, {:held, "k", "signal"}, {:opened, "k", "signal"}}
+           }) == {:error, @lasso}
   end
 
   test "a server that stops stays unresolved and the signal stays held" do
