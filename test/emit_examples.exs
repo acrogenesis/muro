@@ -1,7 +1,7 @@
-# The image of every example except the keyed family. `mix muro.emit`
-# skips a family, so these bytes are the bytes main emitted. The digest
-# is one sha256 per book, of the picture below. Keyed-slots is the book
-# this change adds.
+# The image of every example except the keyed family. A family is spec,
+# so emit skips it. The digest is one sha256 per book, of the picture
+# below. Keyed-slots is the book the family change adds. The C image of
+# a session includes the step.
 #
 # What is compared
 #

@@ -38,7 +38,7 @@ See [The wall](wall.md), [Terms](language.md), [Identity](identity.md).
 
 ## ping.muro
 
-An affine session. The protocol is spec. The process is evidence. The Elixir, C, Rust, Zig, and assembly emitters omit it. `--backend otp` writes a GenServer for each process.
+An affine session. The protocol is spec. The process is evidence. Elixir, Rust, Zig, and assembly omit the session. C writes a step for the session. The actions are the ones the state machine takes, checked by a walk of at most 14 states and depth at most 6. `--backend otp` writes a GenServer for each process.
 
 ```
 session ping := recv Nat (send Nat end)
@@ -54,7 +54,7 @@ See [Terms](language.md#session) and [Emit](emit.md#otp).
 
 ## dual.muro
 
-The other end of a session. The protocol is spec. The process is evidence. The run emitters omit both.
+The other end of a session. The protocol is spec. The process is evidence. Elixir, Rust, Zig, and assembly omit both. C writes a step for each end, checked by that same bounded walk.
 
 ```
 session ping := recv Nat (send Nat end)
@@ -92,7 +92,7 @@ See [Terms](language.md#session).
 
 ## indexed.muro
 
-A received bit selects the next action. The arm is the index. The run emitters omit the session.
+A received bit selects the next action. The arm is the index. Elixir, Rust, Zig, and assembly omit the session. C writes a step for the session, checked by that same bounded walk.
 
 ```
 session route := recv (b : Bit) on (send Nat end) (recv Nat end)
@@ -114,7 +114,7 @@ See [Terms](language.md#session).
 
 ## recursive.muro
 
-A protocol may repeat. The variable sits under an action. The run emitters omit the session.
+A protocol may repeat. The variable sits under an action. Elixir, Rust, Zig, and assembly omit the session. C writes a step for the session, checked by that same bounded walk.
 
 ```
 session loop := rec X. recv Nat (send Nat X)
@@ -140,7 +140,7 @@ See [Terms](language.md#session).
 
 ## talk.muro
 
-One description of an exchange. Each party has a session. The description is spec. The run emitters omit it.
+One description of an exchange. Each party has a session. The description is spec. Elixir, Rust, Zig, and assembly omit it. C refuses the book, because `seen` is not a state machine, and the run is not written.
 
 ```
 talk ping-exchange := say peer pong Nat (say pong peer Nat over)
@@ -159,7 +159,7 @@ See [Terms](language.md#session).
 
 ## two-phase-commit.muro
 
-One choreography, and each role has a session with each other role. The choreography is spec. The run emitters omit it.
+One choreography, and each role has a session with each other role. The choreography is spec. Elixir, Rust, Zig, and assembly omit it. C refuses the book, because `seen` is not a state machine, and the run is not written.
 
 ```
 choreography two-phase-commit
@@ -181,7 +181,7 @@ A participant whose branches differ, and who was not told the choice, is refused
 
 ## seated.muro
 
-A party of a description sits at a place. The seating is spec. The boundary is evidence. The run emitters omit both.
+A party of a description sits at a place. The seating is spec. The boundary is evidence. Elixir, Rust, Zig, and assembly omit both. C refuses the book, because `seen` is not a state machine, and the run is not written.
 
 ```
 place home := node a

@@ -13,7 +13,7 @@ defmodule Muro.NativeIdentityTest do
       {:ok, book} = Muro.Load.file(path)
       book = Muro.Prelude.for_emit(book)
 
-      assert {:ok, header, source, _sigs} = Muro.Emit.C.prepare(book, stem)
+      assert {:ok, header, source, _sigs} = Muro.Emit.C.prepare(book, stem, path: path)
       assert File.read!(Path.join(dir, stem <> ".h")) == header
       assert File.read!(Path.join(dir, stem <> ".c")) == source
 

@@ -25,6 +25,12 @@ defmodule Muro.Emit.C do
   not. An `unboxed data` constructor returns the struct by value and
   does not.
 
+  A session in the book is a stepper beside the runs. The host passes
+  the state and an event. The function returns the next state and the
+  action, or refuses an event the protocol does not allow. The host
+  keeps the transport. A protocol the machine cannot represent, a repr
+  payload, and an unboxed session payload are refused (`c:session`).
+
   Identifiers come from `Muro.Emit.Name`. A source name is spelled there.
   A helper, a step, a constructor argument, and a temporary are generated
   there. The two spellings share no identifier. A binder is claimed there
@@ -148,9 +154,11 @@ defmodule Muro.Emit.C do
   Render `book` as `{header, source}` for a file stem such as `half_ok`.
 
   Run bodies are printed from `Muro.IR`. A refusal is that elaboration's.
+  `opts` are the ones `prepare/3` takes. `path:` is the file a session
+  error names.
   """
-  def render(book, stem) when is_list(book) and is_binary(stem) do
-    case prepare(book, stem) do
+  def render(book, stem, opts \\ []) when is_list(book) and is_binary(stem) and is_list(opts) do
+    case prepare(book, stem, opts) do
       {:ok, header, source, _sigs} -> {:ok, {header, source}}
       {:error, _} = err -> err
     end
@@ -218,7 +226,9 @@ defmodule Muro.Emit.C do
   `params` is `{ctype, c_name}` for each live argument. `run internal` has
   `export: false`.
   """
-  def prepare(book, stem) when is_list(book) and is_binary(stem) do
+  def prepare(book, stem, opts \\ []) when is_list(book) and is_binary(stem) and is_list(opts) do
+    path = Keyword.get(opts, :path, stem <> ".muro")
+
     case IR.elaborate(book) do
       {:ok, funs} ->
         nm = name_map(book)
@@ -231,9 +241,14 @@ defmodule Muro.Emit.C do
 
             with :ok <- Emit.refuse_may_fail(book),
                  :ok <- Emit.refuse_unboxed_opt(book, funs),
-                 {:ok, opts} <- opt_typedefs(funs, book, bytes?) do
-              {:ok, header(book, sigs, stem, nm, opts, bytes?, strings?),
-               source(book, runs, sigs, texts, extras, stem, nm, opts, bytes?, strings?), sigs}
+                 {:ok, opt_src} <- opt_typedefs(funs, book, bytes?),
+                 {:ok, sess_h, sess_c} <- Muro.Emit.C.Session.fragments(book, path, nm, sigs) do
+              header = header(book, sigs, stem, nm, opt_src, bytes?, strings?)
+
+              source =
+                source(book, runs, sigs, texts, extras, stem, nm, opt_src, bytes?, strings?)
+
+              {:ok, splice_session(header, sess_h), source <> sess_c, sigs}
             end
 
           {:error, _} = err ->
@@ -243,6 +258,35 @@ defmodule Muro.Emit.C do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  # The header's last non-empty line is the file guard. An earlier
+  # `#endif` closes `muro__ALLOC`, and a comment may contain the same
+  # word. Session declarations go in front of that last line.
+  @doc false
+  def splice_session(header, ""), do: header
+
+  def splice_session(header, sess) when is_binary(header) and is_binary(sess) do
+    lines = String.split(header, "\n")
+
+    case last_content(lines) do
+      {i, "#endif"} ->
+        {front, back} = Enum.split(lines, i)
+        # One blank line before the session block, then the file guard.
+        Enum.join(front, "\n") <> "\n\n" <> String.trim(sess) <> "\n" <> Enum.join(back, "\n")
+
+      _ ->
+        header <> "\n" <> sess
+    end
+  end
+
+  defp last_content(lines) do
+    lines
+    |> Enum.with_index()
+    |> Enum.reverse()
+    |> Enum.find_value(fn {line, i} ->
+      if String.trim(line) != "", do: {i, String.trim(line)}
+    end)
   end
 
   defp compile_funs(funs, book, nm) do
