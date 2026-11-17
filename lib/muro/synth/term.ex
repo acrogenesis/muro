@@ -48,6 +48,21 @@ defmodule Muro.Synth.Term do
 
   def inhabitants(schema), do: enum_inhabitants(schema, @cap)
 
+  @doc """
+  Whether this datatype refers to itself in a field.
+
+  A mutual family is already `{:open, "mutual"}` and is not this.
+  """
+  def self_referential?({:data, name, rows}) do
+    opening = MapSet.new([name])
+
+    Enum.any?(rows, fn row ->
+      Enum.any?(row.fields, &refers_opening?(field_schema(&1), opening))
+    end)
+  end
+
+  def self_referential?(_schema), do: false
+
   def decode(raw, schema) do
     case pack(schema, raw) do
       {:ok, value, spell, label} ->

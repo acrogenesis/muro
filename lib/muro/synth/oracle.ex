@@ -102,8 +102,46 @@ defmodule Muro.Synth.Oracle do
     end)
   end
 
+  # A nullary cover is finite by the constructors. A reachable cover of a
+  # self-referential `State` is not: `step` can build a new term at every
+  # state. 256 admits a term graph of a few dozen states, which the
+  # certificate already ranks, and refuses an unbounded successor without
+  # building that certificate. It is not the inhabitant cap of 32, and it
+  # is not the reachability-table cap. A fresh state at the bound is a
+  # refusal. The states already met are not returned.
+  @reachable_cap 256
+
+  def reachable_cap, do: @reachable_cap
+
+  def reachable_bound_message do
+    "reachable states are not finite within #{@reachable_cap}; declare all-states"
+  end
+
   def cover(host) do
     if host.all_states, do: host.all_states, else: reachable(host, host.states)
+  end
+
+  @doc """
+  The states reached from `seeds` under `step` of every action.
+
+  `{:error, :bound}` is a fresh state at `reachable_cap/0`. `{:error,
+  :left}` is a successor that is not a state of the cover, including a
+  value `step` returns that does not decode. A set that does not close
+  is not truncated to the states already met.
+  """
+  def close_under_step(host, seeds) when is_list(seeds) do
+    seeds = Enum.uniq_by(seeds, &state_key/1)
+
+    if length(seeds) > @reachable_cap do
+      {:error, :bound}
+    else
+      seen = MapSet.new(Enum.map(seeds, &state_key/1))
+
+      with {:ok, order} <- grow_bounded(host, seeds, seeds, seen, @reachable_cap),
+           :ok <- stays_inside(host, order) do
+        {:ok, order}
+      end
+    end
   end
 
   defp reachable(host, seeds) do
@@ -122,6 +160,68 @@ defmodule Muro.Synth.Oracle do
 
     grow(host, order ++ fresh, rest ++ fresh, MapSet.union(seen, MapSet.new(fresh)))
   end
+
+  defp grow_bounded(_host, order, [], _seen, _cap), do: {:ok, order}
+
+  defp grow_bounded(host, order, [state | rest], seen, cap) do
+    case fresh_states(host, state, seen) do
+      {:error, :left} ->
+        {:error, :left}
+
+      {:ok, fresh} ->
+        cond do
+          fresh == [] ->
+            grow_bounded(host, order, rest, seen, cap)
+
+          length(order) + length(fresh) > cap ->
+            {:error, :bound}
+
+          true ->
+            seen = MapSet.union(seen, MapSet.new(Enum.map(fresh, &state_key/1)))
+            grow_bounded(host, order ++ fresh, rest ++ fresh, seen, cap)
+        end
+    end
+  end
+
+  defp stays_inside(host, states) do
+    seen = MapSet.new(Enum.map(states, &state_key/1))
+
+    Enum.reduce_while(states, :ok, fn state, :ok ->
+      case fresh_states(host, state, seen) do
+        {:ok, []} -> {:cont, :ok}
+        {:ok, _} -> {:halt, {:error, :left}}
+        {:error, :left} -> {:halt, {:error, :left}}
+      end
+    end)
+  end
+
+  defp fresh_states(host, state, seen) do
+    Enum.reduce_while(host.actions, {:ok, []}, fn action, {:ok, acc} ->
+      case one_step(host, state, action) do
+        {:error, :left} ->
+          {:halt, {:error, :left}}
+
+        {:ok, next} ->
+          key = state_key(next)
+
+          if MapSet.member?(seen, key) or Enum.any?(acc, &(state_key(&1) == key)) do
+            {:cont, {:ok, acc}}
+          else
+            {:cont, {:ok, acc ++ [next]}}
+          end
+      end
+    end)
+  end
+
+  defp one_step(host, state, action) do
+    {next, _reward} = host.step.(state, action)
+    {:ok, next}
+  rescue
+    ArgumentError -> {:error, :left}
+  end
+
+  defp state_key(%Muro.Synth.Term{value: value}), do: value
+  defp state_key(other), do: other
 
   defp compare(host, "trace", state, action, other, blind) do
     {left, memo} = trace(host, state, other, host.horizon, blind, %{})

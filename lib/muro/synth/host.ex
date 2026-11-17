@@ -119,7 +119,7 @@ defmodule Muro.Synth.Host do
             truth!(call(host, "eval-feature", [atom!(host, feature), state_arg(host, state)]))
           end)
 
-        {:ok, discover(host)}
+        {:ok, discover(install_reachable(host))}
     end
   catch
     {:error, _, _} = err -> err
@@ -209,7 +209,95 @@ defmodule Muro.Synth.Host do
         )
 
       :open ->
-        open_or(book, schema, "State constructors take arguments; declare all-states")
+        # A self-reference has no inhabitant list. The cover is the
+        # closure of `init` under `step`, computed once `step` can be
+        # called. A declared `all-states` stays that list. Any other
+        # open constructor still has to name its cover.
+        if Muro.Synth.Term.self_referential?(schema) and not named?(book, "all-states") do
+          {:ok, {:structured, schema, nil}}
+        else
+          open_or(book, schema, "State constructors take arguments; declare all-states")
+        end
+    end
+  end
+
+  # A declared cover is not rebuilt. `init` is the start only when
+  # `State` refers to itself and the book does not define `all-states`.
+  defp install_reachable(%{structured: true, all_states: nil, schema: schema} = host) do
+    if Muro.Synth.Term.self_referential?(schema) do
+      case initial_states(host) do
+        {:error, _, _} = err ->
+          throw(err)
+
+        {:ok, []} ->
+          throw({:error, :usage, "a recursive State declares no initial state"})
+
+        {:ok, seeds} ->
+          case Muro.Synth.Oracle.close_under_step(host, seeds) do
+            {:ok, cover} ->
+              %{host | all_states: cover}
+
+            {:error, :bound} ->
+              throw({:error, :usage, Muro.Synth.Oracle.reachable_bound_message()})
+
+            {:error, :left} ->
+              throw({:error, :usage, "step left the reachable cover"})
+          end
+      end
+    else
+      host
+    end
+  end
+
+  defp install_reachable(host), do: host
+
+  defp initial_states(host) do
+    if exported?(host, "init", 0) do
+      raw = call(host, "init", [])
+
+      if init_list?(host.book) do
+        decode_init_list(host, raw)
+      else
+        decode_init_one(host, raw)
+      end
+    else
+      {:ok, []}
+    end
+  end
+
+  defp init_list?(book) do
+    case Enum.find(book, &(Map.get(&1, :name) == "init")) do
+      %{type: ty} -> list_state?(book, ty)
+      _ -> false
+    end
+  end
+
+  defp decode_init_one(host, raw) do
+    case Muro.Synth.Term.decode(raw, host.schema) do
+      {:ok, term} -> {:ok, [term]}
+      :error -> {:error, :usage, "init has a value that is not a State"}
+    end
+  end
+
+  defp decode_init_list(host, raw) do
+    listed =
+      try do
+        {:ok, decode_list(raw)}
+      rescue
+        FunctionClauseError -> :error
+      end
+
+    case listed do
+      :error ->
+        {:error, :usage, "init has a value that is not a State"}
+
+      {:ok, raws} ->
+        Enum.reduce_while(raws, {:ok, []}, fn raw, {:ok, acc} ->
+          case Muro.Synth.Term.decode(raw, host.schema) do
+            {:ok, term} -> {:cont, {:ok, acc ++ [term]}}
+            :error -> {:halt, {:error, :usage, "init has a value that is not a State"}}
+          end
+        end)
     end
   end
 
@@ -285,6 +373,7 @@ defmodule Muro.Synth.Host do
          :ok <- no_erased(book, "leb", leb),
          :ok <- leb_type(book, leb, reward),
          :ok <- optional_list(book, "all-states", "State"),
+         :ok <- optional_init(book),
          :ok <- optional_name(book, "default-action", "Action"),
          :ok <- eval_feature_type(book) do
       :ok
@@ -377,6 +466,32 @@ defmodule Muro.Synth.Host do
       :ok
     else
       _ -> {:error, :usage, "leb must compare the reward step returns"}
+    end
+  end
+
+  defp optional_init(book) do
+    if named?(book, "init") do
+      with {:ok, ty} <- public_run(book, "init"),
+           :ok <- no_erased(book, "init", ty) do
+        if init_type?(book, ty) do
+          :ok
+        else
+          {:error, :usage, "init must be run State or run List State"}
+        end
+      end
+    else
+      :ok
+    end
+  end
+
+  defp init_type?(book, ty) do
+    same?(book, ty, {:var, "State"}) or list_state?(book, ty)
+  end
+
+  defp list_state?(book, ty) do
+    case unfold(book, ty) do
+      {:app, {:var, "List"}, arg} -> same?(book, arg, {:var, "State"})
+      _ -> false
     end
   end
 
