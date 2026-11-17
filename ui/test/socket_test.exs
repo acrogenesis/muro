@@ -12,7 +12,7 @@ defmodule MuroVisor.SocketTest do
       MuroVisor.TestEndpoint.quiet!()
 
       if is_integer(port) and port > 0 do
-        assert {:error, :econnrefused} = :gen_tcp.connect({127, 0, 0, 1}, port, [], 200)
+        MuroVisor.TestEndpoint.refute_accept!(port)
       end
     end)
 
