@@ -31,6 +31,7 @@ In brief: `examples/cshrl/` is [CSHRL](https://github.com/doctorcorral/csh-rl) i
 | `envs/nested_bit.muro` | A bit under two constructors, no declared feature. `trace` checks `CoindHomo` for the constructor of that bit |
 | `envs/list_cover.muro` | Two lists of Nat, no declared feature. `trace` checks `CoindHomo` for the reward of `go` |
 | `envs/nested_bin.muro` | A constructor under a recursive child, no declared feature. `trace` checks `CoindHomo` for that constructor |
+| `envs/reachable_bin.muro` | The same two trees, with no `all-states`. `init` is the start. `trace` checks `CoindHomo` for that constructor |
 | `envs/queens4.muro` | Four rows, no declared feature. Depth 0 and 1 are empty. Size 4 enumerates a survivor. `trace` checks `CoindHomo` |
 | `envs/queens8.muro` | Eight rows, no declared feature. The sized search checks `CoindHomo` by the placement class lemma, outside `mix test` |
 | `envs/class_probe.muro` | Four queens supplying the placement hypotheses, so the class library checks |
