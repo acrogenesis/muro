@@ -147,20 +147,29 @@ temporal no-starve : slots :=
 
 An instance counts for `resolved` when it is known, unless some other running instance of the same key opened before this one was known. A late `init`, still running, does not refute `no-overtake` while that earlier `signal` is open. The graph contains that state. `resolved` there is not "delivered". A `signal` running while its `init` is still absent is in the graph too, and `resolved k init` holds there because no `init` counts.
 
-`forall (k : key)` binds `k` as a key. That sort is `key` even when a data type of the same name is in the book. A `forall` over any other type is `forall over <name> is not a key`, including `Bit`, `Nat`, and the kind. The checker decides `always` on the family graph. `eventually` and `leads_to`, including `no-starve` above, are `not yet decided`. A book whose formulas over the family are only those two does not build the graph. An ill-formed formula does not build it either. A formula over a family that does not check is `skipped because <family> does not check`, and the formula is not walked.
+`forall (k : key)` binds `k` as a key. That sort is `key` even when a data type of the same name is in the book. A `forall` over any other type is `forall over <name> is not a key`, including `Bit`, `Nat`, and the kind. The checker decides `always`, `eventually`, and `leads_to` on the family graph. `no-starve` is that `leads_to`. An ill-formed formula does not build the graph. A formula over a family that does not check is `skipped because <family> does not check`, and the formula is not walked. There is no fairness clause. A refusal is a lasso, the same shape as a meeting: the path to the cycle, then `then forever`.
 
 `opened`, `held`, and `resolved` written on a meeting are `<atom> names an instance of a family`. `forall (k : key)` on a meeting is `forall over key ranges over an open type` when no data type is named `key`. A key that is not bound is `unbound key <name>`. A constructor the kind does not have is `<name> is not a constructor of <kind>`. A proposition other than these atoms is `a family formula names opened, held, or resolved`.
 
 `opened done` stays the role atom. The next word is `done`, `stopped`, `dead`, `at`, or `has`.
 
-The worked book is `examples/keyed-slots.muro`. It writes `no-overtake` and not `no-starve`. `mix muro.check` prints
+The worked book is `examples/keyed-slots.muro`. It writes `no-overtake` and `no-starve`. The failure arm is `done`, so a dying task resolves the instance and a held signal can open. `mix muro.check` prints
 
 ```
 family slots: slot per key of Event
 temporal no-overtake: holds in 171649 reachable states, 729184 transitions
+temporal no-starve: holds in 171649 reachable states, 729184 transitions
 ```
 
-That count is a model hypothesis, not data-independence. The script is fixed and a retry happens once. The checker builds the graph once for the family. That search is the cost of the check.
+That count is a model hypothesis, not data-independence. The script is fixed and a retry happens once. The checker builds the graph once for the family. That search is the cost of the check. Both lines are that same search. This is an Elixir check of the fixed script. It is not an Agda proof, and it is not data-independence.
+
+The same script with `fail stop` refuses `no-starve`. The task dies, the server takes `fail stop`, and both signals of key `a` stay held. Key `b` opens, exchanges `ok`, and resolves while `a` is blocked. The family then stutters:
+
+```
+(held a signal) leads_to (opened a signal) fails in slots after a init 0 opens, a signal 1 held, a init 0 task died, a init 0 server fail stop, a signal 2 held, b init 0 opens, b init 0 task put ok, b init 0 server get (r : Report), b init 0 resolves; then forever: the family has finished
+```
+
+The cycle does not open `a signal`. That run is the counterexample. It is the same Elixir check, not a proof.
 
 The same book with `signal never held` in place of `signal held while earlier unresolved` is refused. Deleting the rule outright is `no rule for signal`. The shortest path is `a init 0 opens, a signal 1 opens`, and `a init 0` is still running. That `signal` is creation index 1.
 
@@ -195,7 +204,7 @@ family slots: slot per key of Event
 temporal echo-answered: holds in 8 reachable states, 8 transitions
 ```
 
-The family line names the meeting and the kind. It is not a count of states. A temporal line over a meeting counts that meeting: the distinct configurations reachable from its start, then the successor table, a left step, a right step, and the finish self-loop at a finished configuration. It is not the number of breadth-first parent links. Declarations of one meeting print the same pair, because the graph is built once. A temporal line over a family counts the family graph. That count is a model hypothesis, not data-independence: one retry, on the fixed script. The checker builds the graph once for the family, and that search is the cost of the check. The second count is that successor table: an arrival that opens or holds, a meeting step, a retry, a give-up, a resolve, and one self-loop when no instance can move. `always` declarations of one family print the same pair. `eventually` and `leads_to` over a family are `not yet decided` and refuse the book, and the family line is not printed. A refusal replaces the counts. A book with no family and no temporal declaration prints the lines it printed before this page existed. A `conforms to` line from an imported package stays after the success sentence. `--fuel` does not change a temporal verdict. The meeting refusals listed in [Limits](limits.md) are unchanged. A family has its own list there.
+The family line names the meeting and the kind. It is not a count of states. A temporal line over a meeting counts that meeting: the distinct configurations reachable from its start, then the successor table, a left step, a right step, and the finish self-loop at a finished configuration. It is not the number of breadth-first parent links. Declarations of one meeting print the same pair, because the graph is built once. A temporal line over a family counts the family graph. That count is a model hypothesis, not data-independence: one retry, on the fixed script. The checker builds the graph once for the family, and that search is the cost of the check. The second count is that successor table: an arrival that opens or holds, a meeting step, a retry, a give-up, a resolve, and one self-loop when no instance can move. `always`, `eventually`, and `leads_to` declarations of one family print the same pair when they hold. A refusal replaces the counts, and the family line is not printed. A refusal replaces the counts. A book with no family and no temporal declaration prints the lines it printed before this page existed. A `conforms to` line from an imported package stays after the success sentence. `--fuel` does not change a temporal verdict. The meeting refusals listed in [Limits](limits.md) are unchanged. A family has its own list there.
 
 Emit of a book is unchanged by appending a declaration whose meeting checks. Elixir, the state-machine backend, C, Rust, and assembly print the same programs. The ExUnit backend embeds the book hash in `@muro_book`, so that one line changes with the book bytes and the suite body does not. A committed module's header records the same hash, and `mix muro.gen --check` reports the target stale until `mix muro.gen` rewrites the header. That is the rule for any edit of a book.
 
