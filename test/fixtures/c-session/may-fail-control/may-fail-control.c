@@ -18,6 +18,10 @@ __attribute__((unused)) static muro__unit *muro__tt(void) { return &muro__tt_obj
 __attribute__((unused)) static Report muro__obj_Report_ok = { .muro__field_tag = 0, .muro__as = { .muro__unused = 0 } };
 
 __attribute__((unused)) static Report *ok(void) { return &muro__obj_Report_ok; }
+#ifndef muro__DROP
+#define muro__DROP(p) free(p)
+#endif
+
 #include <string.h>
 
 static void muro__sess_puts(char *buf, size_t n, size_t *i, const char *s) {
@@ -44,35 +48,35 @@ static int muro__sess_pay_1(const muro__sess_val *v, const muro__sess_st *st);
 static int muro__sess_pay_0(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   {
-  const char *tag;
-  if (!v || v->tag != MURO_SESS_DATA) return 0;
-  tag = muro__sess_src_Report(v->ctor);
-  if (!tag) return 0;
-  if (strcmp(tag, "ok") == 0) {
-    if (v->n != 0) return 0;
-    if (0 && !v->a) return 0;
-    
-    return 1;
+    const char *tag;
+    if (!v || v->tag != MURO_SESS_DATA) return 0;
+    tag = muro__sess_src_Report(v->ctor);
+    if (!tag) return 0;
+    if (strcmp(tag, "ok") == 0) {
+      if (v->n != 0) return 0;
+      if (0 && !v->a) return 0;
+
+      return 1;
+    }
+    return 0;
   }
-  return 0;
-}
 }
 
 static int muro__sess_pay_1(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   {
-  const char *tag;
-  if (!v || v->tag != MURO_SESS_DATA) return 0;
-  tag = muro__sess_src_Report(v->ctor);
-  if (!tag) return 0;
-  if (strcmp(tag, "ok") == 0) {
-    if (v->n != 0) return 0;
-    if (0 && !v->a) return 0;
-    
-    return 1;
+    const char *tag;
+    if (!v || v->tag != MURO_SESS_DATA) return 0;
+    tag = muro__sess_src_Report(v->ctor);
+    if (!tag) return 0;
+    if (strcmp(tag, "ok") == 0) {
+      if (v->n != 0) return 0;
+      if (0 && !v->a) return 0;
+
+      return 1;
+    }
+    return 0;
   }
-  return 0;
-}
 }
 
 static const char *muro__sess_end_of(uint16_t key) {
@@ -110,18 +114,18 @@ static void muro__sess_exp_at(uint16_t at, const muro__sess_st *st, char *buf, s
   if (!buf || n == 0) return;
   buf[0] = 0;
   switch (at) {
-  case 1:
-    muro__sess_puts(buf, n, &i, "send (data Report)");
-    break;
-  case 2:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 3:
-    muro__sess_puts(buf, n, &i, "recv (data Report)");
-    break;
-  case 4:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
+    case 1:
+      muro__sess_puts(buf, n, &i, "send (data Report)");
+      break;
+    case 2:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 3:
+      muro__sess_puts(buf, n, &i, "recv (data Report)");
+      break;
+    case 4:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
     default:
       muro__sess_puts(buf, n, &i, "done");
       break;
@@ -145,9 +149,9 @@ muro__sess_res muro__sess_taskzdwork_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 1;
-  
+
   res->state.at = 1;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -176,7 +180,7 @@ muro__sess_res muro__sess_taskzdwork_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   if (st.key != 1) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/may-fail-control.muro:7 session task-work: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -188,50 +192,49 @@ muro__sess_res muro__sess_taskzdwork_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   switch (st.at) {
-  case 1: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_0(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/may-fail-control.muro:7 session task-work: first send Report";
-  muro__sess_exp_at(1, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 2;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/may-fail-control.muro:7 session task-work: first send Report";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(1, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/may-fail-control.muro:7 session task-work: first send Report";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/may-fail-control.muro:7 session task-work: first send Report";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 1: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_0(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/may-fail-control.muro:7 session task-work: first send Report";
+        muro__sess_exp_at(1, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 2: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/may-fail-control.muro:7 session task-work: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 2;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/may-fail-control.muro:7 session task-work: first send Report";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(1, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/may-fail-control.muro:7 session task-work: first send Report";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/may-fail-control.muro:7 session task-work: first send Report";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 2: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/may-fail-control.muro:7 session task-work: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/may-fail-control.muro:7 session task-work: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -266,9 +269,9 @@ muro__sess_res muro__sess_serverzdwait_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 2;
-  
+
   res->state.at = 3;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -297,7 +300,7 @@ muro__sess_res muro__sess_serverzdwait_step(muro__sess_st st, int dir, const mur
     return out;
   }
   if (st.key != 2) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/may-fail-control.muro:8 session server-wait: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -309,50 +312,49 @@ muro__sess_res muro__sess_serverzdwait_step(muro__sess_st st, int dir, const mur
     return out;
   }
   switch (st.at) {
-  case 3: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_1(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/may-fail-control.muro:8 session server-wait: first recv Report";
-  muro__sess_exp_at(3, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 4;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/may-fail-control.muro:8 session server-wait: first recv Report";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(3, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/may-fail-control.muro:8 session server-wait: first recv Report";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/may-fail-control.muro:8 session server-wait: first recv Report";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 3: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_1(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/may-fail-control.muro:8 session server-wait: first recv Report";
+        muro__sess_exp_at(3, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 4: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/may-fail-control.muro:8 session server-wait: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 4;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/may-fail-control.muro:8 session server-wait: first recv Report";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(3, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/may-fail-control.muro:8 session server-wait: first recv Report";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/may-fail-control.muro:8 session server-wait: first recv Report";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 4: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/may-fail-control.muro:8 session server-wait: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/may-fail-control.muro:8 session server-wait: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -388,24 +390,24 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   (void)args;
   if (!name) return res;
   if (strcmp(name, "task-work") == 0 && n == 0) {
-  return muro__sess_taskzdwork_init();
-}
-if (strcmp(name, "server-wait") == 0 && n == 0) {
-  return muro__sess_serverzdwait_init();
-}
+    return muro__sess_taskzdwork_init();
+  }
+  if (strcmp(name, "server-wait") == 0 && n == 0) {
+    return muro__sess_serverzdwait_init();
+  }
   return res;
 }
 
 muro__sess_res muro__sess_step(const char *name, muro__sess_st st, int dir, const muro__sess_val *value) {
   muro__sess_res res;
   memset(&res, 0, sizeof res);
-  res.status = MURO_SESS_BAD;
+  res.status = MURO_SESS_UNEXPECTED;
   res.state = st;
   res.step = "";
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   if (!name) return res;
   if (strcmp(name, "task-work") == 0) return muro__sess_taskzdwork_step(st, dir, value);
-if (strcmp(name, "server-wait") == 0) return muro__sess_serverzdwait_step(st, dir, value);
+  if (strcmp(name, "server-wait") == 0) return muro__sess_serverzdwait_step(st, dir, value);
   return res;
 }
 
@@ -424,11 +426,11 @@ const char *muro__sess_at(const char *name, muro__sess_st st) {
 void muro__sess_expected(const char *name, muro__sess_st st, char *buf, size_t n) {
   if (!buf || n == 0) return;
   muro__sess_lit(buf, n, "done");
-if (name && strcmp(name, "task-work") == 0) {
+  if (name && strcmp(name, "task-work") == 0) {
     muro__sess_taskzdwork_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "server-wait") == 0) {
+  if (name && strcmp(name, "server-wait") == 0) {
     muro__sess_serverzdwait_expected(st, buf, n);
     return;
   }

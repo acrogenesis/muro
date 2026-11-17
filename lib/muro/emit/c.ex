@@ -154,9 +154,11 @@ defmodule Muro.Emit.C do
   Render `book` as `{header, source}` for a file stem such as `half_ok`.
 
   Run bodies are printed from `Muro.IR`. A refusal is that elaboration's.
+  `opts` are the ones `prepare/3` takes. `path:` is the file a session
+  error names.
   """
-  def render(book, stem) when is_list(book) and is_binary(stem) do
-    case prepare(book, stem) do
+  def render(book, stem, opts \\ []) when is_list(book) and is_binary(stem) and is_list(opts) do
+    case prepare(book, stem, opts) do
       {:ok, header, source, _sigs} -> {:ok, {header, source}}
       {:error, _} = err -> err
     end
@@ -258,19 +260,33 @@ defmodule Muro.Emit.C do
     end
   end
 
-  # The header's last `#endif` closes the file guard. An earlier one
-  # closes `muro__ALLOC`. The session declarations stay inside the guard.
-  defp splice_session(header, ""), do: header
+  # The header's last non-empty line is the file guard. An earlier
+  # `#endif` closes `muro__ALLOC`, and a comment may contain the same
+  # word. Session declarations go in front of that last line.
+  @doc false
+  def splice_session(header, ""), do: header
 
-  defp splice_session(header, sess) do
-    parts = String.split(header, "#endif\n")
+  def splice_session(header, sess) when is_binary(header) and is_binary(sess) do
+    lines = String.split(header, "\n")
 
-    if length(parts) >= 2 do
-      {front, [last]} = Enum.split(parts, -1)
-      Enum.join(front, "#endif\n") <> "\n" <> String.trim(sess) <> "\n#endif\n" <> last
-    else
-      header <> "\n" <> sess
+    case last_content(lines) do
+      {i, "#endif"} ->
+        {front, back} = Enum.split(lines, i)
+        # One blank line before the session block, then the file guard.
+        Enum.join(front, "\n") <> "\n\n" <> String.trim(sess) <> "\n" <> Enum.join(back, "\n")
+
+      _ ->
+        header <> "\n" <> sess
     end
+  end
+
+  defp last_content(lines) do
+    lines
+    |> Enum.with_index()
+    |> Enum.reverse()
+    |> Enum.find_value(fn {line, i} ->
+      if String.trim(line) != "", do: {i, String.trim(line)}
+    end)
   end
 
   defp compile_funs(funs, book, nm) do

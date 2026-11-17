@@ -18,6 +18,10 @@ __attribute__((unused)) static muro__unit *muro__tt(void) { return &muro__tt_obj
 muro__nat *kept(void) {
   return muro__zero();
 }
+#ifndef muro__DROP
+#define muro__DROP(p) free(p)
+#endif
+
 #include <string.h>
 
 static void muro__sess_puts(char *buf, size_t n, size_t *i, const char *s) {
@@ -93,33 +97,33 @@ static void muro__sess_exp_at(uint16_t at, const muro__sess_st *st, char *buf, s
   if (!buf || n == 0) return;
   buf[0] = 0;
   switch (at) {
-  case 1:
-    muro__sess_puts(buf, n, &i, "recv nat");
-    break;
-  case 2:
-    muro__sess_puts(buf, n, &i, "send nat");
-    break;
-  case 3:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 4:
-    muro__sess_puts(buf, n, &i, "recv nat");
-    break;
-  case 5:
-    muro__sess_puts(buf, n, &i, "send nat");
-    break;
-  case 6:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 7:
-    muro__sess_puts(buf, n, &i, "send nat");
-    break;
-  case 8:
-    muro__sess_puts(buf, n, &i, "send nat");
-    break;
-  case 9:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
+    case 1:
+      muro__sess_puts(buf, n, &i, "recv nat");
+      break;
+    case 2:
+      muro__sess_puts(buf, n, &i, "send nat");
+      break;
+    case 3:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 4:
+      muro__sess_puts(buf, n, &i, "recv nat");
+      break;
+    case 5:
+      muro__sess_puts(buf, n, &i, "send nat");
+      break;
+    case 6:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 7:
+      muro__sess_puts(buf, n, &i, "send nat");
+      break;
+    case 8:
+      muro__sess_puts(buf, n, &i, "send nat");
+      break;
+    case 9:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
     default:
       muro__sess_puts(buf, n, &i, "done");
       break;
@@ -143,9 +147,9 @@ muro__sess_res muro__sess_ping_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 1;
-  
+
   res->state.at = 1;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -174,7 +178,7 @@ muro__sess_res muro__sess_ping_step(muro__sess_st st, int dir, const muro__sess_
     return out;
   }
   if (st.key != 1) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/located.muro:5 session ping: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -186,84 +190,82 @@ muro__sess_res muro__sess_ping_step(muro__sess_st st, int dir, const muro__sess_
     return out;
   }
   switch (st.at) {
-  case 1: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_0(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/located.muro:5 session ping: first recv Nat";
-  muro__sess_exp_at(1, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 2;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:5 session ping: first recv Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(1, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:5 session ping: first recv Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/located.muro:5 session ping: first recv Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 1: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_0(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/located.muro:5 session ping: first recv Nat";
+        muro__sess_exp_at(1, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 2: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_0(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/located.muro:5 session ping: first send Nat";
-  muro__sess_exp_at(2, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 3;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:5 session ping: first send Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(2, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:5 session ping: first send Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/located.muro:5 session ping: first send Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 2;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:5 session ping: first recv Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(1, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:5 session ping: first recv Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/located.muro:5 session ping: first recv Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 2: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_0(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/located.muro:5 session ping: first send Nat";
+        muro__sess_exp_at(2, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 3: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/located.muro:5 session ping: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 3;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:5 session ping: first send Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(2, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:5 session ping: first send Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/located.muro:5 session ping: first send Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 3: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/located.muro:5 session ping: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/located.muro:5 session ping: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -298,9 +300,9 @@ muro__sess_res muro__sess_pingzddone_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 2;
-  
+
   res->state.at = 4;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -329,7 +331,7 @@ muro__sess_res muro__sess_pingzddone_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   if (st.key != 2) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/located.muro:7 session ping-done: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -341,84 +343,82 @@ muro__sess_res muro__sess_pingzddone_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   switch (st.at) {
-  case 4: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_1(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/located.muro:7 session ping-done: first recv Nat";
-  muro__sess_exp_at(4, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 5;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:7 session ping-done: first recv Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(4, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:7 session ping-done: first recv Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/located.muro:7 session ping-done: first recv Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 4: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_1(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/located.muro:7 session ping-done: first recv Nat";
+        muro__sess_exp_at(4, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 5: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_1(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/located.muro:7 session ping-done: first send Nat";
-  muro__sess_exp_at(5, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 6;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:7 session ping-done: first send Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(5, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:7 session ping-done: first send Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/located.muro:7 session ping-done: first send Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 5;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:7 session ping-done: first recv Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(4, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:7 session ping-done: first recv Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/located.muro:7 session ping-done: first recv Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 5: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_1(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/located.muro:7 session ping-done: first send Nat";
+        muro__sess_exp_at(5, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 6: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/located.muro:7 session ping-done: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 6;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:7 session ping-done: first send Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(5, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:7 session ping-done: first send Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/located.muro:7 session ping-done: first send Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 6: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/located.muro:7 session ping-done: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/located.muro:7 session ping-done: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -453,9 +453,9 @@ muro__sess_res muro__sess_sendzdthenzdsend_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 3;
-  
+
   res->state.at = 7;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -484,7 +484,7 @@ muro__sess_res muro__sess_sendzdthenzdsend_step(muro__sess_st st, int dir, const
     return out;
   }
   if (st.key != 3) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/located.muro:9 session send-then-send: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -496,84 +496,82 @@ muro__sess_res muro__sess_sendzdthenzdsend_step(muro__sess_st st, int dir, const
     return out;
   }
   switch (st.at) {
-  case 7: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_2(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/located.muro:9 session send-then-send: first send Nat";
-  muro__sess_exp_at(7, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 8;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:9 session send-then-send: first send Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(7, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:9 session send-then-send: first send Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/located.muro:9 session send-then-send: first send Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 7: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_2(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/located.muro:9 session send-then-send: first send Nat";
+        muro__sess_exp_at(7, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 8: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_2(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/located.muro:9 session send-then-send: second send Nat";
-  muro__sess_exp_at(8, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 9;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:9 session send-then-send: second send Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(8, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/located.muro:9 session send-then-send: second send Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/located.muro:9 session send-then-send: second send Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 8;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:9 session send-then-send: first send Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(7, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:9 session send-then-send: first send Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/located.muro:9 session send-then-send: first send Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 8: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_2(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/located.muro:9 session send-then-send: second send Nat";
+        muro__sess_exp_at(8, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 9: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/located.muro:9 session send-then-send: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 9;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:9 session send-then-send: second send Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(8, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/located.muro:9 session send-then-send: second send Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/located.muro:9 session send-then-send: second send Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 9: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/located.muro:9 session send-then-send: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/located.muro:9 session send-then-send: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -609,28 +607,28 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   (void)args;
   if (!name) return res;
   if (strcmp(name, "ping") == 0 && n == 0) {
-  return muro__sess_ping_init();
-}
-if (strcmp(name, "ping-done") == 0 && n == 0) {
-  return muro__sess_pingzddone_init();
-}
-if (strcmp(name, "send-then-send") == 0 && n == 0) {
-  return muro__sess_sendzdthenzdsend_init();
-}
+    return muro__sess_ping_init();
+  }
+  if (strcmp(name, "ping-done") == 0 && n == 0) {
+    return muro__sess_pingzddone_init();
+  }
+  if (strcmp(name, "send-then-send") == 0 && n == 0) {
+    return muro__sess_sendzdthenzdsend_init();
+  }
   return res;
 }
 
 muro__sess_res muro__sess_step(const char *name, muro__sess_st st, int dir, const muro__sess_val *value) {
   muro__sess_res res;
   memset(&res, 0, sizeof res);
-  res.status = MURO_SESS_BAD;
+  res.status = MURO_SESS_UNEXPECTED;
   res.state = st;
   res.step = "";
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   if (!name) return res;
   if (strcmp(name, "ping") == 0) return muro__sess_ping_step(st, dir, value);
-if (strcmp(name, "ping-done") == 0) return muro__sess_pingzddone_step(st, dir, value);
-if (strcmp(name, "send-then-send") == 0) return muro__sess_sendzdthenzdsend_step(st, dir, value);
+  if (strcmp(name, "ping-done") == 0) return muro__sess_pingzddone_step(st, dir, value);
+  if (strcmp(name, "send-then-send") == 0) return muro__sess_sendzdthenzdsend_step(st, dir, value);
   return res;
 }
 
@@ -651,15 +649,15 @@ const char *muro__sess_at(const char *name, muro__sess_st st) {
 void muro__sess_expected(const char *name, muro__sess_st st, char *buf, size_t n) {
   if (!buf || n == 0) return;
   muro__sess_lit(buf, n, "done");
-if (name && strcmp(name, "ping") == 0) {
+  if (name && strcmp(name, "ping") == 0) {
     muro__sess_ping_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "ping-done") == 0) {
+  if (name && strcmp(name, "ping-done") == 0) {
     muro__sess_pingzddone_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "send-then-send") == 0) {
+  if (name && strcmp(name, "send-then-send") == 0) {
     muro__sess_sendzdthenzdsend_expected(st, buf, n);
     return;
   }

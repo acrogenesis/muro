@@ -43,6 +43,10 @@ Bool *grant(Bool *b) {
   }
   return muro__t_0;
 }
+#ifndef muro__DROP
+#define muro__DROP(p) free(p)
+#endif
+
 #include <string.h>
 
 static void muro__sess_puts(char *buf, size_t n, size_t *i, const char *s) {
@@ -120,8 +124,8 @@ static int muro__sess_pay_51(const muro__sess_val *v, const muro__sess_st *st);
 static int muro__sess_pay_0(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_1(v->a, st)) return 0;
-return muro__sess_pay_32(v->b, st);
+  if (!muro__sess_pay_1(v->a, st)) return 0;
+  return muro__sess_pay_32(v->b, st);
 }
 
 static int muro__sess_pay_1(const muro__sess_val *v, const muro__sess_st *st) {
@@ -132,8 +136,8 @@ static int muro__sess_pay_1(const muro__sess_val *v, const muro__sess_st *st) {
 static int muro__sess_pay_2(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_3(v->a, st)) return 0;
-return muro__sess_pay_33(v->b, st);
+  if (!muro__sess_pay_3(v->a, st)) return 0;
+  return muro__sess_pay_33(v->b, st);
 }
 
 static int muro__sess_pay_3(const muro__sess_val *v, const muro__sess_st *st) {
@@ -144,89 +148,89 @@ static int muro__sess_pay_3(const muro__sess_val *v, const muro__sess_st *st) {
 static int muro__sess_pay_4(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_5(v->a, st)) return 0;
-return muro__sess_pay_34(v->b, st);
+  if (!muro__sess_pay_5(v->a, st)) return 0;
+  return muro__sess_pay_34(v->b, st);
 }
 
 static int muro__sess_pay_5(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   {
-  const char *tag;
-  if (!v || v->tag != MURO_SESS_DATA) return 0;
-  tag = muro__sess_src_Bool(v->ctor);
-  if (!tag) return 0;
-  if (strcmp(tag, "true") == 0) {
-    if (v->n != 0) return 0;
-    if (0 && !v->a) return 0;
-    
-    return 1;
+    const char *tag;
+    if (!v || v->tag != MURO_SESS_DATA) return 0;
+    tag = muro__sess_src_Bool(v->ctor);
+    if (!tag) return 0;
+    if (strcmp(tag, "true") == 0) {
+      if (v->n != 0) return 0;
+      if (0 && !v->a) return 0;
+
+      return 1;
+    }
+    if (strcmp(tag, "false") == 0) {
+      if (v->n != 0) return 0;
+      if (0 && !v->a) return 0;
+
+      return 1;
+    }
+    return 0;
   }
-  if (strcmp(tag, "false") == 0) {
-    if (v->n != 0) return 0;
-    if (0 && !v->a) return 0;
-    
-    return 1;
-  }
-  return 0;
-}
 }
 
 static int muro__sess_pay_6(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_7(v->a, st)) return 0;
-return muro__sess_pay_35(v->b, st);
+  if (!muro__sess_pay_7(v->a, st)) return 0;
+  return muro__sess_pay_35(v->b, st);
 }
 
 static int muro__sess_pay_7(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   {
-  const char *tag;
-  if (!v || v->tag != MURO_SESS_DATA) return 0;
-  tag = muro__sess_src_Bool(v->ctor);
-  if (!tag) return 0;
-  if (strcmp(tag, "true") == 0) {
-    if (v->n != 0) return 0;
-    if (0 && !v->a) return 0;
-    
-    return 1;
+    const char *tag;
+    if (!v || v->tag != MURO_SESS_DATA) return 0;
+    tag = muro__sess_src_Bool(v->ctor);
+    if (!tag) return 0;
+    if (strcmp(tag, "true") == 0) {
+      if (v->n != 0) return 0;
+      if (0 && !v->a) return 0;
+
+      return 1;
+    }
+    if (strcmp(tag, "false") == 0) {
+      if (v->n != 0) return 0;
+      if (0 && !v->a) return 0;
+
+      return 1;
+    }
+    return 0;
   }
-  if (strcmp(tag, "false") == 0) {
-    if (v->n != 0) return 0;
-    if (0 && !v->a) return 0;
-    
-    return 1;
-  }
-  return 0;
-}
 }
 
 static int muro__sess_pay_8(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_REC || v->n != 2 || !v->a || !v->names) return 0;
-{
-  uint8_t seen[2] = {0};
-  uint64_t i;
-  for (i = 0; i < v->n; i++) {
-    const char *nm = v->names[i];
-    int hit = -1;
-    if (!nm) return 0;
-    if (strcmp(nm, "x") == 0) hit = 0;
-    else if (strcmp(nm, "y") == 0) hit = 1;
-    else return 0;
-    if (hit == 0) {
-      if (seen[0]) return 0;
-      seen[0] = 1;
-      if (!muro__sess_pay_36(&v->a[i], st)) return 0;
-    }
-    if (hit == 1) {
-      if (seen[1]) return 0;
-      seen[1] = 1;
-      if (!muro__sess_pay_9(&v->a[i], st)) return 0;
+  {
+    uint8_t seen[2] = {0};
+    uint64_t i;
+    for (i = 0; i < v->n; i++) {
+      const char *nm = v->names[i];
+      int hit = -1;
+      if (!nm) return 0;
+      if (strcmp(nm, "x") == 0) hit = 0;
+      else if (strcmp(nm, "y") == 0) hit = 1;
+      else return 0;
+      if (hit == 0) {
+        if (seen[0]) return 0;
+        seen[0] = 1;
+        if (!muro__sess_pay_36(&v->a[i], st)) return 0;
+      }
+      if (hit == 1) {
+        if (seen[1]) return 0;
+        seen[1] = 1;
+        if (!muro__sess_pay_9(&v->a[i], st)) return 0;
+      }
     }
   }
-}
-return 1;
+  return 1;
 }
 
 static int muro__sess_pay_9(const muro__sess_val *v, const muro__sess_st *st) {
@@ -237,29 +241,29 @@ static int muro__sess_pay_9(const muro__sess_val *v, const muro__sess_st *st) {
 static int muro__sess_pay_10(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_REC || v->n != 2 || !v->a || !v->names) return 0;
-{
-  uint8_t seen[2] = {0};
-  uint64_t i;
-  for (i = 0; i < v->n; i++) {
-    const char *nm = v->names[i];
-    int hit = -1;
-    if (!nm) return 0;
-    if (strcmp(nm, "x") == 0) hit = 0;
-    else if (strcmp(nm, "y") == 0) hit = 1;
-    else return 0;
-    if (hit == 0) {
-      if (seen[0]) return 0;
-      seen[0] = 1;
-      if (!muro__sess_pay_37(&v->a[i], st)) return 0;
-    }
-    if (hit == 1) {
-      if (seen[1]) return 0;
-      seen[1] = 1;
-      if (!muro__sess_pay_11(&v->a[i], st)) return 0;
+  {
+    uint8_t seen[2] = {0};
+    uint64_t i;
+    for (i = 0; i < v->n; i++) {
+      const char *nm = v->names[i];
+      int hit = -1;
+      if (!nm) return 0;
+      if (strcmp(nm, "x") == 0) hit = 0;
+      else if (strcmp(nm, "y") == 0) hit = 1;
+      else return 0;
+      if (hit == 0) {
+        if (seen[0]) return 0;
+        seen[0] = 1;
+        if (!muro__sess_pay_37(&v->a[i], st)) return 0;
+      }
+      if (hit == 1) {
+        if (seen[1]) return 0;
+        seen[1] = 1;
+        if (!muro__sess_pay_11(&v->a[i], st)) return 0;
+      }
     }
   }
-}
-return 1;
+  return 1;
 }
 
 static int muro__sess_pay_11(const muro__sess_val *v, const muro__sess_st *st) {
@@ -270,8 +274,8 @@ static int muro__sess_pay_11(const muro__sess_val *v, const muro__sess_st *st) {
 static int muro__sess_pay_12(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_13(v->a, st)) return 0;
-return muro__sess_pay_38(v->b, st);
+  if (!muro__sess_pay_13(v->a, st)) return 0;
+  return muro__sess_pay_38(v->b, st);
 }
 
 static int muro__sess_pay_13(const muro__sess_val *v, const muro__sess_st *st) {
@@ -282,8 +286,8 @@ static int muro__sess_pay_13(const muro__sess_val *v, const muro__sess_st *st) {
 static int muro__sess_pay_14(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_15(v->a, st)) return 0;
-return muro__sess_pay_39(v->b, st);
+  if (!muro__sess_pay_15(v->a, st)) return 0;
+  return muro__sess_pay_39(v->b, st);
 }
 
 static int muro__sess_pay_15(const muro__sess_val *v, const muro__sess_st *st) {
@@ -294,8 +298,8 @@ static int muro__sess_pay_15(const muro__sess_val *v, const muro__sess_st *st) {
 static int muro__sess_pay_16(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_40(v->a, st)) return 0;
-return muro__sess_pay_17(v->b, st);
+  if (!muro__sess_pay_40(v->a, st)) return 0;
+  return muro__sess_pay_17(v->b, st);
 }
 
 static int muro__sess_pay_17(const muro__sess_val *v, const muro__sess_st *st) {
@@ -306,8 +310,8 @@ static int muro__sess_pay_17(const muro__sess_val *v, const muro__sess_st *st) {
 static int muro__sess_pay_18(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_41(v->a, st)) return 0;
-return muro__sess_pay_19(v->b, st);
+  if (!muro__sess_pay_41(v->a, st)) return 0;
+  return muro__sess_pay_19(v->b, st);
 }
 
 static int muro__sess_pay_19(const muro__sess_val *v, const muro__sess_st *st) {
@@ -318,106 +322,106 @@ static int muro__sess_pay_19(const muro__sess_val *v, const muro__sess_st *st) {
 static int muro__sess_pay_20(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_21(v->a, st)) return 0;
-return muro__sess_pay_42(v->b, st);
+  if (!muro__sess_pay_21(v->a, st)) return 0;
+  return muro__sess_pay_42(v->b, st);
 }
 
 static int muro__sess_pay_21(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_43(v->a, st)) return 0;
-return muro__sess_pay_42(v->b, st);
+  if (!muro__sess_pay_43(v->a, st)) return 0;
+  return muro__sess_pay_42(v->b, st);
 }
 
 static int muro__sess_pay_22(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_23(v->a, st)) return 0;
-return muro__sess_pay_44(v->b, st);
+  if (!muro__sess_pay_23(v->a, st)) return 0;
+  return muro__sess_pay_44(v->b, st);
 }
 
 static int muro__sess_pay_23(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_45(v->a, st)) return 0;
-return muro__sess_pay_44(v->b, st);
+  if (!muro__sess_pay_45(v->a, st)) return 0;
+  return muro__sess_pay_44(v->b, st);
 }
 
 static int muro__sess_pay_24(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_REC || v->n != 2 || !v->a || !v->names) return 0;
-{
-  uint8_t seen[2] = {0};
-  uint64_t i;
-  for (i = 0; i < v->n; i++) {
-    const char *nm = v->names[i];
-    int hit = -1;
-    if (!nm) return 0;
-    if (strcmp(nm, "x") == 0) hit = 0;
-    else if (strcmp(nm, "y") == 0) hit = 1;
-    else return 0;
-    if (hit == 0) {
-      if (seen[0]) return 0;
-      seen[0] = 1;
-      if (!muro__sess_pay_25(&v->a[i], st)) return 0;
-    }
-    if (hit == 1) {
-      if (seen[1]) return 0;
-      seen[1] = 1;
-      if (!muro__sess_pay_46(&v->a[i], st)) return 0;
+  {
+    uint8_t seen[2] = {0};
+    uint64_t i;
+    for (i = 0; i < v->n; i++) {
+      const char *nm = v->names[i];
+      int hit = -1;
+      if (!nm) return 0;
+      if (strcmp(nm, "x") == 0) hit = 0;
+      else if (strcmp(nm, "y") == 0) hit = 1;
+      else return 0;
+      if (hit == 0) {
+        if (seen[0]) return 0;
+        seen[0] = 1;
+        if (!muro__sess_pay_25(&v->a[i], st)) return 0;
+      }
+      if (hit == 1) {
+        if (seen[1]) return 0;
+        seen[1] = 1;
+        if (!muro__sess_pay_46(&v->a[i], st)) return 0;
+      }
     }
   }
-}
-return 1;
+  return 1;
 }
 
 static int muro__sess_pay_25(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_47(v->a, st)) return 0;
-return muro__sess_pay_46(v->b, st);
+  if (!muro__sess_pay_47(v->a, st)) return 0;
+  return muro__sess_pay_46(v->b, st);
 }
 
 static int muro__sess_pay_26(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_REC || v->n != 2 || !v->a || !v->names) return 0;
-{
-  uint8_t seen[2] = {0};
-  uint64_t i;
-  for (i = 0; i < v->n; i++) {
-    const char *nm = v->names[i];
-    int hit = -1;
-    if (!nm) return 0;
-    if (strcmp(nm, "x") == 0) hit = 0;
-    else if (strcmp(nm, "y") == 0) hit = 1;
-    else return 0;
-    if (hit == 0) {
-      if (seen[0]) return 0;
-      seen[0] = 1;
-      if (!muro__sess_pay_27(&v->a[i], st)) return 0;
-    }
-    if (hit == 1) {
-      if (seen[1]) return 0;
-      seen[1] = 1;
-      if (!muro__sess_pay_48(&v->a[i], st)) return 0;
+  {
+    uint8_t seen[2] = {0};
+    uint64_t i;
+    for (i = 0; i < v->n; i++) {
+      const char *nm = v->names[i];
+      int hit = -1;
+      if (!nm) return 0;
+      if (strcmp(nm, "x") == 0) hit = 0;
+      else if (strcmp(nm, "y") == 0) hit = 1;
+      else return 0;
+      if (hit == 0) {
+        if (seen[0]) return 0;
+        seen[0] = 1;
+        if (!muro__sess_pay_27(&v->a[i], st)) return 0;
+      }
+      if (hit == 1) {
+        if (seen[1]) return 0;
+        seen[1] = 1;
+        if (!muro__sess_pay_48(&v->a[i], st)) return 0;
+      }
     }
   }
-}
-return 1;
+  return 1;
 }
 
 static int muro__sess_pay_27(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_49(v->a, st)) return 0;
-return muro__sess_pay_48(v->b, st);
+  if (!muro__sess_pay_49(v->a, st)) return 0;
+  return muro__sess_pay_48(v->b, st);
 }
 
 static int muro__sess_pay_28(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_29(v->a, st)) return 0;
-return muro__sess_pay_50(v->b, st);
+  if (!muro__sess_pay_29(v->a, st)) return 0;
+  return muro__sess_pay_50(v->b, st);
 }
 
 static int muro__sess_pay_29(const muro__sess_val *v, const muro__sess_st *st) {
@@ -428,8 +432,8 @@ static int muro__sess_pay_29(const muro__sess_val *v, const muro__sess_st *st) {
 static int muro__sess_pay_30(const muro__sess_val *v, const muro__sess_st *st) {
   (void)st;
   if (!v || v->tag != MURO_SESS_PAIR || !v->a || !v->b) return 0;
-if (!muro__sess_pay_31(v->a, st)) return 0;
-return muro__sess_pay_51(v->b, st);
+  if (!muro__sess_pay_31(v->a, st)) return 0;
+  return muro__sess_pay_51(v->b, st);
 }
 
 static int muro__sess_pay_31(const muro__sess_val *v, const muro__sess_st *st) {
@@ -642,150 +646,150 @@ static void muro__sess_exp_at(uint16_t at, const muro__sess_st *st, char *buf, s
   if (!buf || n == 0) return;
   buf[0] = 0;
   switch (at) {
-  case 1:
-    muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
-    break;
-  case 2:
-    muro__sess_puts(buf, n, &i, "send nat");
-    break;
-  case 3:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 4:
-    muro__sess_puts(buf, n, &i, "send (pair nat bit)");
-    break;
-  case 5:
-    muro__sess_puts(buf, n, &i, "recv nat");
-    break;
-  case 6:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 7:
-    muro__sess_puts(buf, n, &i, "recv (pair (data Bool) bit)");
-    break;
-  case 8:
-    muro__sess_puts(buf, n, &i, "send (data Bool)");
-    break;
-  case 9:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 10:
-    muro__sess_puts(buf, n, &i, "send (pair (data Bool) bit)");
-    break;
-  case 11:
-    muro__sess_puts(buf, n, &i, "recv (data Bool)");
-    break;
-  case 12:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 13:
-    muro__sess_puts(buf, n, &i, "recv (record x nat y bit)");
-    break;
-  case 14:
-    muro__sess_puts(buf, n, &i, "send bit");
-    break;
-  case 15:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 16:
-    muro__sess_puts(buf, n, &i, "send (record x nat y bit)");
-    break;
-  case 17:
-    muro__sess_puts(buf, n, &i, "recv bit");
-    break;
-  case 18:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 19:
-    muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
-    break;
-  case 20:
-    muro__sess_puts(buf, n, &i, "send nat");
-    break;
-  case 21:
-    muro__sess_puts(buf, n, &i, "send nat");
-    break;
-  case 22:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 23:
-    muro__sess_puts(buf, n, &i, "send (pair nat bit)");
-    break;
-  case 24:
-    muro__sess_puts(buf, n, &i, "recv nat");
-    break;
-  case 25:
-    muro__sess_puts(buf, n, &i, "recv nat");
-    break;
-  case 26:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 27:
-    muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
-    break;
-  case 28:
-    muro__sess_puts(buf, n, &i, "send bit");
-    break;
-  case 29:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 30:
-    muro__sess_puts(buf, n, &i, "send (pair nat bit)");
-    break;
-  case 31:
-    muro__sess_puts(buf, n, &i, "recv bit");
-    break;
-  case 32:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 33:
-    muro__sess_puts(buf, n, &i, "recv (pair (pair nat bit) bit)");
-    break;
-  case 34:
-    muro__sess_puts(buf, n, &i, "send (pair nat bit)");
-    break;
-  case 35:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 36:
-    muro__sess_puts(buf, n, &i, "send (pair (pair nat bit) bit)");
-    break;
-  case 37:
-    muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
-    break;
-  case 38:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 39:
-    muro__sess_puts(buf, n, &i, "recv (record x (pair nat bit) y bit)");
-    break;
-  case 40:
-    muro__sess_puts(buf, n, &i, "send (pair nat bit)");
-    break;
-  case 41:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 42:
-    muro__sess_puts(buf, n, &i, "send (record x (pair nat bit) y bit)");
-    break;
-  case 43:
-    muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
-    break;
-  case 44:
-    muro__sess_puts(buf, n, &i, "done");
-    break;
-  case 45:
-    muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
-    break;
-  case 46:
-    muro__sess_puts(buf, n, &i, "send nat");
-    break;
-  case 47:
-    muro__sess_puts(buf, n, &i, "send (pair nat bit)");
-    break;
-  case 48:
-    muro__sess_puts(buf, n, &i, "recv nat");
-    break;
+    case 1:
+      muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
+      break;
+    case 2:
+      muro__sess_puts(buf, n, &i, "send nat");
+      break;
+    case 3:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 4:
+      muro__sess_puts(buf, n, &i, "send (pair nat bit)");
+      break;
+    case 5:
+      muro__sess_puts(buf, n, &i, "recv nat");
+      break;
+    case 6:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 7:
+      muro__sess_puts(buf, n, &i, "recv (pair (data Bool) bit)");
+      break;
+    case 8:
+      muro__sess_puts(buf, n, &i, "send (data Bool)");
+      break;
+    case 9:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 10:
+      muro__sess_puts(buf, n, &i, "send (pair (data Bool) bit)");
+      break;
+    case 11:
+      muro__sess_puts(buf, n, &i, "recv (data Bool)");
+      break;
+    case 12:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 13:
+      muro__sess_puts(buf, n, &i, "recv (record x nat y bit)");
+      break;
+    case 14:
+      muro__sess_puts(buf, n, &i, "send bit");
+      break;
+    case 15:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 16:
+      muro__sess_puts(buf, n, &i, "send (record x nat y bit)");
+      break;
+    case 17:
+      muro__sess_puts(buf, n, &i, "recv bit");
+      break;
+    case 18:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 19:
+      muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
+      break;
+    case 20:
+      muro__sess_puts(buf, n, &i, "send nat");
+      break;
+    case 21:
+      muro__sess_puts(buf, n, &i, "send nat");
+      break;
+    case 22:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 23:
+      muro__sess_puts(buf, n, &i, "send (pair nat bit)");
+      break;
+    case 24:
+      muro__sess_puts(buf, n, &i, "recv nat");
+      break;
+    case 25:
+      muro__sess_puts(buf, n, &i, "recv nat");
+      break;
+    case 26:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 27:
+      muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
+      break;
+    case 28:
+      muro__sess_puts(buf, n, &i, "send bit");
+      break;
+    case 29:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 30:
+      muro__sess_puts(buf, n, &i, "send (pair nat bit)");
+      break;
+    case 31:
+      muro__sess_puts(buf, n, &i, "recv bit");
+      break;
+    case 32:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 33:
+      muro__sess_puts(buf, n, &i, "recv (pair (pair nat bit) bit)");
+      break;
+    case 34:
+      muro__sess_puts(buf, n, &i, "send (pair nat bit)");
+      break;
+    case 35:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 36:
+      muro__sess_puts(buf, n, &i, "send (pair (pair nat bit) bit)");
+      break;
+    case 37:
+      muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
+      break;
+    case 38:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 39:
+      muro__sess_puts(buf, n, &i, "recv (record x (pair nat bit) y bit)");
+      break;
+    case 40:
+      muro__sess_puts(buf, n, &i, "send (pair nat bit)");
+      break;
+    case 41:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 42:
+      muro__sess_puts(buf, n, &i, "send (record x (pair nat bit) y bit)");
+      break;
+    case 43:
+      muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
+      break;
+    case 44:
+      muro__sess_puts(buf, n, &i, "done");
+      break;
+    case 45:
+      muro__sess_puts(buf, n, &i, "recv (pair nat bit)");
+      break;
+    case 46:
+      muro__sess_puts(buf, n, &i, "send nat");
+      break;
+    case 47:
+      muro__sess_puts(buf, n, &i, "send (pair nat bit)");
+      break;
+    case 48:
+      muro__sess_puts(buf, n, &i, "recv nat");
+      break;
     default:
       muro__sess_puts(buf, n, &i, "done");
       break;
@@ -809,9 +813,9 @@ muro__sess_res muro__sess_pairzdping_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 1;
-  
+
   res->state.at = 1;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -840,7 +844,7 @@ muro__sess_res muro__sess_pairzdping_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   if (st.key != 1) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:14 session pair-ping: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -852,84 +856,82 @@ muro__sess_res muro__sess_pairzdping_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   switch (st.at) {
-  case 1: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_0(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:14 session pair-ping: first recv (Nat * Bit)";
-  muro__sess_exp_at(1, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 2;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:14 session pair-ping: first recv (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(1, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:14 session pair-ping: first recv (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:14 session pair-ping: first recv (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 1: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_0(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:14 session pair-ping: first recv (Nat * Bit)";
+        muro__sess_exp_at(1, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 2: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_1(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:14 session pair-ping: first send Nat";
-  muro__sess_exp_at(2, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 3;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:14 session pair-ping: first send Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(2, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:14 session pair-ping: first send Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:14 session pair-ping: first send Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 2;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:14 session pair-ping: first recv (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(1, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:14 session pair-ping: first recv (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:14 session pair-ping: first recv (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 2: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_1(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:14 session pair-ping: first send Nat";
+        muro__sess_exp_at(2, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 3: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:14 session pair-ping: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 3;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:14 session pair-ping: first send Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(2, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:14 session pair-ping: first send Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:14 session pair-ping: first send Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 3: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:14 session pair-ping: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:14 session pair-ping: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -964,9 +966,9 @@ muro__sess_res muro__sess_pairzdpong_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 2;
-  
+
   res->state.at = 4;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -995,7 +997,7 @@ muro__sess_res muro__sess_pairzdpong_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   if (st.key != 2) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:16 session pair-pong: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -1007,84 +1009,82 @@ muro__sess_res muro__sess_pairzdpong_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   switch (st.at) {
-  case 4: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_2(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:16 session pair-pong: first send (Nat * Bit)";
-  muro__sess_exp_at(4, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 5;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:16 session pair-pong: first send (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(4, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:16 session pair-pong: first send (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:16 session pair-pong: first send (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 4: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_2(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:16 session pair-pong: first send (Nat * Bit)";
+        muro__sess_exp_at(4, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 5: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_3(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:16 session pair-pong: first recv Nat";
-  muro__sess_exp_at(5, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 6;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:16 session pair-pong: first recv Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(5, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:16 session pair-pong: first recv Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:16 session pair-pong: first recv Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 5;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:16 session pair-pong: first send (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(4, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:16 session pair-pong: first send (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:16 session pair-pong: first send (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 5: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_3(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:16 session pair-pong: first recv Nat";
+        muro__sess_exp_at(5, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 6: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:16 session pair-pong: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 6;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:16 session pair-pong: first recv Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(5, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:16 session pair-pong: first recv Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:16 session pair-pong: first recv Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 6: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:16 session pair-pong: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:16 session pair-pong: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -1119,9 +1119,9 @@ muro__sess_res muro__sess_grantzdping_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 3;
-  
+
   res->state.at = 7;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -1150,7 +1150,7 @@ muro__sess_res muro__sess_grantzdping_step(muro__sess_st st, int dir, const muro
     return out;
   }
   if (st.key != 3) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:31 session grant-ping: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -1162,84 +1162,82 @@ muro__sess_res muro__sess_grantzdping_step(muro__sess_st st, int dir, const muro
     return out;
   }
   switch (st.at) {
-  case 7: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_4(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:31 session grant-ping: first recv (Bool * Bit)";
-  muro__sess_exp_at(7, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 8;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:31 session grant-ping: first recv (Bool * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(7, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:31 session grant-ping: first recv (Bool * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:31 session grant-ping: first recv (Bool * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 7: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_4(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:31 session grant-ping: first recv (Bool * Bit)";
+        muro__sess_exp_at(7, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 8: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_5(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:31 session grant-ping: first send Bool";
-  muro__sess_exp_at(8, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 9;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:31 session grant-ping: first send Bool";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(8, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:31 session grant-ping: first send Bool";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:31 session grant-ping: first send Bool";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 8;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:31 session grant-ping: first recv (Bool * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(7, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:31 session grant-ping: first recv (Bool * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:31 session grant-ping: first recv (Bool * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 8: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_5(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:31 session grant-ping: first send Bool";
+        muro__sess_exp_at(8, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 9: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:31 session grant-ping: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 9;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:31 session grant-ping: first send Bool";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(8, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:31 session grant-ping: first send Bool";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:31 session grant-ping: first send Bool";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 9: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:31 session grant-ping: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:31 session grant-ping: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -1274,9 +1272,9 @@ muro__sess_res muro__sess_grantzdpong_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 4;
-  
+
   res->state.at = 10;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -1305,7 +1303,7 @@ muro__sess_res muro__sess_grantzdpong_step(muro__sess_st st, int dir, const muro
     return out;
   }
   if (st.key != 4) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:33 session grant-pong: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -1317,84 +1315,82 @@ muro__sess_res muro__sess_grantzdpong_step(muro__sess_st st, int dir, const muro
     return out;
   }
   switch (st.at) {
-  case 10: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_6(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:33 session grant-pong: first send (Bool * Bit)";
-  muro__sess_exp_at(10, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 11;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:33 session grant-pong: first send (Bool * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(10, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:33 session grant-pong: first send (Bool * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:33 session grant-pong: first send (Bool * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 10: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_6(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:33 session grant-pong: first send (Bool * Bit)";
+        muro__sess_exp_at(10, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 11: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_7(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:33 session grant-pong: first recv Bool";
-  muro__sess_exp_at(11, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 12;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:33 session grant-pong: first recv Bool";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(11, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:33 session grant-pong: first recv Bool";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:33 session grant-pong: first recv Bool";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 11;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:33 session grant-pong: first send (Bool * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(10, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:33 session grant-pong: first send (Bool * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:33 session grant-pong: first send (Bool * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 11: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_7(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:33 session grant-pong: first recv Bool";
+        muro__sess_exp_at(11, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 12: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:33 session grant-pong: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 12;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:33 session grant-pong: first recv Bool";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(11, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:33 session grant-pong: first recv Bool";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:33 session grant-pong: first recv Bool";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 12: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:33 session grant-pong: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:33 session grant-pong: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -1429,9 +1425,9 @@ muro__sess_res muro__sess_reczdping_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 5;
-  
+
   res->state.at = 13;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -1460,7 +1456,7 @@ muro__sess_res muro__sess_reczdping_step(muro__sess_st st, int dir, const muro__
     return out;
   }
   if (st.key != 5) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:46 session rec-ping: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -1472,84 +1468,82 @@ muro__sess_res muro__sess_reczdping_step(muro__sess_st st, int dir, const muro__
     return out;
   }
   switch (st.at) {
-  case 13: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_8(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:46 session rec-ping: first recv {x : Nat, y : Bit}";
-  muro__sess_exp_at(13, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 14;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:46 session rec-ping: first recv {x : Nat, y : Bit}";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(13, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:46 session rec-ping: first recv {x : Nat, y : Bit}";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:46 session rec-ping: first recv {x : Nat, y : Bit}";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 13: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_8(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:46 session rec-ping: first recv {x : Nat, y : Bit}";
+        muro__sess_exp_at(13, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 14: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_9(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:46 session rec-ping: first send Bit";
-  muro__sess_exp_at(14, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 15;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:46 session rec-ping: first send Bit";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(14, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:46 session rec-ping: first send Bit";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:46 session rec-ping: first send Bit";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 14;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:46 session rec-ping: first recv {x : Nat, y : Bit}";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(13, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:46 session rec-ping: first recv {x : Nat, y : Bit}";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:46 session rec-ping: first recv {x : Nat, y : Bit}";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 14: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_9(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:46 session rec-ping: first send Bit";
+        muro__sess_exp_at(14, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 15: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:46 session rec-ping: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 15;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:46 session rec-ping: first send Bit";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(14, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:46 session rec-ping: first send Bit";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:46 session rec-ping: first send Bit";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 15: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:46 session rec-ping: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:46 session rec-ping: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -1584,9 +1578,9 @@ muro__sess_res muro__sess_reczdpong_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 6;
-  
+
   res->state.at = 16;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -1615,7 +1609,7 @@ muro__sess_res muro__sess_reczdpong_step(muro__sess_st st, int dir, const muro__
     return out;
   }
   if (st.key != 6) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:48 session rec-pong: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -1627,84 +1621,82 @@ muro__sess_res muro__sess_reczdpong_step(muro__sess_st st, int dir, const muro__
     return out;
   }
   switch (st.at) {
-  case 16: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_10(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:48 session rec-pong: first send {x : Nat, y : Bit}";
-  muro__sess_exp_at(16, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 17;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:48 session rec-pong: first send {x : Nat, y : Bit}";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(16, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:48 session rec-pong: first send {x : Nat, y : Bit}";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:48 session rec-pong: first send {x : Nat, y : Bit}";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 16: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_10(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:48 session rec-pong: first send {x : Nat, y : Bit}";
+        muro__sess_exp_at(16, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 17: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_11(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:48 session rec-pong: first recv Bit";
-  muro__sess_exp_at(17, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 18;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:48 session rec-pong: first recv Bit";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(17, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:48 session rec-pong: first recv Bit";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:48 session rec-pong: first recv Bit";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 17;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:48 session rec-pong: first send {x : Nat, y : Bit}";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(16, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:48 session rec-pong: first send {x : Nat, y : Bit}";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:48 session rec-pong: first send {x : Nat, y : Bit}";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 17: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_11(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:48 session rec-pong: first recv Bit";
+        muro__sess_exp_at(17, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 18: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:48 session rec-pong: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 18;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:48 session rec-pong: first recv Bit";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(17, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:48 session rec-pong: first recv Bit";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:48 session rec-pong: first recv Bit";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 18: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:48 session rec-pong: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:48 session rec-pong: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -1739,9 +1731,9 @@ muro__sess_res muro__sess_linzdping_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 7;
-  
+
   res->state.at = 19;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -1770,7 +1762,7 @@ muro__sess_res muro__sess_linzdping_step(muro__sess_st st, int dir, const muro__
     return out;
   }
   if (st.key != 7) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:61 session lin-ping: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -1782,118 +1774,115 @@ muro__sess_res muro__sess_linzdping_step(muro__sess_st st, int dir, const muro__
     return out;
   }
   switch (st.at) {
-  case 19: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_12(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:61 session lin-ping: first recv (Nat * Bit)";
-  muro__sess_exp_at(19, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 20;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:61 session lin-ping: first recv (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(19, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:61 session lin-ping: first recv (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:61 session lin-ping: first recv (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 19: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_12(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:61 session lin-ping: first recv (Nat * Bit)";
+        muro__sess_exp_at(19, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 20: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_13(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:61 session lin-ping: first send Nat";
-  muro__sess_exp_at(20, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 21;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:61 session lin-ping: first send Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(20, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:61 session lin-ping: first send Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:61 session lin-ping: first send Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 20;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:61 session lin-ping: first recv (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(19, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:61 session lin-ping: first recv (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:61 session lin-ping: first recv (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 20: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_13(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:61 session lin-ping: first send Nat";
+        muro__sess_exp_at(20, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 21: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_13(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:61 session lin-ping: second send Nat";
-  muro__sess_exp_at(21, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 22;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:61 session lin-ping: second send Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(21, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:61 session lin-ping: second send Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:61 session lin-ping: second send Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 21;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:61 session lin-ping: first send Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(20, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:61 session lin-ping: first send Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:61 session lin-ping: first send Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 21: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_13(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:61 session lin-ping: second send Nat";
+        muro__sess_exp_at(21, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 22: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:61 session lin-ping: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 22;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:61 session lin-ping: second send Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(21, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:61 session lin-ping: second send Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:61 session lin-ping: second send Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 22: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:61 session lin-ping: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:61 session lin-ping: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -1928,9 +1917,9 @@ muro__sess_res muro__sess_linzdpong_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 8;
-  
+
   res->state.at = 23;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -1959,7 +1948,7 @@ muro__sess_res muro__sess_linzdpong_step(muro__sess_st st, int dir, const muro__
     return out;
   }
   if (st.key != 8) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:63 session lin-pong: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -1971,118 +1960,115 @@ muro__sess_res muro__sess_linzdpong_step(muro__sess_st st, int dir, const muro__
     return out;
   }
   switch (st.at) {
-  case 23: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_14(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:63 session lin-pong: first send (Nat * Bit)";
-  muro__sess_exp_at(23, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 24;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:63 session lin-pong: first send (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(23, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:63 session lin-pong: first send (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:63 session lin-pong: first send (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 23: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_14(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:63 session lin-pong: first send (Nat * Bit)";
+        muro__sess_exp_at(23, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 24: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_15(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:63 session lin-pong: first recv Nat";
-  muro__sess_exp_at(24, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 25;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:63 session lin-pong: first recv Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(24, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:63 session lin-pong: first recv Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:63 session lin-pong: first recv Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 24;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:63 session lin-pong: first send (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(23, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:63 session lin-pong: first send (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:63 session lin-pong: first send (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 24: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_15(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:63 session lin-pong: first recv Nat";
+        muro__sess_exp_at(24, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 25: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_15(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:63 session lin-pong: second recv Nat";
-  muro__sess_exp_at(25, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 26;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:63 session lin-pong: second recv Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(25, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:63 session lin-pong: second recv Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:63 session lin-pong: second recv Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 25;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:63 session lin-pong: first recv Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(24, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:63 session lin-pong: first recv Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:63 session lin-pong: first recv Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 25: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_15(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:63 session lin-pong: second recv Nat";
+        muro__sess_exp_at(25, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 26: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:63 session lin-pong: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 26;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:63 session lin-pong: second recv Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(25, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:63 session lin-pong: second recv Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:63 session lin-pong: second recv Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 26: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:63 session lin-pong: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:63 session lin-pong: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -2117,9 +2103,9 @@ muro__sess_res muro__sess_shade_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 9;
-  
+
   res->state.at = 27;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -2148,7 +2134,7 @@ muro__sess_res muro__sess_shade_step(muro__sess_st st, int dir, const muro__sess
     return out;
   }
   if (st.key != 9) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:76 session shade: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -2160,84 +2146,82 @@ muro__sess_res muro__sess_shade_step(muro__sess_st st, int dir, const muro__sess
     return out;
   }
   switch (st.at) {
-  case 27: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_16(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:76 session shade: first recv (Nat * Bit)";
-  muro__sess_exp_at(27, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 28;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:76 session shade: first recv (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(27, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:76 session shade: first recv (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:76 session shade: first recv (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 27: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_16(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:76 session shade: first recv (Nat * Bit)";
+        muro__sess_exp_at(27, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 28: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_17(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:76 session shade: first send Bit";
-  muro__sess_exp_at(28, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 29;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:76 session shade: first send Bit";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(28, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:76 session shade: first send Bit";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:76 session shade: first send Bit";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 28;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:76 session shade: first recv (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(27, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:76 session shade: first recv (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:76 session shade: first recv (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 28: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_17(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:76 session shade: first send Bit";
+        muro__sess_exp_at(28, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 29: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:76 session shade: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 29;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:76 session shade: first send Bit";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(28, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:76 session shade: first send Bit";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:76 session shade: first send Bit";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 29: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:76 session shade: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:76 session shade: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -2272,9 +2256,9 @@ muro__sess_res muro__sess_shadezdback_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 10;
-  
+
   res->state.at = 30;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -2303,7 +2287,7 @@ muro__sess_res muro__sess_shadezdback_step(muro__sess_st st, int dir, const muro
     return out;
   }
   if (st.key != 10) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:78 session shade-back: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -2315,84 +2299,82 @@ muro__sess_res muro__sess_shadezdback_step(muro__sess_st st, int dir, const muro
     return out;
   }
   switch (st.at) {
-  case 30: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_18(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:78 session shade-back: first send (Nat * Bit)";
-  muro__sess_exp_at(30, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 31;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:78 session shade-back: first send (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(30, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:78 session shade-back: first send (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:78 session shade-back: first send (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 30: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_18(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:78 session shade-back: first send (Nat * Bit)";
+        muro__sess_exp_at(30, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 31: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_19(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:78 session shade-back: first recv Bit";
-  muro__sess_exp_at(31, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 32;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:78 session shade-back: first recv Bit";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(31, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:78 session shade-back: first recv Bit";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:78 session shade-back: first recv Bit";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 31;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:78 session shade-back: first send (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(30, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:78 session shade-back: first send (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:78 session shade-back: first send (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 31: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_19(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:78 session shade-back: first recv Bit";
+        muro__sess_exp_at(31, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 32: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:78 session shade-back: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 32;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:78 session shade-back: first recv Bit";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(31, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:78 session shade-back: first recv Bit";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:78 session shade-back: first recv Bit";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 32: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:78 session shade-back: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:78 session shade-back: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -2427,9 +2409,9 @@ muro__sess_res muro__sess_wrap_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 11;
-  
+
   res->state.at = 33;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -2458,7 +2440,7 @@ muro__sess_res muro__sess_wrap_step(muro__sess_st st, int dir, const muro__sess_
     return out;
   }
   if (st.key != 11) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:89 session wrap: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -2470,84 +2452,82 @@ muro__sess_res muro__sess_wrap_step(muro__sess_st st, int dir, const muro__sess_
     return out;
   }
   switch (st.at) {
-  case 33: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_20(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:89 session wrap: first recv ((Nat * Bit) * Bit)";
-  muro__sess_exp_at(33, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 34;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:89 session wrap: first recv ((Nat * Bit) * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(33, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:89 session wrap: first recv ((Nat * Bit) * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:89 session wrap: first recv ((Nat * Bit) * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 33: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_20(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:89 session wrap: first recv ((Nat * Bit) * Bit)";
+        muro__sess_exp_at(33, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 34: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_21(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:89 session wrap: first send (Nat * Bit)";
-  muro__sess_exp_at(34, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 35;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:89 session wrap: first send (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(34, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:89 session wrap: first send (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:89 session wrap: first send (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 34;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:89 session wrap: first recv ((Nat * Bit) * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(33, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:89 session wrap: first recv ((Nat * Bit) * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:89 session wrap: first recv ((Nat * Bit) * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 34: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_21(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:89 session wrap: first send (Nat * Bit)";
+        muro__sess_exp_at(34, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 35: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:89 session wrap: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 35;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:89 session wrap: first send (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(34, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:89 session wrap: first send (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:89 session wrap: first send (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 35: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:89 session wrap: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:89 session wrap: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -2582,9 +2562,9 @@ muro__sess_res muro__sess_wrapzdback_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 12;
-  
+
   res->state.at = 36;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -2613,7 +2593,7 @@ muro__sess_res muro__sess_wrapzdback_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   if (st.key != 12) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:91 session wrap-back: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -2625,84 +2605,82 @@ muro__sess_res muro__sess_wrapzdback_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   switch (st.at) {
-  case 36: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_22(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:91 session wrap-back: first send ((Nat * Bit) * Bit)";
-  muro__sess_exp_at(36, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 37;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:91 session wrap-back: first send ((Nat * Bit) * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(36, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:91 session wrap-back: first send ((Nat * Bit) * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:91 session wrap-back: first send ((Nat * Bit) * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 36: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_22(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:91 session wrap-back: first send ((Nat * Bit) * Bit)";
+        muro__sess_exp_at(36, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 37: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_23(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:91 session wrap-back: first recv (Nat * Bit)";
-  muro__sess_exp_at(37, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 38;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:91 session wrap-back: first recv (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(37, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:91 session wrap-back: first recv (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:91 session wrap-back: first recv (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 37;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:91 session wrap-back: first send ((Nat * Bit) * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(36, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:91 session wrap-back: first send ((Nat * Bit) * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:91 session wrap-back: first send ((Nat * Bit) * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 37: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_23(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:91 session wrap-back: first recv (Nat * Bit)";
+        muro__sess_exp_at(37, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 38: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:91 session wrap-back: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 38;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:91 session wrap-back: first recv (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(37, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:91 session wrap-back: first recv (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:91 session wrap-back: first recv (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 38: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:91 session wrap-back: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:91 session wrap-back: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -2737,9 +2715,9 @@ muro__sess_res muro__sess_box_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 13;
-  
+
   res->state.at = 39;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -2768,7 +2746,7 @@ muro__sess_res muro__sess_box_step(muro__sess_st st, int dir, const muro__sess_v
     return out;
   }
   if (st.key != 13) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:102 session box: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -2780,84 +2758,82 @@ muro__sess_res muro__sess_box_step(muro__sess_st st, int dir, const muro__sess_v
     return out;
   }
   switch (st.at) {
-  case 39: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_24(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:102 session box: first recv {x : Nat * Bit, y : Bit}";
-  muro__sess_exp_at(39, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 40;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:102 session box: first recv {x : Nat * Bit, y : Bit}";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(39, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:102 session box: first recv {x : Nat * Bit, y : Bit}";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:102 session box: first recv {x : Nat * Bit, y : Bit}";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 39: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_24(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:102 session box: first recv {x : Nat * Bit, y : Bit}";
+        muro__sess_exp_at(39, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 40: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_25(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:102 session box: first send (Nat * Bit)";
-  muro__sess_exp_at(40, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 41;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:102 session box: first send (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(40, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:102 session box: first send (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:102 session box: first send (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 40;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:102 session box: first recv {x : Nat * Bit, y : Bit}";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(39, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:102 session box: first recv {x : Nat * Bit, y : Bit}";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:102 session box: first recv {x : Nat * Bit, y : Bit}";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 40: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_25(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:102 session box: first send (Nat * Bit)";
+        muro__sess_exp_at(40, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 41: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:102 session box: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 41;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:102 session box: first send (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(40, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:102 session box: first send (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:102 session box: first send (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 41: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:102 session box: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:102 session box: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -2892,9 +2868,9 @@ muro__sess_res muro__sess_boxzdback_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 14;
-  
+
   res->state.at = 42;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -2923,7 +2899,7 @@ muro__sess_res muro__sess_boxzdback_step(muro__sess_st st, int dir, const muro__
     return out;
   }
   if (st.key != 14) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:104 session box-back: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -2935,84 +2911,82 @@ muro__sess_res muro__sess_boxzdback_step(muro__sess_st st, int dir, const muro__
     return out;
   }
   switch (st.at) {
-  case 42: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_26(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:104 session box-back: first send {x : Nat * Bit, y : Bit}";
-  muro__sess_exp_at(42, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 43;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:104 session box-back: first send {x : Nat * Bit, y : Bit}";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(42, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:104 session box-back: first send {x : Nat * Bit, y : Bit}";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:104 session box-back: first send {x : Nat * Bit, y : Bit}";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 42: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_26(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:104 session box-back: first send {x : Nat * Bit, y : Bit}";
+        muro__sess_exp_at(42, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 43: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_27(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:104 session box-back: first recv (Nat * Bit)";
-  muro__sess_exp_at(43, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 44;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:104 session box-back: first recv (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(43, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:104 session box-back: first recv (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:104 session box-back: first recv (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 43;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:104 session box-back: first send {x : Nat * Bit, y : Bit}";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(42, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:104 session box-back: first send {x : Nat * Bit, y : Bit}";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:104 session box-back: first send {x : Nat * Bit, y : Bit}";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 43: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_27(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:104 session box-back: first recv (Nat * Bit)";
+        muro__sess_exp_at(43, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 44: {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:104 session box-back: end";
-  muro__sess_lit(res->expected, sizeof res->expected, "done");
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-    break;
-  }
+        res->state.at = 44;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:104 session box-back: first recv (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(43, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:104 session box-back: first recv (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:104 session box-back: first recv (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 44: {
+      res->status = MURO_SESS_UNEXPECTED;
+      res->state = *saved;
+      res->step = "examples/pair-bindings.muro:104 session box-back: end";
+      muro__sess_lit(res->expected, sizeof res->expected, "done");
+      res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:104 session box-back: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -3047,9 +3021,9 @@ muro__sess_res muro__sess_loopzdping_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 15;
-  
+
   res->state.at = 45;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -3078,7 +3052,7 @@ muro__sess_res muro__sess_loopzdping_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   if (st.key != 15) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:116 session loop-ping: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -3090,75 +3064,74 @@ muro__sess_res muro__sess_loopzdping_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   switch (st.at) {
-  case 45: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_28(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:116 session loop-ping: first recv (Nat * Bit)";
-  muro__sess_exp_at(45, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 46;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:116 session loop-ping: first recv (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(45, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:116 session loop-ping: first recv (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:116 session loop-ping: first recv (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 45: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_28(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:116 session loop-ping: first recv (Nat * Bit)";
+        muro__sess_exp_at(45, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 46: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_29(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:116 session loop-ping: first send Nat";
-  muro__sess_exp_at(46, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 45;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:116 session loop-ping: first send Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(46, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:116 session loop-ping: first send Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:116 session loop-ping: first send Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 46;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:116 session loop-ping: first recv (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(45, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:116 session loop-ping: first recv (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:116 session loop-ping: first recv (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 46: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_29(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:116 session loop-ping: first send Nat";
+        muro__sess_exp_at(46, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
+
+        res->state.at = 45;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:116 session loop-ping: first send Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(46, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:116 session loop-ping: first send Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:116 session loop-ping: first send Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:116 session loop-ping: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -3193,9 +3166,9 @@ muro__sess_res muro__sess_loopzdpong_init(void) {
   memset(res, 0, sizeof *res);
   res->status = MURO_SESS_OK;
   res->state.key = 16;
-  
+
   res->state.at = 47;
-res->state.stuck = 0;
+  res->state.stuck = 0;
   (void)fail;
   (void)cap;
   if (res->state.stuck || res->state.at == 0) {
@@ -3224,7 +3197,7 @@ muro__sess_res muro__sess_loopzdpong_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   if (st.key != 16) {
-    res->status = MURO_SESS_BAD;
+    res->status = MURO_SESS_UNEXPECTED;
     res->step = "examples/pair-bindings.muro:118 session loop-pong: end";
     muro__sess_lit(res->expected, sizeof res->expected, "done");
     return out;
@@ -3236,75 +3209,74 @@ muro__sess_res muro__sess_loopzdpong_step(muro__sess_st st, int dir, const muro_
     return out;
   }
   switch (st.at) {
-  case 47: {
-    if (dir != MURO_SESS_SEND || !muro__sess_pay_30(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:118 session loop-pong: first send (Nat * Bit)";
-  muro__sess_exp_at(47, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 48;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:118 session loop-pong: first send (Nat * Bit)";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(47, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:118 session loop-pong: first send (Nat * Bit)";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:118 session loop-pong: first send (Nat * Bit)";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+    case 47: {
+      if (dir != MURO_SESS_SEND || !muro__sess_pay_30(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:118 session loop-pong: first send (Nat * Bit)";
+        muro__sess_exp_at(47, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
 
-  case 48: {
-    if (dir != MURO_SESS_RECV || !muro__sess_pay_31(value, saved)) {
-    res->status = MURO_SESS_UNEXPECTED;
-  res->state = *saved;
-  res->step = "examples/pair-bindings.muro:118 session loop-pong: first recv Nat";
-  muro__sess_exp_at(48, saved, res->expected, sizeof res->expected);
-  res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    int fail = 0;
-    int cap = 0;
-    
-    res->state.at = 47;
-  res->state.stuck = 0;
-    if (cap) {
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:118 session loop-pong: first recv Nat";
-    muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else if (fail) {
-    muro__sess_exp_at(48, &res->state, res->expected, sizeof res->expected);
-    res->state = *saved;
-    res->status = MURO_SESS_UNEXPECTED;
-    res->step = "examples/pair-bindings.muro:118 session loop-pong: first recv Nat";
-    res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
-  } else {
-    res->status = MURO_SESS_OK;
-    res->step = "examples/pair-bindings.muro:118 session loop-pong: first recv Nat";
-    muro__sess_fill(res);
-  }
-  }
-    break;
-  }
+        res->state.at = 48;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:118 session loop-pong: first send (Nat * Bit)";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(47, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:118 session loop-pong: first send (Nat * Bit)";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:118 session loop-pong: first send (Nat * Bit)";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
+    case 48: {
+      if (dir != MURO_SESS_RECV || !muro__sess_pay_31(value, saved)) {
+        res->status = MURO_SESS_UNEXPECTED;
+        res->state = *saved;
+        res->step = "examples/pair-bindings.muro:118 session loop-pong: first recv Nat";
+        muro__sess_exp_at(48, saved, res->expected, sizeof res->expected);
+        res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+      } else {
+        int fail = 0;
+        int cap = 0;
+
+        res->state.at = 47;
+        res->state.stuck = 0;
+        if (cap) {
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:118 session loop-pong: first recv Nat";
+          muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most 100000");
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else if (fail) {
+          muro__sess_exp_at(48, saved, res->expected, sizeof res->expected);
+          res->state = *saved;
+          res->status = MURO_SESS_UNEXPECTED;
+          res->step = "examples/pair-bindings.muro:118 session loop-pong: first recv Nat";
+          res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
+        } else {
+          res->status = MURO_SESS_OK;
+          res->step = "examples/pair-bindings.muro:118 session loop-pong: first recv Nat";
+          muro__sess_fill(res);
+        }
+      }
+      break;
+    }
     default:
-      res->status = MURO_SESS_BAD;
+      res->status = MURO_SESS_UNEXPECTED;
       res->step = "examples/pair-bindings.muro:118 session loop-pong: end";
       muro__sess_lit(res->expected, sizeof res->expected, "done");
       break;
@@ -3340,80 +3312,80 @@ muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n)
   (void)args;
   if (!name) return res;
   if (strcmp(name, "pair-ping") == 0 && n == 0) {
-  return muro__sess_pairzdping_init();
-}
-if (strcmp(name, "pair-pong") == 0 && n == 0) {
-  return muro__sess_pairzdpong_init();
-}
-if (strcmp(name, "grant-ping") == 0 && n == 0) {
-  return muro__sess_grantzdping_init();
-}
-if (strcmp(name, "grant-pong") == 0 && n == 0) {
-  return muro__sess_grantzdpong_init();
-}
-if (strcmp(name, "rec-ping") == 0 && n == 0) {
-  return muro__sess_reczdping_init();
-}
-if (strcmp(name, "rec-pong") == 0 && n == 0) {
-  return muro__sess_reczdpong_init();
-}
-if (strcmp(name, "lin-ping") == 0 && n == 0) {
-  return muro__sess_linzdping_init();
-}
-if (strcmp(name, "lin-pong") == 0 && n == 0) {
-  return muro__sess_linzdpong_init();
-}
-if (strcmp(name, "shade") == 0 && n == 0) {
-  return muro__sess_shade_init();
-}
-if (strcmp(name, "shade-back") == 0 && n == 0) {
-  return muro__sess_shadezdback_init();
-}
-if (strcmp(name, "wrap") == 0 && n == 0) {
-  return muro__sess_wrap_init();
-}
-if (strcmp(name, "wrap-back") == 0 && n == 0) {
-  return muro__sess_wrapzdback_init();
-}
-if (strcmp(name, "box") == 0 && n == 0) {
-  return muro__sess_box_init();
-}
-if (strcmp(name, "box-back") == 0 && n == 0) {
-  return muro__sess_boxzdback_init();
-}
-if (strcmp(name, "loop-ping") == 0 && n == 0) {
-  return muro__sess_loopzdping_init();
-}
-if (strcmp(name, "loop-pong") == 0 && n == 0) {
-  return muro__sess_loopzdpong_init();
-}
+    return muro__sess_pairzdping_init();
+  }
+  if (strcmp(name, "pair-pong") == 0 && n == 0) {
+    return muro__sess_pairzdpong_init();
+  }
+  if (strcmp(name, "grant-ping") == 0 && n == 0) {
+    return muro__sess_grantzdping_init();
+  }
+  if (strcmp(name, "grant-pong") == 0 && n == 0) {
+    return muro__sess_grantzdpong_init();
+  }
+  if (strcmp(name, "rec-ping") == 0 && n == 0) {
+    return muro__sess_reczdping_init();
+  }
+  if (strcmp(name, "rec-pong") == 0 && n == 0) {
+    return muro__sess_reczdpong_init();
+  }
+  if (strcmp(name, "lin-ping") == 0 && n == 0) {
+    return muro__sess_linzdping_init();
+  }
+  if (strcmp(name, "lin-pong") == 0 && n == 0) {
+    return muro__sess_linzdpong_init();
+  }
+  if (strcmp(name, "shade") == 0 && n == 0) {
+    return muro__sess_shade_init();
+  }
+  if (strcmp(name, "shade-back") == 0 && n == 0) {
+    return muro__sess_shadezdback_init();
+  }
+  if (strcmp(name, "wrap") == 0 && n == 0) {
+    return muro__sess_wrap_init();
+  }
+  if (strcmp(name, "wrap-back") == 0 && n == 0) {
+    return muro__sess_wrapzdback_init();
+  }
+  if (strcmp(name, "box") == 0 && n == 0) {
+    return muro__sess_box_init();
+  }
+  if (strcmp(name, "box-back") == 0 && n == 0) {
+    return muro__sess_boxzdback_init();
+  }
+  if (strcmp(name, "loop-ping") == 0 && n == 0) {
+    return muro__sess_loopzdping_init();
+  }
+  if (strcmp(name, "loop-pong") == 0 && n == 0) {
+    return muro__sess_loopzdpong_init();
+  }
   return res;
 }
 
 muro__sess_res muro__sess_step(const char *name, muro__sess_st st, int dir, const muro__sess_val *value) {
   muro__sess_res res;
   memset(&res, 0, sizeof res);
-  res.status = MURO_SESS_BAD;
+  res.status = MURO_SESS_UNEXPECTED;
   res.state = st;
   res.step = "";
   muro__sess_lit(res.expected, sizeof res.expected, "done");
   if (!name) return res;
   if (strcmp(name, "pair-ping") == 0) return muro__sess_pairzdping_step(st, dir, value);
-if (strcmp(name, "pair-pong") == 0) return muro__sess_pairzdpong_step(st, dir, value);
-if (strcmp(name, "grant-ping") == 0) return muro__sess_grantzdping_step(st, dir, value);
-if (strcmp(name, "grant-pong") == 0) return muro__sess_grantzdpong_step(st, dir, value);
-if (strcmp(name, "rec-ping") == 0) return muro__sess_reczdping_step(st, dir, value);
-if (strcmp(name, "rec-pong") == 0) return muro__sess_reczdpong_step(st, dir, value);
-if (strcmp(name, "lin-ping") == 0) return muro__sess_linzdping_step(st, dir, value);
-if (strcmp(name, "lin-pong") == 0) return muro__sess_linzdpong_step(st, dir, value);
-if (strcmp(name, "shade") == 0) return muro__sess_shade_step(st, dir, value);
-if (strcmp(name, "shade-back") == 0) return muro__sess_shadezdback_step(st, dir, value);
-if (strcmp(name, "wrap") == 0) return muro__sess_wrap_step(st, dir, value);
-if (strcmp(name, "wrap-back") == 0) return muro__sess_wrapzdback_step(st, dir, value);
-if (strcmp(name, "box") == 0) return muro__sess_box_step(st, dir, value);
-if (strcmp(name, "box-back") == 0) return muro__sess_boxzdback_step(st, dir, value);
-if (strcmp(name, "loop-ping") == 0) return muro__sess_loopzdping_step(st, dir, value);
-if (strcmp(name, "loop-pong") == 0) return muro__sess_loopzdpong_step(st, dir, value);
+  if (strcmp(name, "pair-pong") == 0) return muro__sess_pairzdpong_step(st, dir, value);
+  if (strcmp(name, "grant-ping") == 0) return muro__sess_grantzdping_step(st, dir, value);
+  if (strcmp(name, "grant-pong") == 0) return muro__sess_grantzdpong_step(st, dir, value);
+  if (strcmp(name, "rec-ping") == 0) return muro__sess_reczdping_step(st, dir, value);
+  if (strcmp(name, "rec-pong") == 0) return muro__sess_reczdpong_step(st, dir, value);
+  if (strcmp(name, "lin-ping") == 0) return muro__sess_linzdping_step(st, dir, value);
+  if (strcmp(name, "lin-pong") == 0) return muro__sess_linzdpong_step(st, dir, value);
+  if (strcmp(name, "shade") == 0) return muro__sess_shade_step(st, dir, value);
+  if (strcmp(name, "shade-back") == 0) return muro__sess_shadezdback_step(st, dir, value);
+  if (strcmp(name, "wrap") == 0) return muro__sess_wrap_step(st, dir, value);
+  if (strcmp(name, "wrap-back") == 0) return muro__sess_wrapzdback_step(st, dir, value);
+  if (strcmp(name, "box") == 0) return muro__sess_box_step(st, dir, value);
+  if (strcmp(name, "box-back") == 0) return muro__sess_boxzdback_step(st, dir, value);
+  if (strcmp(name, "loop-ping") == 0) return muro__sess_loopzdping_step(st, dir, value);
+  if (strcmp(name, "loop-pong") == 0) return muro__sess_loopzdpong_step(st, dir, value);
   return res;
 }
 
@@ -3460,67 +3432,67 @@ const char *muro__sess_at(const char *name, muro__sess_st st) {
 void muro__sess_expected(const char *name, muro__sess_st st, char *buf, size_t n) {
   if (!buf || n == 0) return;
   muro__sess_lit(buf, n, "done");
-if (name && strcmp(name, "pair-ping") == 0) {
+  if (name && strcmp(name, "pair-ping") == 0) {
     muro__sess_pairzdping_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "pair-pong") == 0) {
+  if (name && strcmp(name, "pair-pong") == 0) {
     muro__sess_pairzdpong_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "grant-ping") == 0) {
+  if (name && strcmp(name, "grant-ping") == 0) {
     muro__sess_grantzdping_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "grant-pong") == 0) {
+  if (name && strcmp(name, "grant-pong") == 0) {
     muro__sess_grantzdpong_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "rec-ping") == 0) {
+  if (name && strcmp(name, "rec-ping") == 0) {
     muro__sess_reczdping_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "rec-pong") == 0) {
+  if (name && strcmp(name, "rec-pong") == 0) {
     muro__sess_reczdpong_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "lin-ping") == 0) {
+  if (name && strcmp(name, "lin-ping") == 0) {
     muro__sess_linzdping_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "lin-pong") == 0) {
+  if (name && strcmp(name, "lin-pong") == 0) {
     muro__sess_linzdpong_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "shade") == 0) {
+  if (name && strcmp(name, "shade") == 0) {
     muro__sess_shade_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "shade-back") == 0) {
+  if (name && strcmp(name, "shade-back") == 0) {
     muro__sess_shadezdback_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "wrap") == 0) {
+  if (name && strcmp(name, "wrap") == 0) {
     muro__sess_wrap_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "wrap-back") == 0) {
+  if (name && strcmp(name, "wrap-back") == 0) {
     muro__sess_wrapzdback_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "box") == 0) {
+  if (name && strcmp(name, "box") == 0) {
     muro__sess_box_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "box-back") == 0) {
+  if (name && strcmp(name, "box-back") == 0) {
     muro__sess_boxzdback_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "loop-ping") == 0) {
+  if (name && strcmp(name, "loop-ping") == 0) {
     muro__sess_loopzdping_expected(st, buf, n);
     return;
   }
-if (name && strcmp(name, "loop-pong") == 0) {
+  if (name && strcmp(name, "loop-pong") == 0) {
     muro__sess_loopzdpong_expected(st, buf, n);
     return;
   }

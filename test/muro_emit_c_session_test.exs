@@ -74,6 +74,40 @@ defmodule Muro.EmitCSessionTest do
     assert msg =~ "unboxed Flag is not a C payload"
   end
 
+  test "an unboxed type nested under boxed data is not a C stepper" do
+    text = """
+    unboxed data Flag : Type where
+      on : Flag
+      off : Flag
+    data Box : Type where
+      box : Flag → Box
+    data Wrap : Type where
+      wrap : Box → Wrap
+    session s := send Wrap end
+    """
+
+    assert {:error, msg} = prepare_text("nested-unboxed.muro", text)
+    assert msg =~ "c:session"
+    assert msg =~ "unboxed Flag is not a C payload"
+  end
+
+  test "an unboxed type named only by a dual is refused" do
+    book = [%{kind: :data, name: "Flag", unboxed: true}]
+
+    image = %{
+      sessions: [
+        %{name: "s", file: "gap.muro", line: 2, proto: {:end, "end"}}
+      ],
+      duals: %{
+        "gone" => {[], {:send, "step", {:dat, "Flag", []}, {:end, "end"}}}
+      },
+      decls: %{}
+    }
+
+    assert {:error, msg} = Muro.Emit.C.Session.refuse_unboxed(image, book)
+    assert msg == "c:session\nsession:0 session gone: unboxed Flag is not a C payload"
+  end
+
   test "a case run whose result or argument is not a C payload is refused" do
     # Flag is returned by value, so it is not a payload tag the step can switch on.
     result = """
@@ -108,6 +142,19 @@ defmodule Muro.EmitCSessionTest do
     assert {:error, msg} = prepare_text("erased-arg.muro", arg)
     assert msg =~ "c:session"
     assert msg =~ "cannot call run see"
+
+    wide = """
+    data Bool : Type where
+      true : Bool
+      false : Bool
+    def both : run Π (a : Bool) → Π (b : Bool) → Bool :=
+      λ (a : Bool) → λ (b : Bool) → a
+    session s := recv (a : Bool) (recv (b : Bool) (case (both a b) | true => end | false => end))
+    """
+
+    assert {:error, msg} = prepare_text("wide-case.muro", wide)
+    assert msg =~ "c:session"
+    assert msg =~ "cannot call run both"
   end
 
   test "a nat above the run cap is refused and the state stays" do
@@ -160,6 +207,125 @@ defmodule Muro.EmitCSessionTest do
 
     path = write_book("stuck-case.muro", text)
     conform_path!(path)
+  end
+
+  test "a direct nat case refuses every nat, as the state machine does" do
+    text = """
+    session s := recv (n : Nat) (case n
+      | 0 => send Nat end
+      | 1 => end)
+    """
+
+    book = parsed(text)
+    parent = parent()
+    assert {:ok, src} = Muro.Emit.Fsm.render(book, "direct.muro", parent)
+    Code.compile_string(src)
+    mod = child(parent, "s")
+    state = mod.init()
+    {bin, _} = compile_book!(book, "direct")
+
+    for n <- [0, 1, 2] do
+      replay!(bin, mod, "s", [], state, [{:recv, {:wire, :nat, n}}])
+    end
+  end
+
+  test "a foreign key, a bad position, and an unknown name are unexpected" do
+    path = "examples/ping.muro"
+    parent = parent()
+    assert {:ok, src} = Muro.emit_fsm(path, parent)
+    Code.compile_string(src)
+    mod = child(parent, "ping")
+    state = mod.init()
+
+    assert {:error, {:unexpected, _, _, _}} =
+             apply(parent, :muro_fsm_step, ["no-such", :recv, state, 0])
+
+    {bin, _} = compile_path!(path)
+
+    script = """
+    init ping 0
+    set key 99
+    step recv nat 1
+    init ping 0
+    set at 40000
+    step recv nat 1
+    init ping 0
+    name gone
+    step recv nat 1
+    """
+
+    [init, foreign, init2, wild, init3, unknown] = run_c!(bin, script)
+    assert elem(init, 0) == 0
+    assert elem(init2, 0) == 0
+    assert elem(init3, 0) == 0
+    assert {1, step, "done", _, false} = foreign
+    assert step =~ "end"
+    assert {1, _, "done", _, false} = wild
+    assert {1, "", "done", "", false} = unknown
+  end
+
+  test "a case run frees the value it built" do
+    text = """
+    data Bool : Type where
+      true : Bool
+      false : Bool
+    data Pair : Type where
+      mk : Nat → Nat → Pair
+    def ok : run Π (p : Pair) → Bool :=
+      λ (p : Pair) → true
+    session s := recv (p : Pair) (case (ok p) | true => end | false => end)
+    """
+
+    path = write_book("pair-live.muro", text)
+    assert {:ok, header, source, _} = prepare(path)
+    assert source =~ "|| !out"
+    assert source =~ "muro__DROP"
+    assert source =~ "muro__sess_free_"
+    assert count_live!(header, source, "pair-live") == 0
+  end
+
+  test "down is not a symbol of the stepper" do
+    assert {:ok, header, source, _} = prepare("examples/ping.muro")
+    refute header =~ ~r/(^|[^A-Za-z0-9_])down([^A-Za-z0-9_]|$)/
+    refute source =~ ~r/(^|[^A-Za-z0-9_])down([^A-Za-z0-9_]|$)/m
+  end
+
+  test "a session error names the path render was given" do
+    book = parsed(File.read!("examples/talk.muro"))
+    assert {:error, bare} = Muro.Emit.C.render(book, "talk")
+    assert bare =~ "talk.muro:"
+    refute bare =~ "examples/talk.muro:"
+
+    assert {:error, named} = Muro.Emit.C.render(book, "talk", path: "examples/talk.muro")
+    assert named =~ "examples/talk.muro:"
+  end
+
+  test "session declarations sit in front of the file guard" do
+    header =
+      "#ifndef GUARD\n#define GUARD\n/* #endif\n */\n#ifndef muro__ALLOC\n#define muro__ALLOC(n) malloc(n)\n#endif\nint kept;\n#endif"
+
+    sess = "void muro__sess_init(const char *name);"
+    assert Muro.Emit.C.splice_session(header, "") == header
+
+    placed = Muro.Emit.C.splice_session(header, sess)
+
+    assert String.ends_with?(placed, "int kept;\n\n#{sess}\n#endif")
+    assert String.contains?(placed, "#define muro__ALLOC(n) malloc(n)\n#endif\nint kept;")
+    assert String.contains?(placed, "/* #endif\n */")
+  end
+
+  test "a bare lambda stays c:lambda in front of the stepper" do
+    book = [
+      %{
+        name: "bad",
+        mode: :run,
+        type: :nat,
+        body: {:lam, :affine, :nat, "n", :ze}
+      },
+      %{kind: :session, name: "s"}
+    ]
+
+    assert {:error, "c:lambda"} = Muro.Emit.C.prepare(book, "bare-lam", path: "bare-lam.muro")
   end
 
   test "emitted C for the session examples matches the goldens" do
@@ -220,10 +386,9 @@ defmodule Muro.EmitCSessionTest do
   end
 
   defp prior_refusal?(rest) do
-    Enum.any?(
-      ~w(machine lambda stream unboxed erased unsupported mayfail),
-      &String.starts_with?(rest, &1)
-    )
+    Enum.any?(~w(machine lambda stream unboxed erased unsupported mayfail), fn word ->
+      rest == word or String.starts_with?(rest, word <> "\n")
+    end)
   end
 
   defp session_books do
@@ -614,6 +779,89 @@ defmodule Muro.EmitCSessionTest do
     book |> Muro.Prelude.for_emit() |> Muro.Grade.erase_book()
   end
 
+  defp parsed(text) do
+    assert {:ok, book} = Muro.Parser.parse(text)
+    book |> Muro.Prelude.for_emit() |> Muro.Grade.erase_book()
+  end
+
+  defp count_live!(header, source, stem) do
+    dir = Path.join(System.tmp_dir!(), "muro_live_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf(dir) end)
+    File.write!(Path.join(dir, stem <> ".h"), header)
+    File.write!(Path.join(dir, stem <> ".c"), source)
+
+    main = """
+    #include <stdlib.h>
+    #include <stdio.h>
+    #include <string.h>
+    #include <stdint.h>
+    static int live;
+    static void *count_alloc(size_t n) {
+      void *p = malloc(n ? n : 1);
+      if (p) live++;
+      return p;
+    }
+    static void count_drop(void *p) {
+      if (!p) return;
+      live--;
+      free(p);
+    }
+    #define muro__ALLOC(n) count_alloc(n)
+    #define muro__DROP(p) count_drop(p)
+    #include "#{stem}.c"
+    static int step_data(const char *ctor, muro__sess_val *fields, uint64_t n) {
+      muro__sess_val v;
+      muro__sess_res init, res;
+      memset(&v, 0, sizeof v);
+      v.tag = MURO_SESS_DATA;
+      v.ctor = ctor;
+      v.n = n;
+      v.a = fields;
+      init = muro__sess_init("s", 0, 0);
+      if (live != 0) return 10;
+      res = muro__sess_step("s", init.state, MURO_SESS_RECV, &v);
+      if (live != 0) return 11;
+      return res.status;
+    }
+    int main(void) {
+      muro__sess_val fields[2];
+      muro__sess_val unit;
+      int status;
+      memset(fields, 0, sizeof fields);
+      fields[0].tag = MURO_SESS_NAT;
+      fields[0].nat = 1;
+      fields[1].tag = MURO_SESS_NAT;
+      fields[1].nat = 2;
+      status = step_data("mk", fields, 2);
+      if (status != 0 || live != 0) return 1;
+      fields[1].tag = MURO_SESS_UNIT;
+      status = step_data("mk", fields, 2);
+      if (status != 1 || live != 0) return 2;
+      memset(&unit, 0, sizeof unit);
+      unit.tag = MURO_SESS_UNIT;
+      status = step_data("nope", &unit, 1);
+      if (status != 1 || live != 0) return 3;
+      return 0;
+    }
+    """
+
+    File.write!(Path.join(dir, "main.c"), main)
+    bin = Path.join(dir, "live")
+
+    {msg, status} =
+      System.cmd(
+        "cc",
+        ~w(-Wall -Wextra -Werror -std=c11 -I) ++ [dir, Path.join(dir, "main.c"), "-o", bin],
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, msg
+    {out, ran} = System.cmd(bin, [], stderr_to_stdout: true)
+    assert ran == 0, out
+    0
+  end
+
   defp write_book(name, text) do
     dir = Path.join(System.tmp_dir!(), "muro_csess_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
@@ -625,7 +873,17 @@ defmodule Muro.EmitCSessionTest do
 
   defp compile_path!(path) do
     assert {:ok, header, source, _} = prepare(path)
-    stem = Path.basename(path, ".muro")
+    compile_texts!(header, source, Path.basename(path, ".muro"))
+  end
+
+  defp compile_book!(book, stem) do
+    assert {:ok, header, source, _} =
+             Muro.Emit.C.prepare(book, stem, path: stem <> ".muro")
+
+    compile_texts!(header, source, stem)
+  end
+
+  defp compile_texts!(header, source, stem) do
     dir = Path.join(System.tmp_dir!(), "muro_cc_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf(dir) end)

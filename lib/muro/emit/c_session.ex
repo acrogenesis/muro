@@ -58,14 +58,28 @@ defmodule Muro.Emit.C.Session do
     end
   end
 
-  defp refuse_unboxed(%{sessions: sessions, duals: duals, decls: decls}, book) do
+  # A dual whose name is not one of the opened sessions still names the
+  # type the walk found. Re-walking the session proto would drop it.
+  @doc false
+  def refuse_unboxed(%{sessions: sessions, duals: duals, decls: decls}, book) do
     hit =
       Enum.find_value(sessions, fn sess ->
-        if walk_unboxed(sess.proto, decls, book, MapSet.new()), do: sess
+        case walk_unboxed(sess.proto, decls, book, MapSet.new()) do
+          nil -> nil
+          type -> {sess, type}
+        end
       end) ||
         Enum.find_value(duals, fn {name, {_params, proto}} ->
-          if walk_unboxed(proto, decls, book, MapSet.new()) do
-            Enum.find(sessions, &(&1.name == name))
+          case walk_unboxed(proto, decls, book, MapSet.new()) do
+            nil ->
+              nil
+
+            type ->
+              sess =
+                Enum.find(sessions, &(&1.name == name)) ||
+                  %{name: name, file: "session", line: 0}
+
+              {sess, type}
           end
         end)
 
@@ -73,9 +87,7 @@ defmodule Muro.Emit.C.Session do
       nil ->
         :ok
 
-      sess ->
-        type = walk_unboxed(sess.proto, decls, book, MapSet.new())
-
+      {sess, type} ->
         {:error,
          @err <>
            "#{sess.file}:#{sess.line} session #{sess.name}: unboxed #{type} is not a C payload"}
@@ -273,10 +285,16 @@ defmodule Muro.Emit.C.Session do
     end
   end
 
-  defp unboxed_field({:dat, name, ts}, _d, decls, book, seen) do
-    if unboxed_data?(book, name),
-      do: name,
-      else: Enum.find_value(ts, &unboxed_field(&1, name, decls, book, seen))
+  defp unboxed_field({:dat, name, ts}, _d, decls, book, seen)
+       when is_binary(name) and is_list(ts) do
+    cond do
+      unboxed_data?(book, name) ->
+        name
+
+      true ->
+        Enum.find_value(ts, &unboxed_field(&1, name, decls, book, seen)) ||
+          unboxed_decl(name, decls, book, seen)
+    end
   end
 
   defp unboxed_field({:self, ts}, name, decls, book, seen) do
@@ -917,10 +935,8 @@ defmodule Muro.Emit.C.Session do
   defp has_nat?({:pair, a, b}), do: has_nat?(a) or has_nat?(b)
   defp has_nat?({:vec, e, _}), do: has_nat?(e)
   defp has_nat?({:rec, fs}) when is_list(fs), do: Enum.any?(fs, fn {_, t} -> has_nat?(t) end)
-  defp has_nat?({:dat, _, args}), do: Enum.any?(args, &has_nat?/1) or dat_has_nat?(args)
+  defp has_nat?({:dat, _, args}), do: Enum.any?(args, &has_nat?/1)
   defp has_nat?(_), do: false
-
-  defp dat_has_nat?(_args), do: false
 
   defp build_key(ty), do: ty
 
@@ -1156,7 +1172,7 @@ defmodule Muro.Emit.C.Session do
 
       """
       static int muro__sess_ix_#{id}(const muro__sess_st *st, uint64_t *out) {
-        #{body}
+      #{indent(body, 2)}
       }
       """
       |> String.trim()
@@ -1248,7 +1264,7 @@ defmodule Muro.Emit.C.Session do
         """
         static int muro__sess_pay_#{id}(const muro__sess_val *v, const muro__sess_st *st) {
           (void)st;
-          #{body}
+        #{indent(body, 2)}
         }
         """
         |> String.trim()
@@ -1381,7 +1397,7 @@ defmodule Muro.Emit.C.Session do
           if (strcmp(tag, #{c_str(ctor)}) == 0) {
             if (#{v}->n != #{n}) return 0;
             if (#{n} && !#{v}->a) return 0;
-            #{checks}
+          #{indent(checks, 2)}
             return 1;
           }
           """
@@ -1498,6 +1514,7 @@ defmodule Muro.Emit.C.Session do
 
   defp source_emit(st) do
     parts = [
+      drop_macro(),
       "#include <string.h>",
       puts_src(),
       if(st.putu, do: putu_src(), else: ""),
@@ -1614,31 +1631,146 @@ defmodule Muro.Emit.C.Session do
 
   defp build_needs_nat?(_, _, _), do: false
 
+  defp drop_macro do
+    """
+    #ifndef muro__DROP
+    #define muro__DROP(p) free(p)
+    #endif
+    """
+    |> String.trim()
+  end
+
   defp build_src(%{build_ord: []}), do: ""
 
   defp build_src(st) do
-    proto =
-      Enum.map_join(st.build_ord, "\n", fn {key, ty} ->
-        id = Map.fetch!(st.builds, key)
+    entries =
+      Enum.map(st.build_ord, fn {key, ty} ->
+        {Map.fetch!(st.builds, key), ty}
+      end)
 
+    build_proto =
+      Enum.map_join(entries, "\n", fn {id, ty} ->
         "static int muro__sess_build_#{id}(const muro__sess_val *v, const muro__sess_st *st, #{build_ptr(ty)} *out);"
       end)
 
-    body =
-      Enum.map_join(st.build_ord, "\n\n", fn {key, ty} ->
-        id = Map.fetch!(st.builds, key)
+    free_proto =
+      Enum.map_join(entries, "\n", fn {id, ty} ->
+        "static void muro__sess_free_#{id}(#{build_ptr(ty)}p);"
+      end)
+
+    free_body = Enum.map_join(entries, "\n\n", fn {id, ty} -> free_body(ty, id, st) end)
+
+    built =
+      Enum.map_join(entries, "\n\n", fn {id, ty} ->
         ptr = build_ptr(ty)
 
         """
         static int muro__sess_build_#{id}(const muro__sess_val *v, const muro__sess_st *st, #{ptr} *out) {
           (void)st;
-          #{build_body(ty, st)}
+        #{indent(build_body(ty, st), 2)}
         }
         """
         |> String.trim()
       end)
 
-    proto <> "\n\n" <> body
+    [build_proto, free_proto, free_body, built]
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join("\n\n")
+  end
+
+  defp free_body(:nat, id, _st) do
+    nat = Name.gen("nat")
+    tag = Name.gen("field_tag")
+    suc = Name.gen("field_suc")
+
+    """
+    static void muro__sess_free_#{id}(#{nat} *p) {
+      #{nat} *next;
+      while (p) {
+        next = p->#{tag} ? p->#{suc} : 0;
+        muro__DROP(p);
+        p = next;
+      }
+    }
+    """
+    |> String.trim()
+  end
+
+  defp free_body(:unit, id, _st) do
+    unit = Name.gen("unit")
+
+    """
+    static void muro__sess_free_#{id}(#{unit} *p) {
+      (void)p;
+    }
+    """
+    |> String.trim()
+  end
+
+  defp free_body({:dat, name, args}, id, st) do
+    data = Map.get(st.datas, name)
+    decl = Map.get(st.decls, name)
+    ptr = build_ptr({:dat, name, args})
+    tagf = Name.gen("field_tag")
+    asf = Name.gen("as")
+
+    arms =
+      if is_nil(data) or is_nil(decl) do
+        ""
+      else
+        data.ctors
+        |> Enum.with_index()
+        |> Enum.map_join("\n", fn {ctor, tag} ->
+          free_ctor(name, ctor.name, tag, args, decl, st, asf)
+        end)
+      end
+
+    """
+    static void muro__sess_free_#{id}(#{ptr}p) {
+      if (!p) return;
+      switch (p->#{tagf}) {
+    #{indent(arms, 4)}
+        default: return;
+      }
+    }
+    """
+    |> String.trim()
+  end
+
+  defp free_body(_ty, id, _st) do
+    """
+    static void muro__sess_free_#{id}(void *p) {
+      (void)p;
+    }
+    """
+    |> String.trim()
+  end
+
+  defp free_ctor(dname, ctor, tag, args, decl, st, asf) do
+    fields = Map.get(decl.ctors, ctor, [])
+    inst = Enum.map(fields, &inst_field(&1, dname, args))
+    member = C.source_id(ctor)
+
+    if inst == [] do
+      "case #{tag}: return;"
+    else
+      frees =
+        inst
+        |> Enum.with_index()
+        |> Enum.map_join("\n", fn {ty, k} ->
+          fid = Map.fetch!(st.builds, ty)
+          "muro__sess_free_#{fid}(p->#{asf}.#{member}.#{Name.gen("f", k)});"
+        end)
+
+      """
+      case #{tag}: {
+      #{indent(frees, 2)}
+        muro__DROP(p);
+        return;
+      }
+      """
+      |> String.trim()
+    end
   end
 
   defp build_ptr(:nat), do: Name.gen("nat") <> " *"
@@ -1649,7 +1781,7 @@ defmodule Muro.Emit.C.Session do
   defp build_body(:nat, _st) do
     """
     #{Name.gen("nat")} *p;
-    if (!v || v->tag != MURO_SESS_NAT) return 2;
+    if (!v || v->tag != MURO_SESS_NAT || !out) return 2;
     p = muro__sess_nat_of(v->nat);
     if (!p) return 1;
     *out = p;
@@ -1660,7 +1792,7 @@ defmodule Muro.Emit.C.Session do
 
   defp build_body(:unit, _st) do
     """
-    if (!v || v->tag != MURO_SESS_UNIT) return 2;
+    if (!v || v->tag != MURO_SESS_UNIT || !out) return 2;
     *out = #{Name.gen("tt")}();
     return 0;
     """
@@ -1708,18 +1840,34 @@ defmodule Muro.Emit.C.Session do
     else
       n = length(inst)
 
+      decls =
+        inst
+        |> Enum.with_index()
+        |> Enum.map_join("\n", fn {ty, i} ->
+          "#{build_ptr(ty)}f#{i} = 0;"
+        end)
+
       built =
         inst
         |> Enum.with_index()
         |> Enum.map_join("\n", fn {ty, i} ->
           id = Map.fetch!(st.builds, ty)
-          ptr = build_ptr(ty)
+
+          prior =
+            inst
+            |> Enum.take(i + 1)
+            |> Enum.with_index()
+            |> Enum.map_join("\n", fn {pty, j} ->
+              "muro__sess_free_#{Map.fetch!(st.builds, pty)}(f#{j});"
+            end)
 
           """
-          #{ptr}f#{i} = 0;
           {
             int rc = muro__sess_build_#{id}(&v->a[#{i}], st, &f#{i});
-            if (rc) return rc;
+            if (rc) {
+          #{indent(prior, 4)}
+              return rc;
+            }
           }
           """
           |> String.trim()
@@ -1737,9 +1885,11 @@ defmodule Muro.Emit.C.Session do
 
       """
       if (strcmp(tag, #{c_str(ctor)}) == 0) {
+        if (!out) return 2;
         if (v->n != #{n}) return 2;
         if (#{n} && !v->a) return 2;
-        #{built}
+      #{indent(decls, 2)}
+      #{indent(built, 2)}
         *out = #{call};
         return 0;
       }
@@ -1873,7 +2023,7 @@ defmodule Muro.Emit.C.Session do
 
         """
         case #{node.id}:
-          #{body}
+        #{indent(body, 2)}
           break;
         """
         |> String.trim()
@@ -1886,7 +2036,7 @@ defmodule Muro.Emit.C.Session do
       if (!buf || n == 0) return;
       buf[0] = 0;
       switch (at) {
-    #{indent(arms, 2)}
+    #{indent(arms, 4)}
         default:
           muro__sess_puts(buf, n, &i, "done");
           break;
@@ -1946,8 +2096,8 @@ defmodule Muro.Emit.C.Session do
       memset(res, 0, sizeof *res);
       res->status = MURO_SESS_OK;
       res->state.key = #{key};
-      #{binds}
-      #{prog_c(prog, st)}
+    #{indent(binds, 2)}
+    #{indent(prog_c(prog, st), 2)}
       (void)fail;
       (void)cap;
       if (res->state.stuck || res->state.at == 0) {
@@ -1968,10 +2118,11 @@ defmodule Muro.Emit.C.Session do
       Enum.map_join(nodes, "\n", fn node ->
         """
         case #{node.id}: {
-          #{node_body(node, st)}
+        #{indent(node_body(node, st), 2)}
           break;
         }
         """
+        |> String.trim()
       end)
 
     """
@@ -1991,7 +2142,7 @@ defmodule Muro.Emit.C.Session do
         return out;
       }
       if (st.key != #{key}) {
-        res->status = MURO_SESS_BAD;
+        res->status = MURO_SESS_UNEXPECTED;
         res->step = #{c_str(end_step)};
         muro__sess_lit(res->expected, sizeof res->expected, "done");
         return out;
@@ -2003,9 +2154,9 @@ defmodule Muro.Emit.C.Session do
         return out;
       }
       switch (st.at) {
-    #{indent(arms, 2)}
+    #{indent(arms, 4)}
         default:
-          res->status = MURO_SESS_BAD;
+          res->status = MURO_SESS_UNEXPECTED;
           res->step = #{c_str(end_step)};
           muro__sess_lit(res->expected, sizeof res->expected, "done");
           break;
@@ -2057,13 +2208,13 @@ defmodule Muro.Emit.C.Session do
 
     """
     if (dir != #{dir} || !muro__sess_pay_#{id}(value, saved)) {
-      #{refuse_node(node)}
+    #{indent(refuse_node(node), 2)}
     } else {
       int fail = 0;
       int cap = 0;
-      #{bind_slot(node.slot)}
-      #{prog_c(node.prog, st)}
-      #{conclude(node)}
+    #{indent(bind_slot(node.slot), 2)}
+    #{indent(prog_c(node.prog, st), 2)}
+    #{indent(conclude(node), 2)}
     }
     """
     |> String.trim()
@@ -2078,17 +2229,17 @@ defmodule Muro.Emit.C.Session do
       if (value && value->tag == MURO_SESS_NAT) {
         uint64_t max = 0;
         int have = 0;
-        #{bound_have(node.bound)}
+    #{indent(bound_have(node.bound), 4)}
         if (have && value->nat <= max) within = 1;
       }
       if (dir != #{dir} || !within) {
-        #{refuse_node(node)}
+    #{indent(refuse_node(node), 4)}
       } else {
         int fail = 0;
         int cap = 0;
-        #{bind_slot(node.slot)}
-        #{prog_c(node.prog, st)}
-        #{conclude(node)}
+    #{indent(bind_slot(node.slot), 4)}
+    #{indent(prog_c(node.prog, st), 4)}
+    #{indent(conclude(node), 4)}
       }
     }
     """
@@ -2104,16 +2255,16 @@ defmodule Muro.Emit.C.Session do
       int arm = -1;
       if (value && value->tag == #{tag} && value->bit <= 1) arm = (int)value->bit;
       if (dir != #{dir} || arm < 0) {
-        #{refuse_node(node)}
+    #{indent(refuse_node(node), 4)}
       } else {
         int fail = 0;
         int cap = 0;
         if (arm == 0) {
-          #{prog_c(node.left, st)}
+    #{indent(prog_c(node.left, st), 6)}
         } else {
-          #{prog_c(node.right, st)}
+    #{indent(prog_c(node.right, st), 6)}
         }
-        #{conclude(node)}
+    #{indent(conclude(node), 4)}
       }
     }
     """
@@ -2146,7 +2297,7 @@ defmodule Muro.Emit.C.Session do
       muro__sess_lit(res->expected, sizeof res->expected, "nat_at_most #{@cap}");
       res->done = muro__sess_is_done(saved->key, saved->at, saved->stuck);
     } else if (fail) {
-      muro__sess_exp_at(#{node.id}, &res->state, res->expected, sizeof res->expected);
+      muro__sess_exp_at(#{node.id}, saved, res->expected, sizeof res->expected);
       res->state = *saved;
       res->status = MURO_SESS_UNEXPECTED;
       res->step = #{step};
@@ -2232,14 +2383,14 @@ defmodule Muro.Emit.C.Session do
     """
     {
       int jok = 1;
-      #{decl}
-      #{evals}
+    #{indent(decl, 2)}
+    #{indent(evals, 2)}
       if (!jok) {
         res->state.stuck = 1;
       } else {
         memset(res->state.set, 0, sizeof res->state.set);
-        #{writes}
-        #{prog_c(inner, st)}
+    #{indent(writes, 4)}
+    #{indent(prog_c(inner, st), 4)}
       }
     }
     """
@@ -2297,7 +2448,7 @@ defmodule Muro.Emit.C.Session do
           prog ->
             """
             case #{idx}: {
-              #{prog_c(prog, st)}
+            #{indent(prog_c(prog, st), 2)}
               break;
             }
             """
@@ -2312,14 +2463,19 @@ defmodule Muro.Emit.C.Session do
       if (rc == 1) {
         cap = 1;
       } else if (rc != 0 || !built) {
+        muro__sess_free_#{info.build}(built);
         fail = 1;
       } else {
         #{ret} *got = #{info.cname}(built);
+        int tag = -1;
         if (!got) {
+          muro__sess_free_#{info.build}(built);
           fail = 1;
         } else {
-          switch (got->#{tagf}) {
-    #{indent(branches, 6)}
+          tag = (int)got->#{tagf};
+          muro__sess_free_#{info.build}(built);
+          switch (tag) {
+    #{indent(branches, 8)}
             default: fail = 1; break;
           }
         }
@@ -2335,7 +2491,7 @@ defmodule Muro.Emit.C.Session do
     Enum.map_join(arms, "\n", fn {tag, prog} ->
       """
       else if (tag && strcmp(tag, #{c_str(tag)}) == 0) {
-        #{prog_c(prog, st)}
+      #{indent(prog_c(prog, st), 2)}
       }
       """
       |> String.trim()
@@ -2384,10 +2540,10 @@ defmodule Muro.Emit.C.Session do
         fun = sess_fun(sess.name)
 
         """
-          if (name && strcmp(name, #{c_str(sess.name)}) == 0) {
-            #{fun}_expected(st, buf, n);
-            return;
-          }
+        if (name && strcmp(name, #{c_str(sess.name)}) == 0) {
+          #{fun}_expected(st, buf, n);
+          return;
+        }
         """
         |> String.trim()
       end)
@@ -2401,19 +2557,19 @@ defmodule Muro.Emit.C.Session do
       muro__sess_lit(res.expected, sizeof res.expected, "done");
       (void)args;
       if (!name) return res;
-      #{inits}
+    #{indent(inits, 2)}
       return res;
     }
 
     muro__sess_res muro__sess_step(const char *name, muro__sess_st st, int dir, const muro__sess_val *value) {
       muro__sess_res res;
       memset(&res, 0, sizeof res);
-      res.status = MURO_SESS_BAD;
+      res.status = MURO_SESS_UNEXPECTED;
       res.state = st;
       res.step = "";
       muro__sess_lit(res.expected, sizeof res.expected, "done");
       if (!name) return res;
-      #{steps}
+    #{indent(steps, 2)}
       return res;
     }
 
@@ -2430,7 +2586,7 @@ defmodule Muro.Emit.C.Session do
     void muro__sess_expected(const char *name, muro__sess_st st, char *buf, size_t n) {
       if (!buf || n == 0) return;
       muro__sess_lit(buf, n, "done");
-    #{exps}
+    #{indent(exps, 2)}
     }
     """
     |> String.trim()
