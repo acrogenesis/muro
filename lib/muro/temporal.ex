@@ -448,6 +448,9 @@ defmodule Muro.Temporal do
   defp fault_name(:unbounded), do: "unbounded recursive payload"
   defp fault_name(other), do: to_string(other)
 
+  @doc false
+  def meeting_graph(book, %{kind: :meet} = meet) when is_list(book), do: build(book, meet)
+
   defp build(book, meet) do
     with {:ok, left} <- fetch_process(book, meet.left),
          {:ok, right} <- fetch_process(book, meet.right),

@@ -1,10 +1,10 @@
 -- One buffered meeting, keyed by a closed kind. init opens when it
--- arrives. signal waits until every earlier instance of its key is
--- resolved, an earlier init and an earlier signal included. The formula
--- (opened k signal) implies (resolved k init) names only init.
--- opened, held, and resolved take a constructor name, not an instance,
--- so that formula cannot name an earlier signal. Step 2 decides it.
--- The family is spec.
+-- arrives. signal opens when no earlier arrived instance of its key
+-- is unresolved. An earlier init and an earlier signal both count.
+-- An instance that has not arrived does not.
+-- no-overtake says every counting init is resolved, and there may be
+-- none. A signal before any init does not refute it. The hold line
+-- is the stronger guard. The family is spec.
 
 data Event : Type where
   init : Event
@@ -28,3 +28,6 @@ meet slot : server with task may fail buffer 1
 family slots : slot per key of Event
   init never held
   signal held while earlier unresolved
+
+temporal no-overtake : slots :=
+  forall (k : key). always ((opened k signal) implies (resolved k init))

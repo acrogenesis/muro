@@ -3929,7 +3929,8 @@ defmodule Muro.Check do
 
   # Standalone check of one family. `check_sig/2` does not use this
   # clause: the meeting was already checked, and the declaration reads
-  # that recorded outcome. The family graph is not built.
+  # that recorded outcome. The family graph is built for a temporal
+  # declaration, not for the family itself.
   def check_def(book, %{kind: :family} = d, fuel) do
     family_report(d, Muro.Family.check_decl(book, d, fuel))
   end
@@ -3985,6 +3986,10 @@ defmodule Muro.Check do
     loc = Print.loc_prefix(Map.get(d, :loc))
 
     case result do
+      # The line is the count. For a family that count is the fixed
+      # script at one retry: a model hypothesis, not data-independence.
+      # The sentence stands beside the count in the manual. A meeting
+      # uses this same line, and that count is the proved graph.
       {:ok, n, m} ->
         {:note, "temporal #{name}: holds in #{n} reachable states, #{transitions(m)}"}
 
@@ -4936,7 +4941,10 @@ defmodule Muro.Check do
   same recorded outcome and does not walk the meeting again. A temporal
   declaration over a family reads that same check. When the family does
   not check, the formula is `skipped because <family> does not check`
-  and is not walked.
+  and is not walked. `always` explores the family graph once per family,
+  after every formula of that family has been walked and at least one
+  `always` is well-formed, and shares it. An ill-formed formula does
+  not explore it. `eventually` and `leads_to` do not explore it.
   """
   def check_sig(named_book, opts \\ []) do
     note_check()
@@ -5034,18 +5042,42 @@ defmodule Muro.Check do
          )}
       end)
 
+    family_preps =
+      over_family
+      |> Enum.map(fn {%{meeting: name}, _i} -> find_family(book, name) end)
+      |> Enum.uniq_by(& &1.name)
+      |> Map.new(fn family ->
+        status = Muro.Family.check(book, family, recorded_status(meetings, family.meeting))
+        {family.name, {status, family_prep(book, family, status, over_family)}}
+      end)
+
     family_slots =
       Enum.map(over_family, fn {d, i} ->
         family = find_family(book, d.meeting)
-
-        status =
-          Muro.Family.check(book, family, recorded_status(meetings, family.meeting))
-
-        {i, temporal_report(d, Muro.Family.judge_formula(book, family, d.formula, status))}
+        {status, prep} = Map.fetch!(family_preps, family.name)
+        {i, temporal_report(d, Muro.Family.judge_formula(book, family, d.formula, status, prep))}
       end)
 
     meet_slots ++ family_slots
   end
+
+  # One search for every well-formed `always` on this family. The
+  # formulas are walked first. An ill-formed formula, and a liveness
+  # formula, do not build the graph.
+  defp family_prep(book, family, :ok, decls) do
+    formulas =
+      for {%{meeting: name, formula: formula}, _i} <- decls,
+          name == family.name,
+          do: formula
+
+    if Muro.Family.needs_graph?(book, family, formulas) do
+      Muro.Family.Graph.prepare(book, family)
+    else
+      :skip
+    end
+  end
+
+  defp family_prep(_book, _family, _status, _decls), do: :skip
 
   defp family_slots(_book, [], _meetings), do: []
 

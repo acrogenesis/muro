@@ -3,11 +3,10 @@ defmodule Muro.Family do
   Checks a keyed family.
 
   The declaration is spec. It names one buffered meeting and a closed
-  kind, and one rule for each constructor. This module does not build
-  the family graph. A formula over a family that checks and is well
-  formed is `not yet decided`. A formula over a family that does not
-  check is `skipped because <family> does not check`, and the formula
-  is not walked.
+  kind, and one rule for each constructor. `always` is decided on the
+  fixed script in `Muro.Family.Graph`. `eventually` and `leads_to` are
+  `not yet decided`. A formula over a family that does not check is
+  `skipped because <family> does not check`, and the formula is not walked.
   """
 
   @run_msg "temporal formulas do not mention run definitions"
@@ -41,28 +40,76 @@ defmodule Muro.Family do
   end
 
   @doc """
-  `{:error, "not yet decided"}` when the family checks and the formula
-  is well formed. `{:error, "skipped because <family> does not check"}`
-  when `status` is the family's refusal: the formula is not walked.
-  `{:error, message}` when a binder or an atom is not. The message has
-  no location and no declaration name. This does not build the graph.
+  `{:ok, states, transitions}` when `always` holds on the family graph.
+  `{:error, "not yet decided"}` when the formula is `eventually` or
+  `leads_to`. `{:error, "skipped because <family> does not check"}` when
+  `status` is the family's refusal: the formula is not walked.
+  `{:error, message}` when a binder or an atom is not, or `always`
+  fails. The message has no location and no declaration name.
 
   `status` is `check/3` or `check_decl/3`. The three-argument form
-  checks the declaration, including its meeting.
+  checks the declaration, including its meeting. `prep` is a
+  `Muro.Family.Graph` search shared by the declarations of one family,
+  or `:auto` to build it here.
   """
   def judge_formula(book, family, formula) when is_list(book) do
     judge_formula(book, family, formula, check_decl(book, family, nil))
   end
 
-  def judge_formula(book, %{key: key}, formula, :ok) when is_list(book) do
+  def judge_formula(book, family, formula, status) when is_list(book) do
+    judge_formula(book, family, formula, status, :auto)
+  end
+
+  def judge_formula(book, %{key: key} = family, formula, :ok, prep) when is_list(book) do
     with {:ok, data} <- closed_kind(book, key),
          :ok <- walk_formula(book, data, %{}, formula) do
+      decide(book, family, formula, prep)
+    end
+  end
+
+  def judge_formula(_book, %{name: name}, _formula, {:error, _}, _prep) do
+    {:error, "skipped because #{name} does not check"}
+  end
+
+  defp decide(book, family, formula, prep) do
+    if always?(formula) do
+      decide_always(book, family, formula, prep)
+    else
       {:error, "not yet decided"}
     end
   end
 
-  def judge_formula(_book, %{name: name}, _formula, {:error, _}) do
-    {:error, "skipped because #{name} does not check"}
+  defp always?({:forall, _, _, body}), do: always?(body)
+  defp always?({:always, _}), do: true
+  defp always?(_), do: false
+
+  defp decide_always(book, family, formula, :auto) do
+    case Muro.Family.Graph.prepare(book, family) do
+      {:ok, search} -> Muro.Family.Graph.decide(search, formula)
+      {:error, _} = err -> err
+    end
+  end
+
+  defp decide_always(_book, _family, formula, {:ok, search}) do
+    Muro.Family.Graph.decide(search, formula)
+  end
+
+  defp decide_always(book, family, formula, :skip),
+    do: decide_always(book, family, formula, :auto)
+
+  defp decide_always(_book, _family, _formula, {:error, msg}), do: {:error, msg}
+
+  @doc false
+  def needs_graph?(book, %{key: key}, formulas) when is_list(book) and is_list(formulas) do
+    case closed_kind(book, key) do
+      {:ok, data} ->
+        Enum.any?(formulas, fn formula ->
+          always?(formula) and walk_formula(book, data, %{}, formula) == :ok
+        end)
+
+      _ ->
+        false
+    end
   end
 
   defp meeting_ok(name, :absent), do: {:error, "unknown meeting #{name}"}
@@ -150,25 +197,15 @@ defmodule Muro.Family do
   end
 
   # `key` is the sort, including when a data type of that name exists.
+  # Any other binder is refused here. Deciding used to peel it and
+  # ignore it, so `forall (c : Bit). always true` held vacuously.
   defp bind(_book, {:dat, "key", []}), do: {:ok, :key}
-  defp bind(_book, :bit), do: {:ok, :value}
-  defp bind(_book, :nat), do: {:error, "forall over Nat ranges over an open type"}
+  defp bind(_book, ty), do: {:error, "forall over #{forall_ty(ty)} is not a key"}
 
-  defp bind(book, {:dat, name, _}) do
-    case Enum.find(book, &(&1[:kind] == :data and &1.name == name)) do
-      %{params: params, ctors: ctors} = data ->
-        if ctors != [] and Enum.all?(ctors, &nullary?(&1, data)) and params_closed?(params) do
-          {:ok, :value}
-        else
-          {:error, "forall over #{name} ranges over an open type"}
-        end
-
-      _ ->
-        {:error, "forall over #{name} ranges over an open type"}
-    end
-  end
-
-  defp bind(_book, ty), do: {:error, "forall over #{ty_open(ty)} ranges over an open type"}
+  defp forall_ty(:bit), do: "Bit"
+  defp forall_ty(:nat), do: "Nat"
+  defp forall_ty({:dat, name, _}), do: name
+  defp forall_ty(ty), do: ty_open(ty)
 
   defp ty_open(:unit), do: "Unit"
   defp ty_open({:vec, _, _}), do: "Vec"
