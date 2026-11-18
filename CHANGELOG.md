@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.21.18
+
+`prefix` names a list of directed moves and says that list is a legal prefix of a session from a position. The position is the start, a recursion variable, a session the protocol continues as, or the number `--backend c` assigns to a node of that session. An empty list is legal. A move in the wrong direction, a constructor the payload does not have, and a move the protocol does not allow there are refused.
+
+The finite forms `end`, `send`, `recv`, `choose`, and `branch` are proved in Agda. A derivation is a legal prefix, and the decision procedure accepts a list only when that list has one. Recursion, a named continuation, a dependent payload, an evidence bound, an indexed bit, a case, and the numeric position are decided by the checker. They are not that theorem. The generated C program is not proved.
+
+`examples/prefix.muro` is the worked book.
+
+A `dual` use is the other end of that session, including from a session the protocol continues as. Two `dual`s cancel.
+
+The judgment does not check muro-http's `admit.muro`. That book has no `prefix` declarations. Checking its offers means adding `prefix` declarations there, on `conn` and `peer`.
+
+### Manual
+
+- Sessions, Grammar, Examples, and Limits: a legal prefix, how to write it, and what is proved.
+
+### Package
+
+- Version 0.21.18.
+
 ## 0.21.17
 
 `eventually` and `leads_to` over a keyed family are checked on the same fixed script as `always`. Key `a` runs `init`, then `signal`, then `signal`. Key `b` runs `init`. `no-starve` is `(held k signal) leads_to (opened k signal)`. On `examples/keyed-slots.muro` the failure arm is `done`, and `no-starve` holds in 171649 reachable states, 729184 transitions. That count is a model hypothesis, not data-independence: the script is fixed and a retry happens once. It is the graph `no-overtake` already uses. The checker builds that graph once, and the search is the cost of the check.

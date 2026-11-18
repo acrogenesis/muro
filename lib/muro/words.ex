@@ -7,10 +7,10 @@ defmodule Muro.Words do
   cannot drift from the grammar.
   """
 
-  @decl ~w(def data session conform meet place scheme move endpoint read talk choreography seat link relay import param where)
+  @decl ~w(def data session conform prefix meet place scheme move endpoint read talk choreography seat link relay import param where)
   # A book entry on its own. `place` and `relay` are declaration words too;
   # the parser tells those from a type by what follows the word.
-  @book ~w(def data param import session conform where)
+  @book ~w(def data param import session conform prefix where)
   @pay_stop ~w(end send recv choose branch rec case on done stop put get pick0 pick1 cover where)
   @reserved ~w(end send recv choose branch rec case done stop put get pick0 pick1 cover match on Nat Bit Unit Vec dual seen)
   @proc ~w(done stop put get pick0 pick1 cover rec match end send recv choose branch on)
@@ -31,6 +31,10 @@ defmodule Muro.Words do
   # The parser reserves them only in those forms.
   @family ~w(per key of never held while earlier unresolved opened resolved)
   @repr ~w(else boolean integer nil interned string list optional nullable tuple map_of map open)
+  # Keywords only inside `prefix name :`. `start` is the position and
+  # `pick` selects an arm. Classified here so the highlighter and the
+  # parser share the spelling. The parser reserves them only in that form.
+  @prefix_move ~w(start pick)
 
   @types ~w(Atom String Bytes Slice Type Nat I64 U8 U32 U64 WBool Opt F32 Tensor Unit Empty Stream Always Bit Vec run spec evidence internal)
   @nu ["ν", "nu"]
@@ -72,7 +76,7 @@ defmodule Muro.Words do
     "<"
   ]
 
-  @naming ~w(def data session conform meet place scheme talk choreography param endpoint seat link temporal repr family) ++
+  @naming ~w(def data session conform prefix meet place scheme talk choreography param endpoint seat link temporal repr family) ++
             @nu
 
   @keywords @pay_stop ++
@@ -84,6 +88,7 @@ defmodule Muro.Words do
               @temporal ++
               @family ++
               @repr ++
+              @prefix_move ++
               @term
 
   @lexicon (
