@@ -28,7 +28,8 @@ defmodule Muro.ManifestTest do
                target: "lib/my_app/billing/rounding.ex",
                kind: :elixir,
                impl: nil,
-               imports: false
+               imports: false,
+               c_prefix: nil
              }
            ]
   end
@@ -202,7 +203,8 @@ defmodule Muro.ManifestTest do
                target: "lib/round.ex",
                kind: :elixir,
                impl: nil,
-               imports: false
+               imports: false,
+               c_prefix: nil
              },
              %{
                book: "priv/muro/round.muro",
@@ -210,7 +212,8 @@ defmodule Muro.ManifestTest do
                target: "test/round_test.exs",
                kind: :exunit,
                impl: MyApp.Rounding,
-               imports: false
+               imports: false,
+               c_prefix: nil
              }
            ]
   end
@@ -286,6 +289,54 @@ defmodule Muro.ManifestTest do
              )
 
     assert bad_bool =~ "modules entry 1: imports: must be a boolean, got: :yes"
+
+    assert {:error, prefix_kind} =
+             Muro.Manifest.validate(
+               [
+                 muro: "1.0.0",
+                 modules: [{"ok.muro", One, "lib/one.ex", [kind: :elixir, c_prefix: "admit_"]}]
+               ],
+               dir
+             )
+
+    assert prefix_kind =~ "modules entry 1: c_prefix: is only valid for kind: :c"
+
+    assert {:error, prefix_text} =
+             Muro.Manifest.validate(
+               [
+                 muro: "1.0.0",
+                 modules: [{"ok.muro", "lib/one.c", [kind: :c, c_prefix: "1bad"]}]
+               ],
+               dir
+             )
+
+    assert prefix_text =~ "modules entry 1: c_prefix: must be a C identifier prefix"
+  end
+
+  test "c_prefix is stored on a c entry and includes the separator" do
+    dir = tmp_dir()
+    write_book(dir, "ok.muro")
+
+    assert {:ok, manifest} =
+             Muro.Manifest.validate(
+               [
+                 muro: "1.0.0",
+                 modules: [{"ok.muro", "lib/ok.c", [kind: :c, c_prefix: "admit_"]}]
+               ],
+               dir
+             )
+
+    assert manifest.modules == [
+             %{
+               book: "ok.muro",
+               module: nil,
+               target: "lib/ok.c",
+               kind: :c,
+               impl: nil,
+               imports: false,
+               c_prefix: "admit_"
+             }
+           ]
   end
 
   test "imports: true is stored only on an exunit entry" do
@@ -310,7 +361,8 @@ defmodule Muro.ManifestTest do
                target: "test/one_test.exs",
                kind: :exunit,
                impl: nil,
-               imports: true
+               imports: true,
+               c_prefix: nil
              }
            ]
   end
@@ -455,7 +507,8 @@ defmodule Muro.ManifestTest do
                target: "lib/ok_fsm.ex",
                kind: :fsm,
                impl: nil,
-               imports: false
+               imports: false,
+               c_prefix: nil
              }
            ]
 

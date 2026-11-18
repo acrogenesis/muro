@@ -193,6 +193,7 @@ defmodule Muro.Emit do
 
   @doc false
   def emit_private_runs(book, wanted) when is_list(book) and is_list(wanted) do
+    reset_produce()
     names = elixir_names(book)
     want = MapSet.new(wanted)
 
@@ -294,6 +295,8 @@ defmodule Muro.Emit do
   exists, a caller compares these shapes.
   """
   def emit_closed(term, book) when is_list(book) do
+    reset_produce()
+
     case value_kind(term, book) do
       :value -> {:ok, emit_db(term, 0, book, %{})}
       reason -> {:error, reason}
@@ -301,6 +304,7 @@ defmodule Muro.Emit do
   end
 
   def emit_module(module, book) when is_atom(module) do
+    reset_produce()
     book = Muro.Grade.erase_book(book)
     runs = run_defs(book)
     names = elixir_names(book)
@@ -446,6 +450,8 @@ defmodule Muro.Emit do
   end
 
   defp emit_db({:mdata, e, _p, bs}, d, book, names) do
+    bs = reachable_arms(e, bs, book)
+
     clauses =
       Enum.map(bs, fn {name, ar, b} ->
         pat = emit_ctor_pat(name, ar, d, b, book)
@@ -899,6 +905,200 @@ defmodule Muro.Emit do
       %{kind: :data, ctors: cs} -> Enum.any?(cs, &(&1.name == name))
       _ -> false
     end)
+  end
+
+  # Drop a data clause only when the scrutinee's over-approx is one
+  # data type and does not include that constructor. `:any` keeps the
+  # book's clauses. An empty intersection keeps them too: a wrong
+  # empty set must not become an empty case.
+  defp reachable_arms(e, bs, book) do
+    case produced(e, book, MapSet.new()) do
+      {:ctors, data, set} ->
+        kept = Enum.filter(bs, &arm_kept?(&1, data, set, book))
+        if kept == [], do: bs, else: kept
+
+      _ ->
+        bs
+    end
+  end
+
+  defp arm_kept?({name, _, _}, data, set, book) do
+    case ctor_datas(book, name) do
+      [^data] -> MapSet.member?(set, name)
+      _ -> true
+    end
+  end
+
+  defp reset_produce, do: Process.put({__MODULE__, :produce}, %{})
+
+  defp produce_get(name) do
+    case Process.get({__MODULE__, :produce}) do
+      %{^name => value} -> {:ok, value}
+      _ -> :error
+    end
+  end
+
+  defp produce_put(name, value) do
+    map = Process.get({__MODULE__, :produce}) || %{}
+    Process.put({__MODULE__, :produce}, Map.put(map, name, value))
+    value
+  end
+
+  # Constructors a term can return. Unknowns are `:any`, which drops
+  # nothing. A match contributes every arm, including an arm the
+  # scrutinee cannot reach, so a dead arm cannot hide a constructor.
+  defp produced(term, book, seen) do
+    case peel_marks(term) do
+      {:app, _, _} = t ->
+        {head, args} = spine(t, [])
+        produced_head(head, args, book, seen)
+
+      {:def, n} ->
+        produced_head({:def, n}, [], book, seen)
+
+      {:mdata, _e, _, bs} ->
+        union_bodies(bs, book, seen)
+
+      {:mwbool, _e, _, bs} ->
+        union_bodies(bs, book, seen)
+
+      {:mopt, _e, _, bs} ->
+        union_bodies(bs, book, seen)
+
+      {:matom, _e, _, bs} ->
+        union_bodies(bs, book, seen)
+
+      {:mnat, _e, _, z, s} ->
+        union_prod(produced(z, book, seen), produced(s, book, seen)) |> empty_any()
+
+      {:munit, _e, _, u} ->
+        produced(u, book, seen)
+
+      {:letp, _e, t} ->
+        produced(t, book, seen)
+
+      _ ->
+        :any
+    end
+  end
+
+  defp produced_head({:def, n}, args, book, seen) do
+    cond do
+      ctor_name?(book, n) ->
+        case ctor_data_arity(book, n) do
+          {:ok, data, arity} when length(args) == arity ->
+            {:ctors, data, MapSet.new([n])}
+
+          _ ->
+            :any
+        end
+
+      true ->
+        case run_arity(book, n) do
+          {:ok, arity} when length(args) == arity -> def_produced(n, book, seen)
+          _ -> :any
+        end
+    end
+  end
+
+  defp produced_head(_, _, _, _), do: :any
+
+  defp def_produced(name, book, seen) do
+    if MapSet.member?(seen, name) do
+      :any
+    else
+      case produce_get(name) do
+        {:ok, value} ->
+          value
+
+        :error ->
+          value =
+            case Enum.find(run_defs(book), &(&1.name == name)) do
+              nil ->
+                :any
+
+              %{type: ty, body: body} ->
+                with {:ok, arity} <- type_arity(ty),
+                     {:ok, body_db} <- Ast.to_db(body) do
+                  produced(eta_body(body_db, arity), book, MapSet.put(seen, name))
+                else
+                  _ -> :any
+                end
+            end
+
+          produce_put(name, value)
+      end
+    end
+  end
+
+  defp union_bodies(bs, book, seen) do
+    Enum.reduce(bs, :empty, fn arm, acc ->
+      body =
+        case arm do
+          {_, _, b} -> b
+          {_, b} -> b
+        end
+
+      union_prod(acc, produced(body, book, seen))
+    end)
+    |> empty_any()
+  end
+
+  defp union_prod(:empty, other), do: other
+  defp union_prod(other, :empty), do: other
+  defp union_prod(:any, _), do: :any
+  defp union_prod(_, :any), do: :any
+  defp union_prod({:ctors, data, a}, {:ctors, data, b}), do: {:ctors, data, MapSet.union(a, b)}
+  defp union_prod({:ctors, _, _}, {:ctors, _, _}), do: :any
+
+  defp empty_any(:empty), do: :any
+  defp empty_any(other), do: other
+
+  defp peel_marks({:ann, e, _}), do: peel_marks(e)
+  defp peel_marks({:rwt, _, _, t}), do: peel_marks(t)
+  defp peel_marks(term), do: term
+
+  defp ctor_datas(book, name) do
+    for %{kind: :data, name: data, ctors: cs} <- book,
+        Enum.any?(cs, &(&1.name == name)),
+        do: data
+  end
+
+  defp ctor_data_arity(book, name) do
+    hits =
+      for %{kind: :data, name: data, ctors: cs} <- book,
+          ctor <- cs,
+          ctor.name == name,
+          do: {data, ctor}
+
+    case hits do
+      [{data, ctor}] ->
+        case type_arity(ctor.type) do
+          {:ok, n} -> {:ok, data, n}
+          :error -> :error
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp run_arity(book, name) do
+    case Enum.find(run_defs(book), &(&1.name == name)) do
+      nil -> :error
+      %{type: ty} -> type_arity(ty)
+    end
+  end
+
+  defp type_arity(type) do
+    case Ast.to_db(type) do
+      {:ok, db} ->
+        {_erased, n} = telescope(db, 0, [])
+        {:ok, n}
+
+      _ ->
+        :error
+    end
   end
 
   # A value the suite can pass to `==`. Anything else is a skip reason.

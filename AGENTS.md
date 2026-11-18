@@ -55,7 +55,7 @@ make agda                                   # Job B only; needs vendor/agda-stdl
 
 `mix muro.synth` discovers features from `step`. A `Feature` the book declares is an optional hint. A state name is not a feature.
 
-The archive installs those tasks in any directory: `mix archive.install hex muro`. A pinned version: `mix archive.install hex muro 0.21.18`. From a checkout: `mix archive.build && mix archive.install muro-0.21.18.ez`. From GitHub: `mix archive.install github murolang/muro`. Inside a project that depends on muro, the project's copy runs after `app.start`. Inside any other project, or outside a project, the archive's copy runs and the host is neither compiled nor started. A script run with `mix run --no-start` does not see the archive; use the Mix tasks. A project without Elixir installs the self-contained executable: `mise use -g github:murolang/muro@0.21.18`. See [The executable](manual/binary.md).
+The archive installs those tasks in any directory: `mix archive.install hex muro`. A pinned version: `mix archive.install hex muro 0.21.19`. From a checkout: `mix archive.build && mix archive.install muro-0.21.19.ez`. From GitHub: `mix archive.install github murolang/muro`. Inside a project that depends on muro, the project's copy runs after `app.start`. Inside any other project, or outside a project, the archive's copy runs and the host is neither compiled nor started. A script run with `mix run --no-start` does not see the archive; use the Mix tasks. A project without Elixir installs the self-contained executable: `mise use -g github:murolang/muro@0.21.19`. See [The executable](manual/binary.md).
 
 Success from `mix muro.check`: a `Muro v…` line, then `All terms check. Evidence never becomes a run.` A keyed family prints `family <name>: <meeting> per key of <kind>`, and a temporal declaration prints one line per declaration. Those lines are in book order. A choreography prints one line per projected pair. All of them sit between the version and that sentence. A book with none of them prints the two lines. A book that imports packages then prints one `conforms to <name> <version> (sha256 <hash>)` line per package. See [Packages](manual/packages.md).
 
@@ -66,7 +66,7 @@ Emit only after a successful check. Spec and evidence are omitted; erased argume
 ```
 mix muro.emit path.muro                     # Elixir (default); module name from the file stem
 mix muro.emit path.muro --backend exunit    # ExUnit suite on stdout; test module is the stem plus Test
-mix muro.emit path.muro --backend c         # <name>.h and <name>.c; a Nat run is also a NIF
+mix muro.emit path.muro --backend c --prefix TEXT  # <name>.h and <name>.c; a Nat run is also a NIF
 mix muro.emit path.muro --backend rust      # <name>.rs
 mix muro.emit path.muro --backend zig       # <name>.zig
 mix muro.emit path.muro --backend asm       # <name>.s, Cortex-M0, Nat run

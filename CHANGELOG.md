@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.21.19
+
+`--backend c` steps a session with a constructor word. `muro__sess_<name>_step_word` takes the direction, the payload kind, and a `uint64_t`. A data word is the constructor's number in this book: every data declaration, in book order, then that declaration's constructors. The name-string step still works. A pair, a record, a vector, and a constructor with fields stay on that step. The header names the status, the direction, and the payload kind, and it names each constructor twice: the tag inside its type, and the flat word. `MURO_SESS_SEND` is 1 and `MURO_SESS_RECV` is 2. Those are directions. The payload kind is a separate enum: `MURO_SESS_NAT` is 1, `MURO_SESS_BIT` is 2, `MURO_SESS_UNIT` is 3, `MURO_SESS_PICK` is 4, `MURO_SESS_PAIR` is 5, `MURO_SESS_REC` is 6, `MURO_SESS_VEC` is 7, and `MURO_SESS_DATA` is 8. The first constructor of a type is tag 0.
+
+`struct muro__nat` and `struct muro__unit` sit under one include guard. Two emitted headers can share a translation unit. Two session headers with the same number of nat slots share the state struct. A different count is a compile error. A bytes typedef sits under `MURO__SLICE` and a string typedef sits under `MURO__STR`, so two headers that use them share those typedefs. A prefix also covers each data struct and its tag enum. An empty prefix leaves those names as they are. The prelude structs, the session status, direction, and payload enums, `muro__slice`, `muro__str`, an `Opt` typedef name, and the atom enum stay unprefixed. An `Opt` of a word sits under one guard. An `Opt` of data does not, because the field type is that book's struct. Two books that both declare `Piece` can share a translation unit when each has its own prefix. Two books that both emit an `Opt` of the same data type still share that name. Without a prefix, two books that declare the same data type still cannot be included together.
+
+`I64` is `int64_t`. Passing −1, and `lti` of that value, was already correct. This release adds a check that the path still holds. Session init still takes `uint64_t`.
+
+`run internal` is `static` and is not a header entry. `--prefix`, and `c_prefix:` on a `:c` manifest entry (`c_prefix` in `muro.toml`), prepends that text to every run, to that book's session entry points, to each data struct, and to that struct's tag enum. The text includes the separator. Without a prefix the names are unchanged. Two session books with no prefix both define `muro__sess_init`.
+
+The Elixir emitter omits a `match` clause whose constructor the scrutinee cannot return. A match on a value the book still builds keeps every clause.
+
+### Manual
+
+- Emit, Sessions, Machine numbers, Committed modules, and The executable: the word step, the named constants, the shared prelude, the C prefix on runs, session entry points, data structs, and tag enums, the bytes and string guards, and an `I64` of −1 that was already signed.
+
+### Package
+
+- Version 0.21.19.
+
 ## 0.21.18
 
 `prefix` names a list of directed moves and says that list is a legal prefix of a session from a position. The position is the start, a recursion variable, a session the protocol continues as, or the number `--backend c` assigns to a node of that session. An empty list is legal. A move in the wrong direction, a constructor the payload does not have, and a move the protocol does not allow there are refused.

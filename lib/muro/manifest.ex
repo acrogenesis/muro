@@ -27,6 +27,10 @@ defmodule Muro.Manifest do
       `imports:` boolean. `imports: true` collects closed equations
       from the files that book imports directly. The default is
       `false`. `imports:` on an `:elixir` entry is an error.
+      `c_prefix:` is only valid for `kind: :c`. It is a C identifier,
+      including the separator (`admit_`), prepended to every run and
+      to that book's session entry points. Omitted, those names stay
+      the source spellings. In `muro.toml` the key is `c_prefix`.
 
   A book or a target that leaves the project root is refused, and so
   is a missing book, a duplicate target, a module that is not an
@@ -59,7 +63,7 @@ defmodule Muro.Manifest do
   defstruct [:version, :fuel, :modules, :deps, :source, backend: nil]
 
   @keys [:backend, :fuel, :modules, :muro, :muro_deps]
-  @entry_opts [:kind, :impl, :imports]
+  @entry_opts [:kind, :impl, :imports, :c_prefix]
   @dep_name ~r/\A[a-z][a-z0-9_]*\z/
   @hex_name ~r/\A[a-z][a-z0-9_-]*\z/
   @git_opts [:ref, :root, :tag]
@@ -784,6 +788,7 @@ defmodule Muro.Manifest do
     module_errors = validate_module(module, index, kind)
     {impl, impl_errors} = take_impl(opts, kind, kind_errors == [], index)
     {imports, import_errors} = take_imports(opts, kind, kind_errors == [], index)
+    {c_prefix, c_prefix_errors} = take_c_prefix(opts, kind, kind_errors == [], index)
 
     ext_errors =
       if is_binary(target_rel) and kind_errors == [] do
@@ -796,7 +801,8 @@ defmodule Muro.Manifest do
       book_errors ++
         module_errors ++
         target_errors ++
-        opt_errors ++ kind_errors ++ impl_errors ++ import_errors ++ ext_errors
+        opt_errors ++
+        kind_errors ++ impl_errors ++ import_errors ++ c_prefix_errors ++ ext_errors
 
     entry =
       if book_rel && target_rel && errors == [] do
@@ -806,7 +812,8 @@ defmodule Muro.Manifest do
           target: target_rel,
           kind: kind,
           impl: impl,
-          imports: imports
+          imports: imports,
+          c_prefix: c_prefix
         }
       end
 
@@ -907,6 +914,48 @@ defmodule Muro.Manifest do
 
   defp import_bool_error(errors, value, index) do
     errors ++ ["modules entry #{index}: imports: must be a boolean, got: #{inspect(value)}"]
+  end
+
+  # Omitted means the C names stay the source spellings. The string is
+  # concatenated, so it includes the separator (`admit_`).
+  defp take_c_prefix(opts, kind, kind_ok?, index) do
+    case Keyword.fetch(opts, :c_prefix) do
+      :error ->
+        {nil, []}
+
+      {:ok, value} ->
+        errors =
+          []
+          |> c_prefix_kind_error(kind, kind_ok?, index)
+          |> c_prefix_text_error(value, index)
+
+        if errors == [], do: {value, []}, else: {nil, errors}
+    end
+  end
+
+  defp c_prefix_kind_error(errors, :c, true, _index), do: errors
+
+  defp c_prefix_kind_error(errors, _kind, true, index) do
+    errors ++ ["modules entry #{index}: c_prefix: is only valid for kind: :c"]
+  end
+
+  defp c_prefix_kind_error(errors, _kind, false, _index), do: errors
+
+  defp c_prefix_text_error(errors, value, index)
+       when is_binary(value) and value != "" do
+    if value =~ ~r/\A[A-Za-z_][A-Za-z0-9_]*\z/ do
+      errors
+    else
+      errors ++
+        [
+          "modules entry #{index}: c_prefix: must be a C identifier prefix, got: #{inspect(value)}"
+        ]
+    end
+  end
+
+  defp c_prefix_text_error(errors, value, index) do
+    errors ++
+      ["modules entry #{index}: c_prefix: must be a C identifier prefix, got: #{inspect(value)}"]
   end
 
   defp impl_alias_error(errors, impl, index) do

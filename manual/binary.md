@@ -14,10 +14,10 @@ In brief: `muro` is a self-contained executable. It carries its own Erlang runti
 Release assets are one file per target, named `muro-<version>-<os>-<arch>`, with a `.sha256` file beside each:
 
 ```
-muro-0.21.18-macos-aarch64
-muro-0.21.18-macos-x86_64
-muro-0.21.18-linux-x86_64
-muro-0.21.18-linux-aarch64
+muro-0.21.19-macos-aarch64
+muro-0.21.19-macos-x86_64
+muro-0.21.19-linux-x86_64
+muro-0.21.19-linux-aarch64
 ```
 
 The Linux binaries are built against musl, so one file runs on glibc and on Alpine. The asset name does not contain `musl`.
@@ -25,14 +25,14 @@ The Linux binaries are built against musl, so one file runs on glibc and on Alpi
 [mise](https://mise.jdx.dev/) installs the asset for the host:
 
 ```
-mise use -g github:murolang/muro@0.21.18
+mise use -g github:murolang/muro@0.21.19
 ```
 
 If mise reports `No versions found` or a 404 from `mise-versions.jdx.dev`, its version mirror does not list the release yet. Turn the mirror off and ask GitHub directly:
 
 ```
 mise settings set use_versions_host false
-mise use -g github:murolang/muro@0.21.18
+mise use -g github:murolang/muro@0.21.19
 ```
 
 `mise install muro` from the mise registry follows once the assets exist. A tag `v*` builds the four files, then smokes the Linux binary in a container with no Elixir and no Erlang. The assets are attached to the GitHub release only after that smoke succeeds. A failed smoke publishes nothing. The Hex package's dependencies are unchanged. Burrito builds the executable and is not a runtime dependency of the package.
@@ -47,7 +47,7 @@ prints `Muro v` and the version, the same line as `mix muro --version`.
 
 ```
 muro check path.muro
-muro emit path.muro [--backend elixir|c|rust|zig|asm|otp|fsm|exunit] [--node NAME] [--imports]
+muro emit path.muro [--backend elixir|c|rust|zig|asm|otp|fsm|exunit] [--node NAME] [--imports] [--prefix TEXT]
 muro gen
 muro gen --check
 muro init [--ci github] [--backend BACKEND] [--cargo-metadata]
@@ -66,7 +66,7 @@ The executable never compiles a host application and never starts one. That hold
 
 ## C
 
-`muro emit path.muro --backend c` writes `<name>.h` and `<name>.c` next to the book. `<name>` is the book stem. The executable does not load the host Mix project, so those two files are the whole output. Nothing in that output mentions `elixir_make`.
+`muro emit path.muro --backend c` writes `<name>.h` and `<name>.c` next to the book. `<name>` is the book stem. `--prefix TEXT` prepends TEXT to every run, to that book's session entry points, to each data struct, and to that struct's tag enum. TEXT includes the separator (`admit_`). Without it those names stay as they are. `struct muro__nat`, `struct muro__unit`, the session status, direction, and payload enums, `muro__slice`, `muro__str`, an `Opt` typedef, and the atom enum stay unprefixed. The page [Emit](emit.md) lists every name the prefix does and does not cover. The executable does not load the host Mix project, so those two files are the whole output. Nothing in that output mentions `elixir_make`.
 
 `mix muro.emit path.muro --backend c` writes the same `.h` and `.c`. When the working directory is the loaded Mix project, it also writes the NIF through `elixir_make`. The C bytes are the same in both cases. A project that wants the NIF adds `{:elixir_make, "~> 0.10", runtime: false}` and runs the Mix task. See [Emit](emit.md).
 
@@ -83,7 +83,7 @@ muro.toml and [package.metadata.muro] in Cargo.toml both define a manifest
 Three or more end with `all define a manifest`.
 
 ```toml
-muro = "0.21.18"
+muro = "0.21.19"
 fuel = 2000          # optional
 backend = "rust"     # optional default for [[modules]]
 

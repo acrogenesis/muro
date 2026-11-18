@@ -283,6 +283,56 @@ static void muro__sess_fill(muro__sess_res *res) {
   muro__sess_exp_at(res->state.at, &res->state, res->expected, sizeof res->expected);
 }
 
+static muro__sess_res muro__sess_word_bad(muro__sess_st st) {
+  muro__sess_res bad;
+  memset(&bad, 0, sizeof bad);
+  bad.status = MURO_SESS_UNEXPECTED;
+  bad.state = st;
+  bad.step = "";
+  muro__sess_lit(bad.expected, sizeof bad.expected, "word");
+  return bad;
+}
+
+static const char *muro__sess_word_name(uint64_t word) {
+  switch (word) {
+  case muro__word_temporal_Frame_bytes: return "bytes";
+  case muro__word_temporal_Frame_trailers: return "trailers";
+  case muro__word_temporal_Frame_headers: return "headers";
+  case muro__word_temporal_Ctl_rst: return "rst";
+    default: return 0;
+  }
+}
+
+static muro__sess_res muro__sess_word_step(
+    muro__sess_st st, int dir, int tag, uint64_t word,
+    muro__sess_res (*step)(muro__sess_st, int, const muro__sess_val *)) {
+  muro__sess_val value;
+  memset(&value, 0, sizeof value);
+  if (tag == MURO_SESS_NAT) {
+    value.tag = MURO_SESS_NAT;
+    value.nat = word;
+    return step(st, dir, &value);
+  }
+  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
+    if (word > 1) return muro__sess_word_bad(st);
+    value.tag = tag == MURO_SESS_BIT ? (uint8_t)MURO_SESS_BIT : (uint8_t)MURO_SESS_PICK;
+    value.bit = (uint8_t)word;
+    return step(st, dir, &value);
+  }
+  if (tag == MURO_SESS_UNIT) {
+    value.tag = MURO_SESS_UNIT;
+    return step(st, dir, &value);
+  }
+  if (tag == MURO_SESS_DATA) {
+    const char *ctor = muro__sess_word_name(word);
+    if (!ctor) return muro__sess_word_bad(st);
+    value.tag = MURO_SESS_DATA;
+    value.ctor = ctor;
+    return step(st, dir, &value);
+  }
+  return muro__sess_word_bad(st);
+}
+
 muro__sess_res muro__sess_outzdframes_init(void) {
   muro__sess_res out;
   muro__sess_res *res = &out;
@@ -448,6 +498,10 @@ muro__sess_res muro__sess_outzdframes_step(muro__sess_st st, int dir, const muro
       break;
   }
   return out;
+}
+
+muro__sess_res muro__sess_outzdframes_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_outzdframes_step);
 }
 
 int muro__sess_outzdframes_done(muro__sess_st st) {
@@ -836,6 +890,10 @@ muro__sess_res muro__sess_tolerate_step(muro__sess_st st, int dir, const muro__s
   return out;
 }
 
+muro__sess_res muro__sess_tolerate_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_tolerate_step);
+}
+
 int muro__sess_tolerate_done(muro__sess_st st) {
   if (st.key != 2) return 0;
   return muro__sess_is_done(st.key, st.at, st.stuck);
@@ -979,6 +1037,10 @@ muro__sess_res muro__sess_echo_step(muro__sess_st st, int dir, const muro__sess_
       break;
   }
   return out;
+}
+
+muro__sess_res muro__sess_echo_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_echo_step);
 }
 
 int muro__sess_echo_done(muro__sess_st st) {
@@ -1126,6 +1188,10 @@ muro__sess_res muro__sess_echozdback_step(muro__sess_st st, int dir, const muro_
   return out;
 }
 
+muro__sess_res muro__sess_echozdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_echozdback_step);
+}
+
 int muro__sess_echozdback_done(muro__sess_st st) {
   if (st.key != 4) return 0;
   return muro__sess_is_done(st.key, st.at, st.stuck);
@@ -1180,6 +1246,24 @@ muro__sess_res muro__sess_step(const char *name, muro__sess_st st, int dir, cons
   if (strcmp(name, "tolerate") == 0) return muro__sess_tolerate_step(st, dir, value);
   if (strcmp(name, "echo") == 0) return muro__sess_echo_step(st, dir, value);
   if (strcmp(name, "echo-back") == 0) return muro__sess_echozdback_step(st, dir, value);
+  return res;
+}
+
+muro__sess_res muro__sess_step_word(const char *name, muro__sess_st st, int dir, int tag, uint64_t word) {
+  muro__sess_res res;
+  memset(&res, 0, sizeof res);
+  res.status = MURO_SESS_UNEXPECTED;
+  res.state = st;
+  res.step = "";
+  muro__sess_lit(res.expected, sizeof res.expected, "done");
+  (void)dir;
+  (void)tag;
+  (void)word;
+  if (!name) return res;
+  if (strcmp(name, "out-frames") == 0) return muro__sess_outzdframes_step_word(st, dir, tag, word);
+  if (strcmp(name, "tolerate") == 0) return muro__sess_tolerate_step_word(st, dir, tag, word);
+  if (strcmp(name, "echo") == 0) return muro__sess_echo_step_word(st, dir, tag, word);
+  if (strcmp(name, "echo-back") == 0) return muro__sess_echozdback_step_word(st, dir, tag, word);
   return res;
 }
 

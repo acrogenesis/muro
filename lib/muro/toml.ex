@@ -932,8 +932,10 @@ defmodule Muro.Toml do
          {:ok, book} <- field_string(table, "book", index, path),
          {:ok, target} <- field_string(table, "target", index, path),
          {:ok, kind} <- field_kind(table, index, path, default),
-         {:ok, module} <- field_module(table, index, path) do
+         {:ok, module} <- field_module(table, index, path),
+         {:ok, c_prefix} <- field_c_prefix(table, index, path) do
       opts = [kind: kind]
+      opts = if c_prefix == nil, do: opts, else: Keyword.put(opts, :c_prefix, c_prefix)
 
       entry =
         if module == nil do
@@ -947,7 +949,7 @@ defmodule Muro.Toml do
   end
 
   defp module_keys(table, index, path) do
-    case Map.keys(table) -- ["book", "target", "backend", "module"] do
+    case Map.keys(table) -- ["book", "target", "backend", "module", "c_prefix"] do
       [] ->
         :ok
 
@@ -989,6 +991,19 @@ defmodule Muro.Toml do
 
       node ->
         {:error, "#{path}:#{node_line(node)}: modules entry #{index}: backend must be a string"}
+    end
+  end
+
+  defp field_c_prefix(table, index, path) do
+    case Map.get(table, "c_prefix") do
+      nil ->
+        {:ok, nil}
+
+      {:string, value, _line} ->
+        {:ok, value}
+
+      node ->
+        {:error, "#{path}:#{node_line(node)}: modules entry #{index}: c_prefix must be a string"}
     end
   end
 
