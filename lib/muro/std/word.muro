@@ -6,12 +6,7 @@
 
 import "le.muro"
 
-def minus : run internal Π (n : Nat) → Π (m : Nat) → Nat :=
-  λ (n : Nat) → λ (m : Nat) →
-    match m motive (λ _ → Nat)
-      | 0 => n
-      | suc mp => pred (minus n mp)
-
+-- minus is le.muro's truncated subtraction. times is not in that book.
 def times : run internal Π (+n : Nat) → Π (m : Nat) → Nat :=
   λ (+n : Nat) → λ (m : Nat) →
     match m motive (λ _ → Nat)

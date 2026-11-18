@@ -42,7 +42,9 @@ Evidence: `not-not`, `and-true`, `and-false`, `or-true`, `or-false`, `and-comm`,
 
 `Le` is ≤ on `Nat`. It is `spec`, and it computes: `Unit` when the inequality holds, `Empty` when it does not. A closed inequality is `tt`. A false one is eliminated with `matchEmpty`.
 
-`le-refl` and `le-trans` are evidence. `max` is `run`. `le-max-left` is `m ≤ max m n`. `le-max-right` is `n ≤ max m n`. `max-mono-left` and `max-mono-right` are monotonicity in each argument.
+`le-refl` and `le-trans` are evidence. `max`, `min`, and `minus` are `run`. `minus m n` is truncated subtraction: `0` when `n` is larger. `le-max-left` is `m ≤ max m n`. `le-max-right` is `n ≤ max m n`. `max-mono-left` and `max-mono-right` are monotonicity in each argument. `le-min-left` is `min m n ≤ m`. `le-min-right` is `min m n ≤ n`. `minus-le-zero` is `minus m n ≡ 0` when `m ≤ n`.
+
+In emitted Elixir, `max`, `min`, and `minus` are the integer operations they compute, and so is `compare` from `ord.muro` ([Emit](emit.md#how-values-look)).
 
 ## list.muro
 
@@ -84,7 +86,7 @@ Check on disk with `mix muro.check lib/muro/std/suc_bin.muro`. Import it with `i
 
 ## word.muro
 
-Unsigned checked arithmetic agrees with Nat. It imports `le.muro`. `minus` and `times` are `run internal`. `I64` is outside this book: `toNat` of −1 is 2^64−1.
+Unsigned checked arithmetic agrees with Nat. It imports `le.muro`, and `minus` is that book's truncated subtraction. `times` is `run internal` here. `I64` is outside this book: `toNat` of −1 is 2^64−1.
 
 For `U8`, `U32`, and `U64`, and for `addc`, `subc`, and `mulc`, the book gives three lemmas. The body of each is `wlink`.
 
