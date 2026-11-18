@@ -26,8 +26,10 @@ defmodule Muro.Family.GraphTest do
            end)
 
     assert Enum.any?(search.states, fn state ->
-             match?({:run, _, n, _}, Graph.phase(state, 0)) and
-               elem(Graph.phase(state, 0), 2) > 0 and Graph.phase(state, 1) == :held
+             case Graph.phase(state, 0) do
+               {:run, _, n, _} when n > 0 -> Graph.phase(state, 1) == :held
+               _ -> false
+             end
            end)
 
     assert Enum.any?(search.states, fn state ->
@@ -52,8 +54,17 @@ defmodule Muro.Family.GraphTest do
 
     assert {:error, ev} = Graph.decide(search, {:eventually, false})
     assert ev =~ "eventually (false) fails in slots"
-    assert ev =~ "; then forever:"
-    refute String.ends_with?(ev, "then forever: ")
+    [_, forever] = String.split(ev, "; then forever: ")
+
+    # The lasso cycle is the family stutter. The state after the step is
+    # the one that step returns to: every instance has resolved.
+    cycle = {:resolved, :resolved, :resolved, :resolved}
+    assert forever == "the family has finished: " <> Graph.dump(search.g, cycle)
+    assert Graph.dump(search.g, cycle) ==
+             "a init 0: resolved; a signal 1: resolved; a signal 2: resolved; b init 0: resolved"
+
+    assert Graph.edges(search.g, cycle) == [{:stay, cycle}]
+    assert Enum.member?(search.states, cycle)
 
     assert Graph.decide(search, {
              :forall,
