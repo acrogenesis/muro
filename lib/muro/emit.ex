@@ -289,8 +289,8 @@ defmodule Muro.Emit do
   Returns `{:ok, source}` or `{:error, reason}` where `reason` is
   `:function`, `:stream`, `:machine`, `:open`, or `:shape`.
 
-  Host data (`repr`, issue #131) belongs in this function. Until that
-  exists, a caller compares these shapes.
+  Host data goes through a `repr`; this function prints the emitted
+  shapes only.
   """
   def emit_closed(term, book) when is_list(book) do
     reset_produce()

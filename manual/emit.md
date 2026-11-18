@@ -261,7 +261,7 @@ The BEAM runs this call. The proof stops at the move.
 
 `rewrite` emits as its body. `refl` would be `:refl` if it ever appeared in run; it should not.
 
-A `Nat` is a non-negative integer of any size, the same integer on the wire, in a `repr`, and in an ExUnit suite. A closed numeral is that integer literal. A `match` on `0` and `suc` is a `case` on `0`, and the `suc` arm rebinds the predecessor as the integer minus one, so a run that recurses still takes one call per unit.
+A `Nat` is a non-negative integer of any size, the same integer on the wire, in a `repr`, and in an ExUnit suite. A closed numeral is that integer literal. A `match` on `0` and `suc` is a `case` on `0`, and the `suc` arm rebinds the predecessor as the integer minus one.
 
 A `match` on a `Nat` takes `0` or a positive integer. A negative integer, a float, or any other term raises `CaseClauseError`, so a host that passes something that is not a `Nat` gets an error, not a predecessor that keeps going down. A recursive run that is not a library operation still takes one call per unit of the value it recurses on: `half` of a billion is half a billion calls.
 

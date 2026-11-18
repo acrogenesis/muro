@@ -261,7 +261,7 @@ The same check applies inside a shape that has to pick, such as `nullable` of a 
 
 ## Nat
 
-`Nat` is a non-negative integer in the emitted module, so decode of an integer is that integer and encode returns it. Neither walks the value, and there is no upper bound. A negative integer is `{:negative_integer, v}`. A float, a string, or `nil` is `{:not_integer, v}`.
+`Nat` is a non-negative integer in the emitted module, so decode of an integer is that integer and encode returns it. Neither walks the value, and there is no upper bound, so a host that decodes untrusted input bounds the integer itself. A negative integer is `{:negative_integer, v}`. A float, a string, or `nil` is `{:not_integer, v}`.
 
 An interned name whose target is `Nat` is its index. `@muro_repr_nat_max`, set to `1_000_000` in the generated code, bounds how many names one table holds. A binary-numeral target, described above, is the other numeral a name may use. Its terms are as deep as the bit count, not as deep as the index. `std:suc_bin.muro` is a library successor on `List Bit`; it is not an interned-name target.
 
