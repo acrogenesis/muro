@@ -124,7 +124,7 @@ A vector length is the numeral in the type, or the nat received earlier in this 
 
 An evidence payload is the nat alone. The evidence is not on the wire. The machine also checks the bound that evidence stands for, a numeral or an earlier nat. `window` after receiving `8` expects `{:send, {:nat_at_most, 8}}`, and `9` is `:unexpected`. This is stricter than the OTP image, which checks only that the value is a nat. A binder erased in any other way is not on the wire.
 
-A bit index selects the first arm on `:b0` and the second on `:b1`. A `case` on the constructor just exchanged takes that constructor's arm, in declaration order. `case (f n)` applies the emitted `run` `f` to the value just exchanged and takes the arm of the result. The run functions live in the parent module. They take the emitter's data (a nat is `0` or `{:suc, n}`), so the call converts at that boundary only. A nat above `100_000` is `:unexpected` there, with `{:nat_at_most, 100_000}`, and no Peano term is built. `expected/1` still describes the protocol step.
+A bit index selects the first arm on `:b0` and the second on `:b1`. A `case` on the constructor just exchanged takes that constructor's arm, in declaration order. `case (f n)` applies the emitted `run` `f` to the value just exchanged and takes the arm of the result. The run functions live in the parent module. They take the emitter's data, and a nat there is the same non-negative integer as on the wire, at any size. The C and JavaScript session images still build a Peano nat for that run, and refuse a nat above `100_000` there. `expected/1` still describes the protocol step.
 
 ## repr
 

@@ -249,7 +249,7 @@ The BEAM runs this call. The proof stops at the move.
 | Muro | Elixir |
 | --- | --- |
 | `0` | `0` |
-| `suc(n)` | `{:suc, n}` |
+| `suc(n)` | `n + 1`, a non-negative integer |
 | `tt` | `:tt` |
 | 0-argument ctor (`nil`, `nothing`, `leaf`) | atom (`:nil`, `:nothing`, `:leaf`) |
 | n-argument ctor | `{:ctor, args…}` |
@@ -260,6 +260,12 @@ The BEAM runs this call. The proof stops at the move.
 | `addi` / `addt` / `packI` | `Nx.add` / `Nx.stack` / `Nx.tensor` |
 
 `rewrite` emits as its body. `refl` would be `:refl` if it ever appeared in run; it should not.
+
+A `Nat` is a non-negative integer of any size, the same integer on the wire, in a `repr`, and in an ExUnit suite. A closed numeral is that integer literal. A `match` on `0` and `suc` is a `case` on `0`, and the `suc` arm rebinds the predecessor as the integer minus one, so a run that recurses still takes one call per unit.
+
+A run whose type and body are exactly a library definition is emitted as the integer operation that definition computes: `pred` and `plus` from the prelude, `max`, `min`, and `minus` from `std:le.muro`, and `compare` from `std:ord.muro`. `plus 1000000 3` is one addition. A file that redefines one of those names, or a mutant of its body, is not that definition and keeps the emitted recursion. Each operation is tested against the recursion it replaces.
+
+C, Rust, Zig, JavaScript, and Cortex-M keep their own `Nat` representation, described in each section above.
 
 ## Failing functions
 
@@ -309,7 +315,7 @@ The C backend has no closures. An unapplied lambda, a definition passed as a val
 
 A `repr` states the host shape of a data type. `mix muro.emit` then writes `decode_<type>/1`, `decode_<type>/2`, and `encode_<type>/2` in the same module as the run functions. Decode takes an Elixir term and returns `{:ok, value, table}` or `{:error, {path, reason}}`. `decode_<type>/1` starts from an empty name table. `decode_<type>/2` starts from the table the host passes. Encode takes `(value, table)` and returns the host term. There is no arity-1 encode. A book with no `repr` emits the same text as before. `--backend fsm` calls `decode_<type>/1` for a payload that has a `repr` and drops the table. `--backend js` writes `decode_<type>` and `encode_<type>` in that module. Decode returns `{ok: {value, table}}` or `{error: {path, reason}}` and does not throw. One argument starts from an empty name table. Encode takes the value and the table and returns `{ok: wire}` or `{error}`. A book with no `repr` emits no codec. A session whose payload type has a `repr` is still omitted. The runs and the codecs are written. The stepper does not call the codecs. Rust, Zig, asm, OTP, and `--node` ignore a `repr`. C writes no codec. A session payload whose type has a `repr` is refused (`c:session`).
 
-The vocabulary, the strictness rules, and the Nat guard are [Host representations](repr.md).
+The vocabulary and the strictness rules are [Host representations](repr.md).
 
 ## What emit is not
 

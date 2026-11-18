@@ -364,7 +364,6 @@ defmodule Muro.Synth.Feature do
   end
 
   defp positive?(0), do: false
-  defp positive?({:suc, _n}), do: true
   defp positive?(n) when is_integer(n), do: n > 0
   defp positive?(_reward), do: false
 
@@ -409,7 +408,6 @@ defmodule Muro.Synth.Feature do
   end
 
   defp closed_nat?(0), do: true
-  defp closed_nat?({:suc, n}), do: closed_nat?(n)
   defp closed_nat?(n) when is_integer(n) and n >= 0, do: true
   defp closed_nat?(_reward), do: false
 

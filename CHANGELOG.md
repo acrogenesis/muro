@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.22.0
+
+Emitted Elixir carries a `Nat` as a non-negative integer. It was `0` and `{:suc, n}`, so a run that took a large number built and walked one tuple per unit: `plus 1000000 3` allocated a million tuples, and the state machine refused a nat above 100_000 for a run it called. A closed numeral is that integer literal. `suc` adds one. A `match` on `0` and `suc` is a `case` on `0`, and the `suc` arm rebinds the predecessor as the integer minus one. Nat stays Peano in the book. The checker, the proofs, and every other backend are unchanged.
+
+A run whose type and body are exactly a library definition is emitted as the integer operation that definition computes: `pred` and `plus` from the prelude, `max`, `min`, and `minus` from `std:le.muro`, and `compare` from `std:ord.muro`. A redefinition or a mutant of the body keeps the emitted recursion. Each operation is tested against the recursion it replaces on every pair of arguments from 0 to 12.
+
+`std:le.muro` adds `min` and `minus`, truncated subtraction, with `le-min-left`, `le-min-right`, and `minus-le-zero`.
+
+The same integer flows through every Elixir-side image. `--backend fsm` passes a nat to a run as that integer, at any size; `@muro_fsm_cap` and `{:nat_at_most, 100_000}` on a run call are gone. The C and JavaScript session images still build a Peano nat for a run and keep their cap. A `repr` decodes an `integer` to the integer and encodes it back; `{:nat_too_large, v}` is gone, and a numeral fallback has no upper bound. `@muro_repr_nat_max` now bounds only an interned name table, and is emitted only with one. An ExUnit suite prints a nat as the integer. The synthesis host sends and reads integers.
+
+This changes the emitted Elixir of every book that builds or matches a `Nat`, and of every state machine. A host that matched `{:suc, n}` matches the integer. Run `mix muro.gen` to rewrite committed modules. A module with no `Nat` is byte-identical.
+
+### Manual
+
+- Emit, Machine numbers, State machines, Host representations, Closed equations as tests, Library, Data, Indexed data, Streams, Start, Synthesis, and Examples: a `Nat` is an integer in emitted Elixir, the library operations, `min` and `minus`, and the caps that remain in C and JavaScript.
+
+### Package
+
+- Version 0.22.0.
+
 ## 0.21.20
 
 A family liveness refusal prints the state the cycle returns to after `then forever`. On the `fail stop` script that state is the family stutter, and `a signal` is held there. The path to the cycle is the same. The counts are the same. The check is the Elixir graph. It is not an Agda proof. `Satisfies` and `every-run-fair` cover meetings only. A family has no fairness filter.
