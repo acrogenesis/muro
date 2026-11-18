@@ -66,7 +66,7 @@ Emit only after a successful check. Spec and evidence are omitted; erased argume
 ```
 mix muro.emit path.muro                     # Elixir (default); module name from the file stem
 mix muro.emit path.muro --backend exunit    # ExUnit suite on stdout; test module is the stem plus Test
-mix muro.emit path.muro --backend c         # <name>.h and <name>.c; a Nat run is also a NIF
+mix muro.emit path.muro --backend c --prefix TEXT  # <name>.h and <name>.c; a Nat run is also a NIF
 mix muro.emit path.muro --backend rust      # <name>.rs
 mix muro.emit path.muro --backend zig       # <name>.zig
 mix muro.emit path.muro --backend asm       # <name>.s, Cortex-M0, Nat run

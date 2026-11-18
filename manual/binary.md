@@ -66,7 +66,7 @@ The executable never compiles a host application and never starts one. That hold
 
 ## C
 
-`muro emit path.muro --backend c` writes `<name>.h` and `<name>.c` next to the book. `<name>` is the book stem. `--prefix TEXT` prepends TEXT to every run and to that book's session entry points. TEXT includes the separator (`admit_`). Without it the names are unchanged. The executable does not load the host Mix project, so those two files are the whole output. Nothing in that output mentions `elixir_make`.
+`muro emit path.muro --backend c` writes `<name>.h` and `<name>.c` next to the book. `<name>` is the book stem. `--prefix TEXT` prepends TEXT to every run, to that book's session entry points, to each data struct, and to that struct's tag enum. TEXT includes the separator (`admit_`). Without it those names stay as they are. `struct muro__nat`, `struct muro__unit`, the session status, direction, and payload enums, `muro__slice`, `muro__str`, an `Opt` typedef, and the atom enum stay unprefixed. The page [Emit](emit.md) lists every name the prefix does and does not cover. The executable does not load the host Mix project, so those two files are the whole output. Nothing in that output mentions `elixir_make`.
 
 `mix muro.emit path.muro --backend c` writes the same `.h` and `.c`. When the working directory is the loaded Mix project, it also writes the NIF through `elixir_make`. The C bytes are the same in both cases. A project that wants the NIF adds `{:elixir_make, "~> 0.10", runtime: false}` and runs the Mix task. See [Emit](emit.md).
 

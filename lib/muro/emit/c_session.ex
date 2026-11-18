@@ -759,7 +759,13 @@ defmodule Muro.Emit.C.Session do
   defp prepare_run(st, fname, ty, template) do
     sig = Enum.find(st.sigs, &(&1.source == fname))
     ret = sig && String.trim(sig.ret)
-    data = sig && Enum.find(Map.values(st.datas), &(C.source_id(&1.name) <> " *" == ret))
+
+    data =
+      sig &&
+        Enum.find(Map.values(st.datas), fn d ->
+          C.data_struct(d.name, st.prefix) <> " *" == ret
+        end)
+
     param = sig && param_ty(sig)
 
     cond do
@@ -780,8 +786,8 @@ defmodule Muro.Emit.C.Session do
           cname: sig.name,
           ret: data.name,
           ctors: ctors,
-          spell: C.source_id(data.name),
-          arg: build_ptr(ty)
+          spell: C.data_struct(data.name, st.prefix),
+          arg: build_ptr(ty, st)
         }
 
         {id, st} = build_for(st, ty)
@@ -794,8 +800,8 @@ defmodule Muro.Emit.C.Session do
 
   defp arg_ok?(:nat, "muro__nat *", _st), do: true
 
-  defp arg_ok?({:dat, name, _}, param, _st) when is_binary(param) do
-    param == C.source_id(name) <> " *"
+  defp arg_ok?({:dat, name, _}, param, st) when is_binary(param) do
+    param == C.data_struct(name, st.prefix) <> " *"
   end
 
   defp arg_ok?(_, _, _), do: false
@@ -1690,19 +1696,19 @@ defmodule Muro.Emit.C.Session do
 
     build_proto =
       Enum.map_join(entries, "\n", fn {id, ty} ->
-        "static int muro__sess_build_#{id}(const muro__sess_val *v, const muro__sess_st *st, #{build_ptr(ty)} *out);"
+        "static int muro__sess_build_#{id}(const muro__sess_val *v, const muro__sess_st *st, #{build_ptr(ty, st)} *out);"
       end)
 
     free_proto =
       Enum.map_join(entries, "\n", fn {id, ty} ->
-        "static void muro__sess_free_#{id}(#{build_ptr(ty)}p);"
+        "static void muro__sess_free_#{id}(#{build_ptr(ty, st)}p);"
       end)
 
     free_body = Enum.map_join(entries, "\n\n", fn {id, ty} -> free_body(ty, id, st) end)
 
     built =
       Enum.map_join(entries, "\n\n", fn {id, ty} ->
-        ptr = build_ptr(ty)
+        ptr = build_ptr(ty, st)
 
         """
         static int muro__sess_build_#{id}(const muro__sess_val *v, const muro__sess_st *st, #{ptr} *out) {
@@ -1750,7 +1756,7 @@ defmodule Muro.Emit.C.Session do
   defp free_body({:dat, name, args}, id, st) do
     data = Map.get(st.datas, name)
     decl = Map.get(st.decls, name)
-    ptr = build_ptr({:dat, name, args})
+    ptr = build_ptr({:dat, name, args}, st)
     tagf = Name.gen("field_tag")
     asf = Name.gen("as")
 
@@ -1813,10 +1819,10 @@ defmodule Muro.Emit.C.Session do
     end
   end
 
-  defp build_ptr(:nat), do: Name.gen("nat") <> " *"
-  defp build_ptr(:unit), do: Name.gen("unit") <> " *"
-  defp build_ptr({:dat, name, _}), do: C.source_id(name) <> " *"
-  defp build_ptr(_), do: "void *"
+  defp build_ptr(:nat, _st), do: Name.gen("nat") <> " *"
+  defp build_ptr(:unit, _st), do: Name.gen("unit") <> " *"
+  defp build_ptr({:dat, name, _}, st), do: C.data_struct(name, st.prefix) <> " *"
+  defp build_ptr(_, _st), do: "void *"
 
   defp build_body(:nat, _st) do
     """
@@ -1884,7 +1890,7 @@ defmodule Muro.Emit.C.Session do
         inst
         |> Enum.with_index()
         |> Enum.map_join("\n", fn {ty, i} ->
-          "#{build_ptr(ty)}f#{i} = 0;"
+          "#{build_ptr(ty, st)}f#{i} = 0;"
         end)
 
       built =
@@ -1942,32 +1948,32 @@ defmodule Muro.Emit.C.Session do
     data = Map.fetch!(st.datas, dname)
     ctor = Enum.find(data.ctors, &(&1.name == cname))
     fun = Map.fetch!(st.nm.ctors, {dname, cname})
-    {fun, live_field_ctypes(ctor.type, st.book)}
+    {fun, live_field_ctypes(ctor.type, st)}
   end
 
-  defp live_field_ctypes(ty, book) do
+  defp live_field_ctypes(ty, st) do
     ty
     |> telescope([])
     |> Enum.flat_map(fn
       {:erased, _, _} -> []
-      {_, dom, _} -> [pay_ctype(dom, book)]
+      {_, dom, _} -> [pay_ctype(dom, st)]
     end)
   end
 
   defp telescope({:pi, q, a, _x, b}, acc), do: telescope(b, [{q, a, nil} | acc])
   defp telescope(_ty, acc), do: Enum.reverse(acc)
 
-  defp pay_ctype(:nat, _book), do: Name.gen("nat") <> " *"
-  defp pay_ctype(:unit, _book), do: Name.gen("unit") <> " *"
-  defp pay_ctype({:var, name}, book), do: ptr_or_void(name, book)
-  defp pay_ctype({:def, name}, book), do: ptr_or_void(name, book)
-  defp pay_ctype({:app, f, _a}, book), do: pay_ctype(f, book)
-  defp pay_ctype({:data, name}, book), do: ptr_or_void(name, book)
-  defp pay_ctype(_, _book), do: "void *"
+  defp pay_ctype(:nat, _st), do: Name.gen("nat") <> " *"
+  defp pay_ctype(:unit, _st), do: Name.gen("unit") <> " *"
+  defp pay_ctype({:var, name}, st), do: ptr_or_void(name, st)
+  defp pay_ctype({:def, name}, st), do: ptr_or_void(name, st)
+  defp pay_ctype({:app, f, _a}, st), do: pay_ctype(f, st)
+  defp pay_ctype({:data, name}, st), do: ptr_or_void(name, st)
+  defp pay_ctype(_, _st), do: "void *"
 
-  defp ptr_or_void(name, book) do
-    if Enum.any?(book, &(Map.get(&1, :kind) == :data and &1.name == name)) do
-      C.source_id(name) <> " *"
+  defp ptr_or_void(name, st) do
+    if Enum.any?(st.book, &(Map.get(&1, :kind) == :data and &1.name == name)) do
+      C.data_struct(name, st.prefix) <> " *"
     else
       "void *"
     end
@@ -2539,33 +2545,13 @@ defmodule Muro.Emit.C.Session do
     end)
   end
 
+  # One copy per book. Each session's step_word is the call. The tag is
+  # written only after the kind matches, so an out-of-range int is not
+  # stored in the uint8_t field.
   defp step_word_src(fun) do
     """
     muro__sess_res #{fun}_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-      muro__sess_val value;
-      memset(&value, 0, sizeof value);
-      value.tag = (uint8_t)tag;
-      if (tag == MURO_SESS_NAT) {
-        value.nat = word;
-        return #{fun}_step(st, dir, &value);
-      }
-      if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-        if (word > 1) {
-          return muro__sess_word_bad(st);
-        }
-        value.bit = (uint8_t)word;
-        return #{fun}_step(st, dir, &value);
-      }
-      if (tag == MURO_SESS_UNIT) {
-        return #{fun}_step(st, dir, &value);
-      }
-      if (tag == MURO_SESS_DATA) {
-        const char *ctor = muro__sess_word_name(word);
-        if (!ctor) return muro__sess_word_bad(st);
-        value.ctor = ctor;
-        return #{fun}_step(st, dir, &value);
-      }
-      return muro__sess_word_bad(st);
+      return muro__sess_word_step(st, dir, tag, word, #{fun}_step);
     }
     """
     |> String.trim()
@@ -2599,12 +2585,42 @@ defmodule Muro.Emit.C.Session do
       bad.status = MURO_SESS_UNEXPECTED;
       bad.state = st;
       bad.step = "";
-      muro__sess_lit(bad.expected, sizeof bad.expected, "done");
+      muro__sess_lit(bad.expected, sizeof bad.expected, "word");
       return bad;
     }
 
     static const char *muro__sess_word_name(uint64_t word) {
     #{indent(body, 2)}
+    }
+
+    static muro__sess_res muro__sess_word_step(
+        muro__sess_st st, int dir, int tag, uint64_t word,
+        muro__sess_res (*step)(muro__sess_st, int, const muro__sess_val *)) {
+      muro__sess_val value;
+      memset(&value, 0, sizeof value);
+      if (tag == MURO_SESS_NAT) {
+        value.tag = MURO_SESS_NAT;
+        value.nat = word;
+        return step(st, dir, &value);
+      }
+      if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
+        if (word > 1) return muro__sess_word_bad(st);
+        value.tag = tag == MURO_SESS_BIT ? (uint8_t)MURO_SESS_BIT : (uint8_t)MURO_SESS_PICK;
+        value.bit = (uint8_t)word;
+        return step(st, dir, &value);
+      }
+      if (tag == MURO_SESS_UNIT) {
+        value.tag = MURO_SESS_UNIT;
+        return step(st, dir, &value);
+      }
+      if (tag == MURO_SESS_DATA) {
+        const char *ctor = muro__sess_word_name(word);
+        if (!ctor) return muro__sess_word_bad(st);
+        value.tag = MURO_SESS_DATA;
+        value.ctor = ctor;
+        return step(st, dir, &value);
+      }
+      return muro__sess_word_bad(st);
     }
     """
     |> String.trim()

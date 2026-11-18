@@ -91,14 +91,24 @@ defmodule Muro.Emit.C do
 
   # Named constants a host can `_Static_assert`. The struct field stays
   # `uint8_t`. The enumerator is the tag the struct already stores.
+  # `prefix` is prepended when the host asked for one, and it already
+  # includes the separator. Empty is the unprefixed name.
   @doc false
-  def ctor_tag_type(type_name) when is_binary(type_name) do
-    "muro__tag_#{source_id(type_name)}"
+  def ctor_tag_type(type_name, prefix \\ "") when is_binary(type_name) and is_binary(prefix) do
+    prefix <> "muro__tag_#{source_id(type_name)}"
   end
 
   @doc false
-  def ctor_tag(type_name, ctor_name) when is_binary(type_name) and is_binary(ctor_name) do
-    "#{ctor_tag_type(type_name)}_#{source_id(ctor_name)}"
+  def ctor_tag(type_name, ctor_name, prefix \\ "")
+      when is_binary(type_name) and is_binary(ctor_name) and is_binary(prefix) do
+    "#{ctor_tag_type(type_name, prefix)}_#{source_id(ctor_name)}"
+  end
+
+  # The data struct spelling. Empty `prefix` is the source spelling, which
+  # is the ABI an unprefixed book already emits.
+  @doc false
+  def data_struct(name, prefix \\ "") when is_binary(name) and is_binary(prefix) do
+    prefix <> source_id(name)
   end
 
   # One number space for every data declaration in the book, in book
@@ -165,10 +175,10 @@ defmodule Muro.Emit.C do
   # Struct spellings, then atoms, then constructor functions. A run is
   # claimed after those, so a shared C namespace suffixes inside one
   # space. Generated names are not in this set: they already contain `__`.
-  defp name_map(book) do
+  defp name_map(book, prefix \\ "") do
     {structs, taken} =
       Enum.reduce(data_defs(book), {%{}, MapSet.new()}, fn d, {map, used} ->
-        {rn, used} = claim(spell(d.name), used)
+        {rn, used} = claim(prefix <> spell(d.name), used)
         {Map.put(map, d.name, rn), used}
       end)
 
@@ -271,7 +281,7 @@ defmodule Muro.Emit.C do
 
     with :ok <- validate_c_prefix(prefix),
          {:ok, funs} <- IR.elaborate(book) do
-      nm = name_map(book)
+      nm = name_map(book, prefix)
 
       case compile_funs(funs, book, nm, prefix) do
         {:ok, sigs, texts, extras} ->
@@ -281,7 +291,7 @@ defmodule Muro.Emit.C do
 
           with :ok <- Emit.refuse_may_fail(book),
                :ok <- Emit.refuse_unboxed_opt(book, funs),
-               {:ok, opt_src} <- opt_typedefs(funs, book, bytes?),
+               {:ok, opt_src} <- opt_typedefs(funs, book, bytes?, prefix),
                {:ok, sess_h, sess_c} <-
                  Muro.Emit.C.Session.fragments(book, path, nm, sigs,
                    c_prefix: prefix,
@@ -290,7 +300,7 @@ defmodule Muro.Emit.C do
             header = header(book, sigs, stem, nm, opt_src, bytes?, strings?, prefix)
 
             source =
-              source(book, runs, sigs, texts, extras, stem, nm, opt_src, bytes?, strings?)
+              source(book, runs, sigs, texts, extras, stem, nm, opt_src, bytes?, strings?, prefix)
 
             {:ok, splice_session(header, sess_h), source <> sess_c, sigs}
           end
@@ -350,7 +360,7 @@ defmodule Muro.Emit.C do
       by_name = Map.new(groups, fn {fun, _} -> {fun.name, fun} end)
 
       Enum.reduce_while(groups, {:ok, [], [], []}, fn {fun, _steps}, {:ok, sigs, texts, extras} ->
-        case compile_fun(fun, book, names, by_name, step_map, nm) do
+        case compile_fun(fun, book, names, by_name, step_map, nm, prefix) do
           {:ok, sig, text, extra} ->
             {:cont, {:ok, sigs ++ [sig], texts ++ [text], extras ++ extra}}
 
@@ -361,7 +371,7 @@ defmodule Muro.Emit.C do
     end
   end
 
-  defp compile_fun(fun, book, names, by_name, step_map, nm) do
+  defp compile_fun(fun, book, names, by_name, step_map, nm, prefix) do
     file_scope = file_scope(nm, MapSet.new(Map.values(names)))
 
     {bound, scope} =
@@ -374,8 +384,8 @@ defmodule Muro.Emit.C do
       name: Map.fetch!(names, fun.name),
       source: fun.name,
       export: fun.export,
-      params: for({_n, c, lay} <- bound, do: {ctype(lay, book), c}),
-      ret: ctype(fun.ret, book)
+      params: for({_n, c, lay} <- bound, do: {ctype(lay, book, prefix), c}),
+      ret: ctype(fun.ret, book, prefix)
     }
 
     env = Enum.reduce(bound, [], fn {n, c, lay}, env -> [{n, c, lay} | env] end)
@@ -391,6 +401,7 @@ defmodule Muro.Emit.C do
       steps_by_name: step_map,
       fold_done: MapSet.new(),
       nm: nm,
+      prefix: prefix,
       file_scope: file_scope,
       base_scope: scope,
       scope: scope
@@ -459,7 +470,7 @@ defmodule Muro.Emit.C do
   end
 
   defp emit_ir({:call, name, args}, env, st, _expect) do
-    with {:ok, {pres, exprs, st}} <- emit_args(args, live_ctypes(st.book, name), env, st) do
+    with {:ok, {pres, exprs, st}} <- emit_args(args, live_ctypes(st, name), env, st) do
       {:ok,
        {squash(pres), "#{ename(st, name)}(#{Enum.join(exprs, ", ")})", call_lay(st, name), st}}
     end
@@ -470,7 +481,7 @@ defmodule Muro.Emit.C do
   end
 
   defp emit_ir({:con, dname, cname, args}, env, st, _expect) do
-    with {:ok, {pres, exprs, st}} <- emit_args(args, con_ctypes(st.book, cname), env, st) do
+    with {:ok, {pres, exprs, st}} <- emit_args(args, con_ctypes(st, cname), env, st) do
       fun = Map.fetch!(st.nm.ctors, {dname, cname})
       {:ok, {squash(pres), "#{fun}(#{Enum.join(exprs, ", ")})", {:data, dname}, st}}
     end
@@ -498,7 +509,7 @@ defmodule Muro.Emit.C do
   end
 
   defp emit_ir({:let, name, lay, val, body}, env, st, expect) do
-    ty = ctype(lay, st.book)
+    ty = ctype(lay, st.book, st.prefix)
 
     with {:ok, {pre, ex, _vlay, st}} <- emit_ir(val, env, st, ty) do
       {local, st} = news(st)
@@ -580,7 +591,7 @@ defmodule Muro.Emit.C do
     with {:ok, step} <- fetch_step(st, step_name),
          {:ok, {seed_p, cap_ps}} <- ok_split(step.params, caps),
          {:ok, {pre, seed_ex, seed_lay, st}} <-
-           emit_ir(seed, env, st, ctype(lay_of(seed, env, st), st.book)) do
+           emit_ir(seed, env, st, ctype(lay_of(seed, env, st), st.book, st.prefix)) do
       id = step_id(step_name)
       slots = capture_slots(caps, cap_ps, st.file_scope)
       pointer_lays = [seed_lay | Enum.map(slots, fn {_n, _f, _tm, lay} -> lay end)]
@@ -611,9 +622,10 @@ defmodule Muro.Emit.C do
     rlay = lay_of(tm, env, st)
     # A word operation emits its operand as `void *`. The arms still
     # name a word, so the temporary uses that layout.
-    expect = match_expect(expect, rlay, st.book)
+    expect = match_expect(expect, rlay, st.book, st.prefix)
 
-    with {:ok, {pre, ex, _lay, st}} <- emit_ir(scrut, env, st, scrut_ty(kind, st.book)),
+    with {:ok, {pre, ex, _lay, st}} <-
+           emit_ir(scrut, env, st, scrut_ty(kind, st.book, st.prefix)),
          {:ok, {stmt, name, st}} <- emit_switch(kind, pre, ex, arms, env, st, expect) do
       {:ok, {stmt, name, rlay, st}}
     end
@@ -717,7 +729,7 @@ defmodule Muro.Emit.C do
         sl = g("slice")
 
         stmt = """
-        #{struct_ptr("Maybe")}#{out};
+        #{struct_ptr("Maybe", st.prefix)}#{out};
         if ((#{ex}).n == 0) {
           #{out} = #{nothing}();
         } else {
@@ -739,13 +751,14 @@ defmodule Muro.Emit.C do
   defp emit_ir({:bfold, step, caps, z, s}, env, st, _expect) do
     with {:ok, st} <- ensure_fold_step(step, st),
          {:ok, {cpre, cexs, st}} <- emit_cap_list(caps, env, st),
-         {:ok, {pz, ez, lay, st}} <- emit_ir(z, env, st, ctype(fold_ret(st, step), st.book)),
+         {:ok, {pz, ez, lay, st}} <-
+           emit_ir(z, env, st, ctype(fold_ret(st, step), st.book, st.prefix)),
          {:ok, {ps, es, _, st}} <- emit_ir(s, env, st, slice_ty()) do
       {acc, st} = news(st)
       {cur, st} = news(st)
       {b, st} = news(st)
       {rest, st} = news(st)
-      cty = ctype(lay, st.book)
+      cty = ctype(lay, st.book, st.prefix)
       sl = g("slice")
       call = Enum.join(cexs ++ [b, rest, acc], ", ")
 
@@ -833,9 +846,9 @@ defmodule Muro.Emit.C do
   defp seed_load(seedp, :string), do: "*(#{g("str")} *)#{seedp}"
   defp seed_load(seedp, _lay), do: seedp
 
-  defp match_expect(expect, lay, book) do
+  defp match_expect(expect, lay, book, prefix) do
     if String.trim(expect) == "void *" do
-      ty = ctype(lay, book)
+      ty = ctype(lay, book, prefix)
       if String.trim(ty) == "void *", do: expect, else: ty
     else
       expect
@@ -864,12 +877,12 @@ defmodule Muro.Emit.C do
     types ++ List.duplicate("void *", max(n - length(types), 0))
   end
 
-  defp scrut_ty(:nat, _book), do: nat_ptr()
-  defp scrut_ty(:atom, _book), do: atom_ty()
-  defp scrut_ty({:data, name}, book), do: ctype({:data, name}, book)
-  defp scrut_ty(:wbool, book), do: ctype(:wbool, book)
-  defp scrut_ty({:opt, pay}, book), do: ctype({:opt, pay}, book)
-  defp scrut_ty(_, _book), do: "void *"
+  defp scrut_ty(:nat, _book, _prefix), do: nat_ptr()
+  defp scrut_ty(:atom, _book, _prefix), do: atom_ty()
+  defp scrut_ty({:data, name}, book, prefix), do: ctype({:data, name}, book, prefix)
+  defp scrut_ty(:wbool, book, prefix), do: ctype(:wbool, book, prefix)
+  defp scrut_ty({:opt, pay}, book, prefix), do: ctype({:opt, pay}, book, prefix)
+  defp scrut_ty(_, _book, _prefix), do: "void *"
 
   # A pointer or a scalar accepts 0. A struct does not: `muro__slice t = 0`
   # is a type error. `{0}` is the universal initializer, and a scalar
@@ -961,7 +974,12 @@ defmodule Muro.Emit.C do
 
       data ->
         by_value = unboxed?(data)
-        ptr = if by_value, do: struct_name(dname) <> " ", else: struct_ptr(dname)
+
+        ptr =
+          if by_value,
+            do: struct_name(dname, st.prefix) <> " ",
+            else: struct_ptr(dname, st.prefix)
+
         arrow = if by_value, do: ".", else: "->"
         {sname, st} = news(st)
         {tname, st} = newt(st)
@@ -1012,7 +1030,7 @@ defmodule Muro.Emit.C do
             pre,
             init_temp(expect, tname),
             "{",
-            "#{ctype(:wbool, st.book)}#{sname} = #{ex};",
+            "#{ctype(:wbool, st.book, st.prefix)}#{sname} = #{ex};",
             "if (#{sname}) {",
             tpre,
             "#{tname} = #{tex};",
@@ -1049,7 +1067,7 @@ defmodule Muro.Emit.C do
         if uses?(s, y) do
           {yname, scope} = Name.bind(spell(y), st.scope)
           st = %{st | scope: scope}
-          decl = "#{ctype(pay, st.book)}#{yname} = #{sname}.val;"
+          decl = "#{ctype(pay, st.book, st.prefix)}#{yname} = #{sname}.val;"
           {decl, [{y, yname, pay} | env], st}
         else
           {"", env, st}
@@ -1061,7 +1079,7 @@ defmodule Muro.Emit.C do
             pre,
             init_temp(expect, tname),
             "{",
-            "#{ctype({:opt, pay}, st.book)}#{sname} = #{ex};",
+            "#{ctype({:opt, pay}, st.book, st.prefix)}#{sname} = #{ex};",
             "if (#{sname}.tag) {",
             bind,
             spre,
@@ -1121,7 +1139,7 @@ defmodule Muro.Emit.C do
   defp data_arm({:arm, cname, binders, body}, data, sname, tname, arrow, env, st, expect) do
     ctor = Enum.find(data.ctors, &(&1.name == cname))
     tag = Enum.find_index(data.ctors, &(&1.name == cname))
-    fields = if ctor, do: live_fields(ctor, st.book), else: []
+    fields = if ctor, do: live_fields(ctor, st.book, st.prefix), else: []
 
     if ctor == nil or tag == nil or length(fields) != length(binders) do
       {:error, "c:unsupported"}
@@ -1158,13 +1176,13 @@ defmodule Muro.Emit.C do
     end
   end
 
-  defp live_fields(ctor, book) do
+  defp live_fields(ctor, book, prefix \\ "") do
     {pis, _} = telescope(ctor.type)
 
     pis
     |> Enum.reject(fn {q, _, _} -> q == :erased end)
     |> Enum.with_index()
-    |> Enum.map(fn {{_, a, _}, k} -> {ctype(a, book), type_layout(book, a), k} end)
+    |> Enum.map(fn {{_, a, _}, k} -> {ctype(a, book, prefix), type_layout(book, a), k} end)
   end
 
   defp fetch_step(st, name) do
@@ -1265,7 +1283,7 @@ defmodule Muro.Emit.C do
           # The parameter is still named; a dead local is -Wunused-variable.
           if uses?(step.body, sname) do
             {local, visible} = Name.bind(spell(sname), visible)
-            line = "  #{ctype(slay, st.book)}#{local} = #{seed_load(seedp, slay)};"
+            line = "  #{ctype(slay, st.book, st.prefix)}#{local} = #{seed_load(seedp, slay)};"
             {line, [{sname, local, slay} | cap_env], visible}
           else
             {"  (void)#{seedp};", cap_env, visible}
@@ -1507,7 +1525,9 @@ defmodule Muro.Emit.C do
     end
   end
 
-  defp live_ctypes(book, name) do
+  defp live_ctypes(st, name) do
+    book = st.book
+
     type =
       cond do
         d = find_def(book, name) -> d.type
@@ -1517,23 +1537,23 @@ defmodule Muro.Emit.C do
 
     case type do
       nil -> []
-      ty -> live_ctypes_of(ty, book)
+      ty -> live_ctypes_of(ty, book, st.prefix)
     end
   end
 
-  defp con_ctypes(book, cname) do
-    case find_ctor(book, cname) do
+  defp con_ctypes(st, cname) do
+    case find_ctor(st.book, cname) do
       nil -> []
-      ctor -> live_ctypes_of(ctor.type, book)
+      ctor -> live_ctypes_of(ctor.type, st.book, st.prefix)
     end
   end
 
-  defp live_ctypes_of(ty, book) do
+  defp live_ctypes_of(ty, book, prefix) do
     {pis, _} = telescope(ty)
 
     Enum.flat_map(pis, fn
       {:erased, _, _} -> []
-      {_, a, _} -> [ctype(a, book)]
+      {_, a, _} -> [ctype(a, book, prefix)]
     end)
   end
 
@@ -1849,7 +1869,7 @@ defmodule Muro.Emit.C do
   defp cast_c(:u64, x), do: "(uint64_t)(#{x})"
   defp cast_c(:i64, x), do: "(int64_t)(uint64_t)(#{x})"
 
-  defp opt_typedefs(funs, book, bytes?) do
+  defp opt_typedefs(funs, book, bytes?, prefix) do
     extra = if bytes?, do: [{:opt, :u8}], else: []
 
     payloads =
@@ -1867,7 +1887,7 @@ defmodule Muro.Emit.C do
     if Enum.any?(payloads, &unboxed_opt_pay?(book, &1)) do
       {:error, "c:unboxed"}
     else
-      {:ok, Enum.map_join(payloads, "\n", &opt_typedef(&1, book))}
+      {:ok, Enum.map_join(payloads, "\n", &opt_typedef(&1, book, prefix))}
     end
   end
 
@@ -1922,15 +1942,47 @@ defmodule Muro.Emit.C do
   defp unboxed_opt_pay?(book, {:opt, {:opt, _} = inner}), do: unboxed_opt_pay?(book, inner)
   defp unboxed_opt_pay?(_book, _lay), do: false
 
-  defp opt_typedef({:opt, pay}, book) do
+  # A word, a nat, unit, a string, or a slice is the same struct in every
+  # book, so the guard lets two headers share it. An option of data names
+  # that book's struct, and a prefix changes the spelling, so it stays
+  # unguarded: two such headers are a redefinition, not a silent mismatch.
+  defp opt_typedef({:opt, pay}, book, prefix) do
     name = opt_name(pay)
 
-    """
+    body = """
     typedef struct #{name} #{name};
-    struct #{name} { uint8_t tag; #{ctype(pay, book)}val; };
+    struct #{name} { uint8_t tag; #{ctype(pay, book, prefix)}val; };
     """
-    |> String.trim()
+
+    text =
+      if opt_shared?(pay, prefix) do
+        guard = opt_guard(pay)
+
+        """
+        #ifndef #{guard}
+        #define #{guard}
+        #{String.trim(body)}
+        #endif
+        """
+      else
+        body
+      end
+
+    text |> String.trim()
   end
+
+  defp opt_shared?(pay, prefix), do: prefix == "" or not opt_names_data?(pay)
+
+  defp opt_names_data?({:data, _}), do: true
+  defp opt_names_data?({:var, _}), do: true
+  defp opt_names_data?({:def, _}), do: true
+  defp opt_names_data?({:app, f, _}), do: opt_names_data?(f)
+  defp opt_names_data?({:opt, inner}), do: opt_names_data?(inner)
+  defp opt_names_data?({:pair, a, b}), do: opt_names_data?(a) or opt_names_data?(b)
+  defp opt_names_data?({:stream, a}), do: opt_names_data?(a)
+  defp opt_names_data?(_), do: false
+
+  defp opt_guard(pay), do: "MURO__OPT_" <> String.upcase(lay_tag(pay))
 
   defp opt_name(pay), do: g("opt_" <> lay_tag(pay))
 
@@ -1950,46 +2002,51 @@ defmodule Muro.Emit.C do
   defp lay_tag({:stream, a}), do: "stream_#{lay_tag(a)}"
   defp lay_tag(other), do: to_string(other)
 
-  defp ctype(:atom, _book), do: atom_ty()
-  defp ctype(:nat, _book), do: nat_ptr()
-  defp ctype(:unit, _book), do: unit_ptr()
-  defp ctype({:stream, _}, _book), do: stream_ptr()
+  defp ctype(type, book, prefix)
 
-  defp ctype({:var, name}, book) when is_binary(name) do
+  defp ctype(:atom, _book, _prefix), do: atom_ty()
+  defp ctype(:nat, _book, _prefix), do: nat_ptr()
+  defp ctype(:unit, _book, _prefix), do: unit_ptr()
+  defp ctype({:stream, _}, _book, _prefix), do: stream_ptr()
+
+  defp ctype({:var, name}, book, prefix) when is_binary(name) do
     cond do
-      unboxed_name?(book, name) -> struct_val(name)
-      data?(book, name) -> struct_ptr(name)
+      unboxed_name?(book, name) -> struct_val(name, prefix)
+      data?(book, name) -> struct_ptr(name, prefix)
       true -> "void *"
     end
   end
 
-  defp ctype({:def, name}, book) do
-    if unboxed_name?(book, name), do: struct_val(name), else: "void *"
+  defp ctype({:def, name}, book, prefix) do
+    if unboxed_name?(book, name), do: struct_val(name, prefix), else: "void *"
   end
 
-  defp ctype({:app, f, _a}, book), do: ctype(f, book)
-  defp ctype({:data, "Atom"}, _book), do: atom_ty()
+  defp ctype({:app, f, _a}, book, prefix), do: ctype(f, book, prefix)
+  defp ctype({:data, "Atom"}, _book, _prefix), do: atom_ty()
 
-  defp ctype({:data, name}, book) do
-    if unboxed_name?(book, name), do: struct_val(name), else: struct_ptr(name)
+  defp ctype({:data, name}, book, prefix) do
+    if unboxed_name?(book, name), do: struct_val(name, prefix), else: struct_ptr(name, prefix)
   end
 
-  defp ctype(:u8, _book), do: "uint8_t "
-  defp ctype(:u32, _book), do: "uint32_t "
-  defp ctype(:u64, _book), do: "uint64_t "
-  defp ctype(:i64, _book), do: "int64_t "
-  defp ctype(:wbool, _book), do: "uint8_t "
-  defp ctype(:slice, _book), do: g("slice") <> " "
-  defp ctype(:bytes, _book), do: g("slice") <> " "
-  defp ctype(:string, _book), do: str_ty()
-  defp ctype({:opt, pay}, _book), do: opt_name(pay) <> " "
-  defp ctype({:word, {:ty, :u8}, []}, book), do: ctype(:u8, book)
-  defp ctype({:word, {:ty, :u32}, []}, book), do: ctype(:u32, book)
-  defp ctype({:word, {:ty, :u64}, []}, book), do: ctype(:u64, book)
-  defp ctype({:word, :bool, []}, book), do: ctype(:wbool, book)
-  defp ctype({:word, {:optk, k}, []}, book), do: ctype({:opt, k}, book)
-  defp ctype({:word, :opt, [a]}, book), do: ctype({:opt, type_layout(book, a)}, book)
-  defp ctype(_, _book), do: "void *"
+  defp ctype(:u8, _book, _prefix), do: "uint8_t "
+  defp ctype(:u32, _book, _prefix), do: "uint32_t "
+  defp ctype(:u64, _book, _prefix), do: "uint64_t "
+  defp ctype(:i64, _book, _prefix), do: "int64_t "
+  defp ctype(:wbool, _book, _prefix), do: "uint8_t "
+  defp ctype(:slice, _book, _prefix), do: g("slice") <> " "
+  defp ctype(:bytes, _book, _prefix), do: g("slice") <> " "
+  defp ctype(:string, _book, _prefix), do: str_ty()
+  defp ctype({:opt, pay}, _book, _prefix), do: opt_name(pay) <> " "
+  defp ctype({:word, {:ty, :u8}, []}, book, prefix), do: ctype(:u8, book, prefix)
+  defp ctype({:word, {:ty, :u32}, []}, book, prefix), do: ctype(:u32, book, prefix)
+  defp ctype({:word, {:ty, :u64}, []}, book, prefix), do: ctype(:u64, book, prefix)
+  defp ctype({:word, :bool, []}, book, prefix), do: ctype(:wbool, book, prefix)
+  defp ctype({:word, {:optk, k}, []}, book, prefix), do: ctype({:opt, k}, book, prefix)
+
+  defp ctype({:word, :opt, [a]}, book, prefix),
+    do: ctype({:opt, type_layout(book, a)}, book, prefix)
+
+  defp ctype(_, _book, _prefix), do: "void *"
 
   defp data?(book, name) when is_list(book) do
     Enum.any?(book, &(Map.get(&1, :kind) == :data and &1.name == name))
@@ -1997,12 +2054,13 @@ defmodule Muro.Emit.C do
 
   defp data?(_book, _name), do: false
 
-  defp struct_ptr(name), do: struct_name(name) <> " *"
-  defp struct_val(name), do: struct_name(name) <> " "
+  defp struct_ptr(name, prefix), do: struct_name(name, prefix) <> " *"
+  defp struct_val(name, prefix), do: struct_name(name, prefix) <> " "
 
-  # Claimed first, against an empty set. `spell/1` is injective, so the
-  # struct spelling is the source spelling.
-  defp struct_name(name), do: spell(name)
+  # `spell/1` is injective. A prefix, when the host asked for one, is
+  # prepended and already includes the separator. Empty keeps the source
+  # spelling an unprefixed book already emits.
+  defp struct_name(name, prefix), do: data_struct(name, prefix)
 
   defp ename(st, name), do: Map.get(st.names, name, spell(name))
 
@@ -2034,11 +2092,11 @@ defmodule Muro.Emit.C do
       prelude_guard(),
       if(bytes?, do: bytes_header(), else: ""),
       if(strings?, do: string_header(), else: ""),
-      data_typedefs(book),
+      data_typedefs(book, prefix),
       opts,
       atom_enum(book, nm),
       stream_typedef(sigs, book),
-      data_bodies(book),
+      data_bodies(book, prefix),
       word_enum(book, stem, prefix),
       prototypes(sigs),
       "#endif"
@@ -2060,7 +2118,7 @@ defmodule Muro.Emit.C do
     |> String.trim()
   end
 
-  defp source(book, runs, sigs, funs, extras, stem, nm, _opts, bytes?, strings?) do
+  defp source(book, runs, sigs, funs, extras, stem, nm, _opts, bytes?, strings?, prefix) do
     internals =
       sigs
       |> Enum.reject(& &1.export)
@@ -2076,7 +2134,7 @@ defmodule Muro.Emit.C do
       if(strings?, do: "#include <string.h>\n" <> string_helpers(bytes?), else: ""),
       pair_helpers(runs),
       stream_helpers(runs, stream_declared?(sigs, book)),
-      data_ctors(book, nm, sigs),
+      data_ctors(book, nm, sigs, prefix),
       internals,
       Enum.join(extras, "\n\n"),
       Enum.join(funs, "\n\n")
@@ -2242,12 +2300,15 @@ defmodule Muro.Emit.C do
     emp = g("str_empty")
 
     """
+    #ifndef MURO__STR
+    #define MURO__STR
     #include <stddef.h>
     typedef struct { const uint8_t *p; size_t n; } #{ty};
-    static const uint8_t #{empty}[1] = {0};
+    __attribute__((unused)) static const uint8_t #{empty}[1] = {0};
     __attribute__((unused)) static inline #{ty} #{emp}(void) {
       return (#{ty}){#{empty}, 0};
     }
+    #endif
     """
     |> String.trim()
   end
@@ -2384,9 +2445,11 @@ defmodule Muro.Emit.C do
     wrap = g("slice_of")
 
     """
+    #ifndef MURO__SLICE
+    #define MURO__SLICE
     #include <stddef.h>
     typedef struct { const uint8_t *p; size_t n; } #{sl};
-    static const uint8_t #{empty}[1] = {0};
+    __attribute__((unused)) static const uint8_t #{empty}[1] = {0};
     __attribute__((unused)) static inline #{sl} #{emp}(void) {
       return (#{sl}){#{empty}, 0};
     }
@@ -2394,6 +2457,7 @@ defmodule Muro.Emit.C do
       if (n == 0 || p == 0) return #{emp}();
       return (#{sl}){p, n};
     }
+    #endif
     """
     |> String.trim()
   end
@@ -2505,8 +2569,8 @@ defmodule Muro.Emit.C do
         {{pname, c, lay}, scope}
       end)
 
-    params = for {_n, c, lay} <- bound, do: {ctype(lay, st.book), c}
-    ret = ctype(fun.ret, st.book)
+    params = for {_n, c, lay} <- bound, do: {ctype(lay, st.book, st.prefix), c}
+    ret = ctype(fun.ret, st.book, st.prefix)
     env = Enum.reduce(bound, [], fn {n, c, lay}, env -> [{n, c, lay} | env] end)
     st = %{st | scope: scope, base_scope: scope}
 
@@ -2611,7 +2675,7 @@ defmodule Muro.Emit.C do
 
         Enum.any?(pis, fn
           {:erased, _, _} -> false
-          {_, a, _} -> stream_ty?(ctype(a, book))
+          {_, a, _} -> stream_ty?(ctype(a, book, ""))
         end)
       end)
     end)
@@ -2675,22 +2739,22 @@ defmodule Muro.Emit.C do
   # Forward declarations come before option typedefs. `Opt` of boxed
   # data holds a pointer, and the pointer needs the typedef. The struct
   # body stays after the options, in dependency order.
-  defp data_typedefs(book) do
+  defp data_typedefs(book, prefix) do
     datas = data_defs(book)
-    if datas == [], do: "", else: typedefs(datas)
+    if datas == [], do: "", else: typedefs(datas, prefix)
   end
 
-  defp data_bodies(book) do
+  defp data_bodies(book, prefix) do
     datas = data_defs(book)
 
     if datas == [],
       do: "",
-      else: Enum.map_join(order_value_deps(datas, book), "\n", &struct_src(&1, book))
+      else: Enum.map_join(order_value_deps(datas, book), "\n", &struct_src(&1, book, prefix))
   end
 
-  defp typedefs(datas) do
+  defp typedefs(datas, prefix) do
     Enum.map_join(datas, "\n", fn d ->
-      n = struct_name(d.name)
+      n = struct_name(d.name, prefix)
       "typedef struct #{n} #{n};"
     end)
   end
@@ -2717,15 +2781,17 @@ defmodule Muro.Emit.C do
     end
   end
 
-  defp tag_enum(%{ctors: []}), do: ""
+  defp tag_enum(%{ctors: []}, _prefix), do: ""
 
-  defp tag_enum(d) do
-    ty = ctor_tag_type(d.name)
+  defp tag_enum(d, prefix) do
+    ty = ctor_tag_type(d.name, prefix)
 
     members =
       d.ctors
       |> Enum.with_index()
-      |> Enum.map_join(",\n  ", fn {ctor, i} -> "#{ctor_tag(d.name, ctor.name)} = #{i}" end)
+      |> Enum.map_join(",\n  ", fn {ctor, i} ->
+        "#{ctor_tag(d.name, ctor.name, prefix)} = #{i}"
+      end)
 
     """
     typedef enum #{ty} {
@@ -2735,8 +2801,8 @@ defmodule Muro.Emit.C do
     |> String.trim()
   end
 
-  defp struct_src(d, book) do
-    name = struct_name(d.name)
+  defp struct_src(d, book, prefix) do
+    name = struct_name(d.name, prefix)
     tagf = g("field_tag")
     asf = g("as")
     unused = g("unused")
@@ -2751,7 +2817,7 @@ defmodule Muro.Emit.C do
           pis
           |> Enum.reject(fn {q, _, _} -> q == :erased end)
           |> Enum.with_index()
-          |> Enum.map(fn {{_, a, _}, k} -> "    #{ctype(a, book)}#{g("f", k)};" end)
+          |> Enum.map(fn {{_, a, _}, k} -> "    #{ctype(a, book, prefix)}#{g("f", k)};" end)
 
         {tag, ctor.name, fs}
       end)
@@ -2780,12 +2846,12 @@ defmodule Muro.Emit.C do
       """
       |> String.trim()
 
-    [tag_enum(d), body]
+    [tag_enum(d, prefix), body]
     |> Enum.reject(&(&1 == ""))
     |> Enum.join("\n")
   end
 
-  defp data_ctors(book, nm, sigs) do
+  defp data_ctors(book, nm, sigs, prefix) do
     visible = file_scope(nm, MapSet.new(Enum.map(sigs, & &1.name)))
 
     book
@@ -2793,7 +2859,7 @@ defmodule Muro.Emit.C do
     |> Enum.flat_map(fn d ->
       d.ctors
       |> Enum.with_index()
-      |> Enum.map(fn {ctor, tag} -> ctor_fun(d, ctor, tag, book, nm, visible) end)
+      |> Enum.map(fn {ctor, tag} -> ctor_fun(d, ctor, tag, book, nm, visible, prefix) end)
     end)
     |> Enum.join("\n\n")
   end
@@ -2804,19 +2870,19 @@ defmodule Muro.Emit.C do
 
   # A constructor with no runtime fields has one value. Share it, as `tt` does.
   # The object name is generated, so a source spelling cannot be it.
-  defp ctor_fun(d, ctor, tag, book, nm, file_scope) do
+  defp ctor_fun(d, ctor, tag, book, nm, file_scope, prefix) do
     if unboxed?(d) do
-      unboxed_ctor(d, ctor, tag, book, nm, file_scope)
+      unboxed_ctor(d, ctor, tag, book, nm, file_scope, prefix)
     else
-      boxed_ctor(d, ctor, tag, book, nm, file_scope)
+      boxed_ctor(d, ctor, tag, book, nm, file_scope, prefix)
     end
   end
 
   # By value. A compound literal names every field of the active arm, so
   # the return is initialized under -Wall -Wextra.
-  defp unboxed_ctor(d, ctor, tag, book, nm, file_scope) do
-    {params, member, fun} = ctor_params(d, ctor, book, nm, file_scope)
-    ty = struct_name(d.name)
+  defp unboxed_ctor(d, ctor, tag, book, nm, file_scope, prefix) do
+    {params, member, fun} = ctor_params(d, ctor, book, nm, file_scope, prefix)
+    ty = struct_name(d.name, prefix)
     tagf = g("field_tag")
     asf = g("as")
 
@@ -2842,9 +2908,9 @@ defmodule Muro.Emit.C do
     |> String.trim()
   end
 
-  defp boxed_ctor(d, ctor, tag, book, nm, file_scope) do
-    {params, member, fun} = ctor_params(d, ctor, book, nm, file_scope)
-    ptr = struct_ptr(d.name)
+  defp boxed_ctor(d, ctor, tag, book, nm, file_scope, prefix) do
+    {params, member, fun} = ctor_params(d, ctor, book, nm, file_scope, prefix)
+    ptr = struct_ptr(d.name, prefix)
     p = g("p")
     alloc = g("ALLOC")
     tagf = g("field_tag")
@@ -2855,7 +2921,7 @@ defmodule Muro.Emit.C do
       unused = g("unused")
 
       """
-      __attribute__((unused)) static #{struct_name(d.name)} #{obj} = { .#{tagf} = #{tag}, .#{asf} = { .#{unused} = 0 } };
+      __attribute__((unused)) static #{struct_name(d.name, prefix)} #{obj} = { .#{tagf} = #{tag}, .#{asf} = { .#{unused} = 0 } };
 
       __attribute__((unused)) static #{ptr}#{fun}(void) { return &#{obj}; }
       """
@@ -2881,14 +2947,14 @@ defmodule Muro.Emit.C do
     end
   end
 
-  defp ctor_params(d, ctor, book, nm, file_scope) do
+  defp ctor_params(d, ctor, book, nm, file_scope, prefix) do
     {pis, _} = telescope(ctor.type)
 
     fields =
       pis
       |> Enum.reject(fn {q, _, _} -> q == :erased end)
       |> Enum.with_index()
-      |> Enum.map(fn {{_, a, x}, k} -> {ctype(a, book), x, k} end)
+      |> Enum.map(fn {{_, a, x}, k} -> {ctype(a, book, prefix), x, k} end)
 
     {params, _} =
       Enum.map_reduce(fields, file_scope, fn {ty, x, k}, scope ->

@@ -23,6 +23,9 @@ defmodule Muro.EmitCGapsTest do
 
   @peer """
   session peer := recv Nat end
+  session bitp := recv Bit end
+  session unitp := recv Unit end
+  session pickp := branch end end
   """
 
   @wide """
@@ -129,7 +132,7 @@ defmodule Muro.EmitCGapsTest do
   test "a word step, named enums, a signed sentinel, and two headers compile together" do
     dir = tmp_dir()
     {conn_h, _conn_c} = emit!(dir, "conn", @conn)
-    {peer_h, _peer_c} = emit!(dir, "peer", @peer, c_prefix: "p_")
+    {peer_h, peer_c} = emit!(dir, "peer", @peer, c_prefix: "p_")
     {_plain_h, _plain_c} = emit!(dir, "plain", @plain)
     {_sent_h, _sent_c} = emit!(dir, "sent", @sent)
     {left_h, left_c} = emit!(dir, "left", @left)
@@ -157,7 +160,14 @@ defmodule Muro.EmitCGapsTest do
     assert conn_h =~ "#define MURO__SESS_SLOTS 1"
     assert peer_h =~ "#define MURO__SESS_SLOTS 1"
     assert peer_h =~ "p_muro__sess_peer_step_word("
+    assert peer_h =~ "p_muro__sess_bitp_step_word("
+    assert peer_h =~ "p_muro__sess_unitp_step_word("
+    assert peer_h =~ "p_muro__sess_pickp_step_word("
     assert peer_h =~ "p_muro__sess_step_word("
+    assert peer_c =~ "static muro__sess_res muro__sess_word_step("
+    assert peer_c =~ ~s|muro__sess_lit(bad.expected, sizeof bad.expected, "word")|
+    refute peer_c =~ "value.tag = (uint8_t)tag"
+    assert length(:binary.matches(peer_c, "static muro__sess_res muro__sess_word_step(")) == 1
 
     refute left_h =~ "mark("
     assert left_c =~ "__attribute__((unused)) static "
@@ -182,6 +192,9 @@ defmodule Muro.EmitCGapsTest do
 
     _Static_assert(MURO_SESS_SEND == 1, "send");
     _Static_assert(MURO_SESS_RECV == 2, "recv");
+    _Static_assert(MURO_SESS_NAT == 1, "nat");
+    _Static_assert(MURO_SESS_BIT == 2, "bit");
+    _Static_assert(MURO_SESS_UNIT == 3, "unit");
     _Static_assert(MURO_SESS_PICK == 4, "pick");
     _Static_assert(MURO_SESS_DATA == 8, "data");
     _Static_assert(#{reply_tag} == 0, "reply tag");
@@ -210,6 +223,35 @@ defmodule Muro.EmitCGapsTest do
       {
         muro__sess_res p = p_muro__sess_peer_init();
         if (p.status != MURO_SESS_OK) return 5;
+        p = p_muro__sess_peer_step_word(p.state, MURO_SESS_RECV, MURO_SESS_NAT, 0);
+        if (p.status != MURO_SESS_OK || !p.done) return 15;
+        p = p_muro__sess_peer_init();
+        p = p_muro__sess_peer_step_word(p.state, MURO_SESS_RECV, 99, 0);
+        if (p.status != MURO_SESS_UNEXPECTED) return 16;
+      }
+      {
+        muro__sess_res p = p_muro__sess_bitp_init();
+        if (p.status != MURO_SESS_OK) return 17;
+        p = p_muro__sess_bitp_step_word(p.state, MURO_SESS_RECV, MURO_SESS_BIT, 1);
+        if (p.status != MURO_SESS_OK || !p.done) return 18;
+        p = p_muro__sess_bitp_init();
+        p = p_muro__sess_bitp_step_word(p.state, MURO_SESS_RECV, MURO_SESS_BIT, 2);
+        if (p.status != MURO_SESS_UNEXPECTED) return 19;
+      }
+      {
+        muro__sess_res p = p_muro__sess_unitp_init();
+        if (p.status != MURO_SESS_OK) return 20;
+        p = p_muro__sess_unitp_step_word(p.state, MURO_SESS_RECV, MURO_SESS_UNIT, 0);
+        if (p.status != MURO_SESS_OK || !p.done) return 21;
+      }
+      {
+        muro__sess_res p = p_muro__sess_pickp_init();
+        if (p.status != MURO_SESS_OK) return 22;
+        p = p_muro__sess_pickp_step_word(p.state, MURO_SESS_RECV, MURO_SESS_PICK, 0);
+        if (p.status != MURO_SESS_OK || !p.done) return 23;
+        p = p_muro__sess_pickp_init();
+        p = p_muro__sess_pickp_step_word(p.state, MURO_SESS_RECV, MURO_SESS_PICK, 2);
+        if (p.status != MURO_SESS_UNEXPECTED) return 24;
       }
       if (neg() != (int64_t)-1) return 6;
       if (below((int64_t)-1)->muro__field_tag != 1) return 7;
@@ -302,6 +344,185 @@ defmodule Muro.EmitCGapsTest do
     header = File.read!(Path.join(dir, "lib/one.h"))
     assert header =~ "admit_one("
     refute header =~ ~r/(^|[^*_])one\(/
+  end
+
+  @piece """
+  data Piece : Type where
+    piece-chunk : Piece
+    piece-req : Piece
+
+  session hold := recv Piece end
+  """
+
+  @flag """
+  unboxed data Flag : Type where
+    flag-up : Flag
+    flag-down : Flag
+
+  def up : run Flag := flag-up
+  """
+
+  @bytes_left """
+  def left : run Bytes := b"ab"
+  """
+
+  @bytes_right """
+  def right : run Bytes := b"cd"
+  """
+
+  @str_hi """
+  def hi : run String := "hi"
+  """
+
+  @str_yo """
+  def yo : run String := "yo"
+  """
+
+  test "two prefixed books that declare Piece compile together" do
+    dir = tmp_dir()
+    {pa_h, pa_c} = emit!(dir, "pa", @piece, c_prefix: "a_")
+    {pb_h, pb_c} = emit!(dir, "pb", @piece, c_prefix: "b_")
+
+    tag_a = Muro.Emit.C.ctor_tag("Piece", "piece-chunk", "a_")
+    tag_b = Muro.Emit.C.ctor_tag("Piece", "piece-req", "b_")
+    type_a = Muro.Emit.C.ctor_tag_type("Piece", "a_")
+    type_b = Muro.Emit.C.ctor_tag_type("Piece", "b_")
+    struct_a = Muro.Emit.C.data_struct("Piece", "a_")
+    struct_b = Muro.Emit.C.data_struct("Piece", "b_")
+    word_a = Muro.Emit.C.ctor_word("pa", "Piece", "piece-chunk", "a_")
+    word_b = Muro.Emit.C.ctor_word("pb", "Piece", "piece-req", "b_")
+
+    assert pa_h =~ "typedef struct #{struct_a} #{struct_a};"
+    assert pb_h =~ "typedef struct #{struct_b} #{struct_b};"
+    assert pa_h =~ "typedef enum #{type_a}"
+    assert pb_h =~ "typedef enum #{type_b}"
+    assert pa_h =~ "#{tag_a} = 0"
+    assert pb_h =~ "#{tag_b} = 1"
+    assert pa_c =~ "#{struct_a} *"
+    assert pb_c =~ "#{struct_b} *"
+    refute pa_h =~ "typedef struct Piece "
+    refute pb_h =~ "typedef enum muro__tag_Piece "
+
+    File.write!(Path.join(dir, "both.c"), """
+    #include "pa.h"
+    #include "pb.h"
+
+    int main(void) {
+      muro__sess_res a = a_muro__sess_hold_init();
+      if (a.status != MURO_SESS_OK) return 1;
+      a = a_muro__sess_hold_step_word(a.state, MURO_SESS_RECV, MURO_SESS_DATA, #{word_a});
+      if (a.status != MURO_SESS_OK || !a.done) return 2;
+      muro__sess_res b = b_muro__sess_hold_init();
+      if (b.status != MURO_SESS_OK) return 3;
+      b = b_muro__sess_hold_step_word(b.state, MURO_SESS_RECV, MURO_SESS_DATA, #{word_b});
+      if (b.status != MURO_SESS_OK || !b.done) return 4;
+      return 0;
+    }
+    """)
+
+    for stem <- ~w(pa pb both) do
+      cc!(dir, "#{stem}.c", "#{stem}.o")
+    end
+
+    link!(dir, ~w(pa pb both))
+  end
+
+  test "a prefixed unboxed data run returns the prefixed struct" do
+    dir = tmp_dir()
+    {header, _source} = emit!(dir, "flag", @flag, c_prefix: "a_")
+    struct_name = Muro.Emit.C.data_struct("Flag", "a_")
+    tag = Muro.Emit.C.ctor_tag("Flag", "flag-up", "a_")
+    tag_type = Muro.Emit.C.ctor_tag_type("Flag", "a_")
+
+    assert header =~ "typedef struct #{struct_name} #{struct_name};"
+    assert header =~ "typedef enum #{tag_type}"
+    assert header =~ "#{tag} = 0"
+    assert header =~ "#{struct_name} a_up("
+    refute header =~ "typedef struct Flag "
+
+    File.write!(Path.join(dir, "main.c"), """
+    #include "flag.h"
+
+    int main(void) {
+      #{struct_name} f = a_up();
+      if (f.muro__field_tag != #{tag}) return 1;
+      return 0;
+    }
+    """)
+
+    cc!(dir, "flag.c", "flag.o")
+    cc!(dir, "main.c", "main.o")
+    link!(dir, ~w(flag main))
+  end
+
+  test "bytes and string headers from several books share one translation unit" do
+    dir = tmp_dir()
+    {left_h, _} = emit!(dir, "bleft", @bytes_left)
+    {right_h, _} = emit!(dir, "bright", @bytes_right)
+    {hi_h, _} = emit!(dir, "shi", @str_hi)
+    {yo_h, _} = emit!(dir, "syo", @str_yo)
+
+    assert left_h =~ "#ifndef MURO__SLICE"
+    assert right_h =~ "#ifndef MURO__SLICE"
+    assert hi_h =~ "#ifndef MURO__STR"
+    assert yo_h =~ "#ifndef MURO__STR"
+    assert left_h =~ "typedef struct { const uint8_t *p; size_t n; } muro__slice;"
+    assert hi_h =~ "typedef struct { const uint8_t *p; size_t n; } muro__str;"
+
+    File.write!(Path.join(dir, "main.c"), """
+    #include "bleft.h"
+    #include "bright.h"
+    #include "shi.h"
+    #include "syo.h"
+
+    int main(void) {
+      muro__slice a = left();
+      muro__slice b = right();
+      muro__str s = hi();
+      muro__str t = yo();
+      if (a.n != 2 || b.n != 2 || a.p[0] != 'a' || b.p[0] != 'c') return 1;
+      if (s.n != 2 || t.n != 2 || s.p[0] != 'h' || t.p[0] != 'y') return 2;
+      return 0;
+    }
+    """)
+
+    for stem <- ~w(bleft bright shi syo main) do
+      cc!(dir, "#{stem}.c", "#{stem}.o")
+    end
+
+    link!(dir, ~w(bleft bright shi syo main))
+  end
+
+  test "a Nat run emitted with a prefix loads as a NIF that calls the prefixed symbol" do
+    dir = tmp_dir()
+    path = Path.join(dir, "cgaps_pref.muro")
+    File.write!(path, "def one : run Nat := suc 0\n")
+
+    parent = self()
+
+    capture_io(fn ->
+      send(parent, {:emit, Muro.emit_c(path, c_prefix: "a_", nif: true)})
+    end)
+
+    assert_received {:emit, {:ok, files}}
+    nif_path = Enum.find(files, &String.ends_with?(&1, "_nif.c"))
+    nif = File.read!(nif_path)
+    source = File.read!(Path.join(dir, "cgaps_pref.c"))
+    ex = File.read!(Path.join(dir, "cgaps_pref.ex"))
+
+    assert source =~ "a_one("
+    assert nif =~ "a_one("
+    refute nif =~ ~r/(?<![A-Za-z0-9_])one\(/
+    assert ex =~ "def one,"
+    refute ex =~ "def a_one"
+
+    on_exit(fn ->
+      :code.purge(CgapsPref)
+      :code.delete(CgapsPref)
+    end)
+
+    Code.compile_file(Path.join(dir, "cgaps_pref.ex"))
+    assert apply(CgapsPref, :one, []) == 1
   end
 
   test "unreachable id-missing and id-present clauses are omitted and the live ones run" do

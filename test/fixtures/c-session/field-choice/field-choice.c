@@ -1870,7 +1870,7 @@ static muro__sess_res muro__sess_word_bad(muro__sess_st st) {
   bad.status = MURO_SESS_UNEXPECTED;
   bad.state = st;
   bad.step = "";
-  muro__sess_lit(bad.expected, sizeof bad.expected, "done");
+  muro__sess_lit(bad.expected, sizeof bad.expected, "word");
   return bad;
 }
 
@@ -1888,6 +1888,36 @@ static const char *muro__sess_word_name(uint64_t word) {
   case muro__word_fieldzdchoice_Wrap_wrap: return "wrap";
     default: return 0;
   }
+}
+
+static muro__sess_res muro__sess_word_step(
+    muro__sess_st st, int dir, int tag, uint64_t word,
+    muro__sess_res (*step)(muro__sess_st, int, const muro__sess_val *)) {
+  muro__sess_val value;
+  memset(&value, 0, sizeof value);
+  if (tag == MURO_SESS_NAT) {
+    value.tag = MURO_SESS_NAT;
+    value.nat = word;
+    return step(st, dir, &value);
+  }
+  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
+    if (word > 1) return muro__sess_word_bad(st);
+    value.tag = tag == MURO_SESS_BIT ? (uint8_t)MURO_SESS_BIT : (uint8_t)MURO_SESS_PICK;
+    value.bit = (uint8_t)word;
+    return step(st, dir, &value);
+  }
+  if (tag == MURO_SESS_UNIT) {
+    value.tag = MURO_SESS_UNIT;
+    return step(st, dir, &value);
+  }
+  if (tag == MURO_SESS_DATA) {
+    const char *ctor = muro__sess_word_name(word);
+    if (!ctor) return muro__sess_word_bad(st);
+    value.tag = MURO_SESS_DATA;
+    value.ctor = ctor;
+    return step(st, dir, &value);
+  }
+  return muro__sess_word_bad(st);
 }
 
 muro__sess_res muro__sess_gate_init(void) {
@@ -2056,30 +2086,7 @@ muro__sess_res muro__sess_gate_step(muro__sess_st st, int dir, const muro__sess_
 }
 
 muro__sess_res muro__sess_gate_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_gate_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_gate_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_gate_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_gate_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_gate_step);
 }
 
 int muro__sess_gate_done(muro__sess_st st) {
@@ -2267,30 +2274,7 @@ muro__sess_res muro__sess_gatezdback_step(muro__sess_st st, int dir, const muro_
 }
 
 muro__sess_res muro__sess_gatezdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_gatezdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_gatezdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_gatezdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_gatezdback_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_gatezdback_step);
 }
 
 int muro__sess_gatezdback_done(muro__sess_st st) {
@@ -2478,30 +2462,7 @@ muro__sess_res muro__sess_hdrzdgate_step(muro__sess_st st, int dir, const muro__
 }
 
 muro__sess_res muro__sess_hdrzdgate_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_hdrzdgate_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_hdrzdgate_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_hdrzdgate_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_hdrzdgate_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_hdrzdgate_step);
 }
 
 int muro__sess_hdrzdgate_done(muro__sess_st st) {
@@ -2689,30 +2650,7 @@ muro__sess_res muro__sess_hdrzdback_step(muro__sess_st st, int dir, const muro__
 }
 
 muro__sess_res muro__sess_hdrzdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_hdrzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_hdrzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_hdrzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_hdrzdback_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_hdrzdback_step);
 }
 
 int muro__sess_hdrzdback_done(muro__sess_st st) {
@@ -2900,30 +2838,7 @@ muro__sess_res muro__sess_wrapzdgate_step(muro__sess_st st, int dir, const muro_
 }
 
 muro__sess_res muro__sess_wrapzdgate_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_wrapzdgate_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_wrapzdgate_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_wrapzdgate_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_wrapzdgate_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_wrapzdgate_step);
 }
 
 int muro__sess_wrapzdgate_done(muro__sess_st st) {
@@ -3111,30 +3026,7 @@ muro__sess_res muro__sess_wrapzdback_step(muro__sess_st st, int dir, const muro_
 }
 
 muro__sess_res muro__sess_wrapzdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_wrapzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_wrapzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_wrapzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_wrapzdback_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_wrapzdback_step);
 }
 
 int muro__sess_wrapzdback_done(muro__sess_st st) {
@@ -3322,30 +3214,7 @@ muro__sess_res muro__sess_loop_step(muro__sess_st st, int dir, const muro__sess_
 }
 
 muro__sess_res muro__sess_loop_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_loop_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_loop_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_loop_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_loop_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_loop_step);
 }
 
 int muro__sess_loop_done(muro__sess_st st) {
@@ -3533,30 +3402,7 @@ muro__sess_res muro__sess_loopzdback_step(muro__sess_st st, int dir, const muro_
 }
 
 muro__sess_res muro__sess_loopzdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_loopzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_loopzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_loopzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_loopzdback_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_loopzdback_step);
 }
 
 int muro__sess_loopzdback_done(muro__sess_st st) {
@@ -3680,30 +3526,7 @@ muro__sess_res muro__sess_ack_step(muro__sess_st st, int dir, const muro__sess_v
 }
 
 muro__sess_res muro__sess_ack_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_ack_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_ack_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_ack_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_ack_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_ack_step);
 }
 
 int muro__sess_ack_done(muro__sess_st st) {
@@ -3899,30 +3722,7 @@ muro__sess_res muro__sess_called_step(muro__sess_st st, int dir, const muro__ses
 }
 
 muro__sess_res muro__sess_called_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_called_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_called_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_called_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_called_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_called_step);
 }
 
 int muro__sess_called_done(muro__sess_st st) {
@@ -4110,30 +3910,7 @@ muro__sess_res muro__sess_calledzdback_step(muro__sess_st st, int dir, const mur
 }
 
 muro__sess_res muro__sess_calledzdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_calledzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_calledzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_calledzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_calledzdback_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_calledzdback_step);
 }
 
 int muro__sess_calledzdback_done(muro__sess_st st) {
@@ -4322,30 +4099,7 @@ muro__sess_res muro__sess_sizzed_step(muro__sess_st st, int dir, const muro__ses
 }
 
 muro__sess_res muro__sess_sizzed_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_sizzed_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_sizzed_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_sizzed_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_sizzed_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_sizzed_step);
 }
 
 int muro__sess_sizzed_done(muro__sess_st st) {
@@ -4533,30 +4287,7 @@ muro__sess_res muro__sess_sizzed3_step(muro__sess_st st, int dir, const muro__se
 }
 
 muro__sess_res muro__sess_sizzed3_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_sizzed3_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_sizzed3_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_sizzed3_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_sizzed3_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_sizzed3_step);
 }
 
 int muro__sess_sizzed3_done(muro__sess_st st) {
@@ -4744,30 +4475,7 @@ muro__sess_res muro__sess_sizzed3zdback_step(muro__sess_st st, int dir, const mu
 }
 
 muro__sess_res muro__sess_sizzed3zdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_sizzed3zdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_sizzed3zdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_sizzed3zdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_sizzed3zdback_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_sizzed3zdback_step);
 }
 
 int muro__sess_sizzed3zdback_done(muro__sess_st st) {
@@ -4968,30 +4676,7 @@ muro__sess_res muro__sess_counted_step(muro__sess_st st, int dir, const muro__se
 }
 
 muro__sess_res muro__sess_counted_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_counted_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_counted_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_counted_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_counted_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_counted_step);
 }
 
 int muro__sess_counted_done(muro__sess_st st) {
@@ -5192,30 +4877,7 @@ muro__sess_res muro__sess_countedzdback_step(muro__sess_st st, int dir, const mu
 }
 
 muro__sess_res muro__sess_countedzdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_countedzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_countedzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_countedzdback_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_countedzdback_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_countedzdback_step);
 }
 
 int muro__sess_countedzdback_done(muro__sess_st st) {
@@ -5403,30 +5065,7 @@ muro__sess_res muro__sess_once_step(muro__sess_st st, int dir, const muro__sess_
 }
 
 muro__sess_res muro__sess_once_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
-  muro__sess_val value;
-  memset(&value, 0, sizeof value);
-  value.tag = (uint8_t)tag;
-  if (tag == MURO_SESS_NAT) {
-    value.nat = word;
-    return muro__sess_once_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
-    if (word > 1) {
-      return muro__sess_word_bad(st);
-    }
-    value.bit = (uint8_t)word;
-    return muro__sess_once_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_UNIT) {
-    return muro__sess_once_step(st, dir, &value);
-  }
-  if (tag == MURO_SESS_DATA) {
-    const char *ctor = muro__sess_word_name(word);
-    if (!ctor) return muro__sess_word_bad(st);
-    value.ctor = ctor;
-    return muro__sess_once_step(st, dir, &value);
-  }
-  return muro__sess_word_bad(st);
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_once_step);
 }
 
 int muro__sess_once_done(muro__sess_st st) {
