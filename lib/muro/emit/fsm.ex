@@ -3401,31 +3401,7 @@ defmodule Muro.Emit.Fsm do
         end
       end
 
-      defp phase_of(_rows, :never, _index, _st), do: {:ok, :open}
-
-      defp phase_of(rows, :earlier, index, st) do
-        case earlier?(rows, index) do
-          :clear -> {:ok, :open}
-          :blocked -> {:ok, :held}
-          :bad -> {:error, {:state, st}}
-        end
-      end
-
-      defp phase_of(_rows, _hold, _index, st), do: {:error, {:state, st}}
-
-      defp earlier?(rows, index) do
-        Enum.reduce_while(rows, :clear, fn entry, acc ->
-          case entry do
-            {ix, {id, kind, phase}}
-            when is_integer(ix) and ix >= 0 and is_integer(id) and id >= 0 and is_atom(kind) and
-                   phase in [:open, :held] ->
-              if ix < index, do: {:cont, :blocked}, else: {:cont, acc}
-
-            _ ->
-              {:halt, :bad}
-          end
-        end)
-      end
+      #{phase_bodies(family)}
 
       defp locate(st, id) do
         case Map.fetch(st.id, id) do
@@ -3516,9 +3492,6 @@ defmodule Muro.Emit.Fsm do
               {:ok, sess} -> walk(disp, Map.put(seen, {id, party}, sess), rest, i + 1)
               {:error, reason} -> {:error, {i, reason}}
             end
-
-          {:ok, _phase, _key, _kind} ->
-            {:error, {i, {:state, disp}}}
         end
       end
 
@@ -3653,6 +3626,67 @@ defmodule Muro.Emit.Fsm do
       #{clauses}
     end
     """
+  end
+
+  # `hold_of` only passes a hold this family's `rule` returns. A clause for
+  # any other hold is unused, and Elixir 1.20 rejects the generated module.
+  defp phase_bodies(family) do
+    holds = family.rules |> Enum.map(& &1.hold) |> Enum.uniq()
+
+    parts =
+      Enum.flat_map(holds, fn
+        :never ->
+          ["defp phase_of(_rows, :never, _index, _st), do: {:ok, :open}"]
+
+        :earlier ->
+          [earlier_phase(), earlier_scan()]
+
+        hold ->
+          ["defp phase_of(_rows, #{inspect(hold)}, _index, st), do: {:error, {:state, st}}"]
+      end)
+
+    case parts do
+      [] -> "defp phase_of(_rows, _hold, _index, st), do: {:error, {:state, st}}"
+      _ -> Enum.join(parts, "\n\n")
+    end
+  end
+
+  # A heredoc here would be scanned as a parent helper. `earlier?` is a
+  # child function, and a `?` name is not a run.
+  defp earlier_phase do
+    Enum.join(
+      [
+        "defp phase_of(rows, :earlier, index, st) do",
+        "  case earlier?(rows, index) do",
+        "    :clear -> {:ok, :open}",
+        "    :blocked -> {:ok, :held}",
+        "    :bad -> {:error, {:state, st}}",
+        "  end",
+        "end"
+      ],
+      "\n"
+    )
+  end
+
+  defp earlier_scan do
+    Enum.join(
+      [
+        "defp earlier?(rows, index) do",
+        "  Enum.reduce_while(rows, :clear, fn entry, acc ->",
+        "    case entry do",
+        "      {ix, {id, kind, phase}}",
+        "      when is_integer(ix) and ix >= 0 and is_integer(id) and id >= 0 and is_atom(kind) and",
+        "             phase in [:open, :held] ->",
+        "        if ix < index, do: {:cont, :blocked}, else: {:cont, acc}",
+        "",
+        "      _ ->",
+        "        {:halt, :bad}",
+        "    end",
+        "  end)",
+        "end"
+      ],
+      "\n"
+    )
   end
 
   defp held_body(family) do
