@@ -15,6 +15,7 @@ defmodule Muro.Family.Graph do
   data-independence. The model is one retry and the fixed script.
   """
 
+  alias Muro.Temporal
   alias Muro.Temporal.Graph, as: Meet
 
   # One rerun after the first attempt. The next death gives up.
@@ -193,16 +194,17 @@ defmodule Muro.Family.Graph do
     end
   end
 
-  # The same prune as `Muro.Temporal.prune`: a state leaves the region
-  # when no successor remains in it, and what remains can reach a cycle
-  # there. Destinations are already unwrapped. A family state can be a
-  # pair whose first cell is an atom, which `Temporal.prune` would read
-  # as an edge tag.
+  # Same prune and lasso as a meeting. A family edge is `{tag, dest}` and
+  # the tag is not always an atom, so the destination is unwrapped here.
+  # A two-instance state can be a pair whose first cell is an atom.
+  # `Temporal.prune/2` would read that pair as an edge, so this calls
+  # `prune_dests/2`.
   defp verdict(%{g: g, states: states} = search, {:eventually, prop}) do
     region = Enum.filter(states, fn state -> not holds(g, state, prop) end)
     z = prune(search, region)
+    zset = MapSet.new(z)
 
-    if MapSet.member?(MapSet.new(z), g.start) do
+    if MapSet.member?(zset, g.start) do
       {stem, loop} = lasso(search, z, g.start)
       {:no, live_msg(g, {:eventually, prop}, [], stem, loop)}
     else
@@ -229,106 +231,37 @@ defmodule Muro.Family.Graph do
     end
   end
 
-  defp prune(%{edges: edges}, region) when is_map(edges), do: prune_region(region, edges)
+  defp prune(%{edges: edges}, region) when is_map(edges) do
+    Temporal.prune_dests(region, destinations(region, edges))
+  end
 
   defp prune(%{g: g, states: states}, region) do
-    prune_region(region, Map.new(states, fn state -> {state, edges(g, state)} end))
+    succ = Map.new(states, fn state -> {state, edges(g, state)} end)
+    Temporal.prune_dests(region, destinations(region, succ))
   end
 
-  defp prune_region(nodes, succ) do
-    member = MapSet.new(nodes)
+  defp destinations(region, succ) do
+    Map.new(region, fn node ->
+      outs =
+        succ
+        |> Map.get(node, [])
+        |> Enum.map(fn {_tag, dest} -> dest end)
 
-    {degree, preds} =
-      Enum.reduce(nodes, {%{}, %{}}, fn node, {degree, preds} ->
-        outs =
-          succ
-          |> Map.get(node, [])
-          |> Enum.map(fn {_tag, dest} -> dest end)
-          |> Enum.filter(&MapSet.member?(member, &1))
-
-        degree = Map.put(degree, node, length(outs))
-
-        preds =
-          Enum.reduce(outs, preds, fn target, preds ->
-            Map.update(preds, target, [node], &[node | &1])
-          end)
-
-        {degree, preds}
-      end)
-
-    queue = Enum.filter(nodes, &(Map.get(degree, &1, 0) == 0))
-    alive = drop_zeros(queue, [], degree, preds, member)
-    Enum.filter(nodes, &MapSet.member?(alive, &1))
-  end
-
-  defp drop_zeros([], [], _degree, _preds, alive), do: alive
-
-  defp drop_zeros([], back, degree, preds, alive) do
-    drop_zeros(:lists.reverse(back), [], degree, preds, alive)
-  end
-
-  defp drop_zeros([node | rest], back, degree, preds, alive) do
-    if MapSet.member?(alive, node) do
-      alive = MapSet.delete(alive, node)
-
-      {degree, back} =
-        Enum.reduce(Map.get(preds, node, []), {degree, back}, fn pred, {degree, back} ->
-          if MapSet.member?(alive, pred) do
-            left = Map.get(degree, pred, 0) - 1
-            degree = Map.put(degree, pred, left)
-            back = if left == 0, do: [pred | back], else: back
-            {degree, back}
-          else
-            {degree, back}
-          end
-        end)
-
-      drop_zeros(rest, back, degree, preds, alive)
-    else
-      drop_zeros(rest, back, degree, preds, alive)
-    end
+      {node, outs}
+    end)
   end
 
   # `{stem, loop}` are steps `{tag, src, dest}`. The first edge that
   # stays in the region is the one the meeting checker would take.
   # `leads_to` puts the breadth-first parent trace in front of that pair.
   defp lasso(%{edges: edges}, z, state) when is_map(edges) do
-    walk(edges, MapSet.new(z), state, MapSet.new(), state, [])
+    Temporal.lasso_edges(edges, z, state)
   end
 
   defp lasso(%{g: g}, z, state) do
     edges = Map.new(z, fn node -> {node, edges(g, node)} end)
-    walk(edges, MapSet.new(z), state, MapSet.new(), state, [])
+    Temporal.lasso_edges(edges, z, state)
   end
-
-  defp walk(edges, zset, state, seen, origin, steps) do
-    if MapSet.member?(seen, state) do
-      cut(state, origin, :lists.reverse(steps))
-    else
-      case first_out(edges, zset, state) do
-        {tag, dest} ->
-          walk(edges, zset, dest, MapSet.put(seen, state), origin, [{tag, state, dest} | steps])
-
-        nil ->
-          {[], []}
-      end
-    end
-  end
-
-  defp first_out(edges, zset, state) do
-    Enum.find(Map.get(edges, state, []), fn {_tag, dest} -> MapSet.member?(zset, dest) end)
-  end
-
-  defp cut(target, origin, steps) when target == origin, do: {[], steps}
-  defp cut(target, _origin, steps), do: split_at(target, steps, [])
-
-  defp split_at(_target, [], acc), do: {Enum.reverse(acc), []}
-
-  defp split_at(target, [{_tag, _src, dest} = step | rest], acc) when dest == target do
-    {Enum.reverse([step | acc]), rest}
-  end
-
-  defp split_at(target, [step | rest], acc), do: split_at(target, rest, [step | acc])
 
   defp formulas(g, formula) do
     case peel(formula, []) do
@@ -661,17 +594,25 @@ defmodule Muro.Family.Graph do
   end
 
   # The prefix is the path to the cycle. An empty stem is not copied
-  # onto that path. The cycle is what follows `then forever`.
+  # onto that path. The cycle steps follow `then forever`, then the
+  # state those steps return to. A signal held on that state is in the
+  # message. The step name alone is the stutter.
   defp live_msg(g, formula, to_c, stem, loop) do
     prefix = to_c ++ stem
     body = pp_form(formula)
-    forever = labels(g, loop)
+    forever = cycle_text(g, loop)
 
     if prefix == [] do
       "#{body} fails in #{g.family}; then forever: #{forever}"
     else
       "#{body} fails in #{g.family} after #{labels(g, prefix)}; then forever: #{forever}"
     end
+  end
+
+  defp cycle_text(_g, []), do: ""
+
+  defp cycle_text(g, [{_tag, src, _dest} | _] = loop) do
+    "#{labels(g, loop)}: #{dump(g, src)}"
   end
 
   defp live_or_safe(g, {:always, prop}, steps, state) do

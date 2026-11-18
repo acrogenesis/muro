@@ -357,9 +357,7 @@ defmodule Muro.FamilyTest do
 
   # Golden lasso. The task dies, the server takes fail stop, both signals
   # of key a stay held, and key b runs to resolves while a is blocked.
-  # The cycle is the family stutter. It does not open a signal.
-  @lasso "(held a signal) leads_to (opened a signal) fails in slots after a init 0 opens, a signal 1 held, a init 0 task died, a init 0 server fail stop, a signal 2 held, b init 0 opens, b init 0 task put ok, b init 0 server get (r : Report), b init 0 resolves; then forever: the family has finished"
-
+  # The cycle is the family stutter. The state after it shows `a signal` held.
   test "no-starve is refused when the failure arm is stop" do
     src =
       String.replace(@slots, "fail\n    done", "fail\n    stop") <>
@@ -369,16 +367,17 @@ defmodule Muro.FamilyTest do
         """
 
     assert {:error, msg} = check(src)
-    assert msg =~ ~r/\d+:\d+: no-starve: #{Regex.escape(@lasso)}/
+    assert msg =~ ~r/\d+:\d+: no-starve: #{Regex.escape(Muro.FamilyLasso.text())}/
     assert msg =~ "task died"
     assert msg =~ "fail stop"
     assert msg =~ "a signal 1 held"
     assert msg =~ "a signal 2 held"
     [path, forever] = String.split(msg, "; then forever: ")
-    assert forever == "the family has finished"
+    assert forever =~ "the family has finished:"
+    assert forever =~ "a signal 1: held"
+    assert forever =~ "a signal 2: held"
     assert path =~ "b init 0 opens"
     assert path =~ "b init 0 resolves"
-    refute forever =~ "a signal"
     refute forever =~ "opens"
     refute msg =~ "not yet decided"
     refute msg =~ "holds in"

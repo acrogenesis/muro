@@ -156,9 +156,23 @@ defmodule Muro.Temporal do
   The surviving subset of `nodes`, in the original order.
 
   `succ` maps a node to its successors. An entry is a destination or a
-  `{who, dest}` edge. Destinations outside `nodes` are ignored.
+  `{who, dest}` edge whose `who` is an atom. Destinations outside `nodes`
+  are ignored. A node that is itself a pair is not an edge: pass those
+  successors to `prune_dests/2` after unwrapping `{tag, dest}` yourself.
   """
   def prune(nodes, succ) when is_list(nodes) and is_map(succ) do
+    plain =
+      Map.new(succ, fn {node, outs} ->
+        {node, Enum.map(outs, &dest/1)}
+      end)
+
+    prune_dests(nodes, plain)
+  end
+
+  # Successors are already destinations. A pair whose first cell is an
+  # atom stays a node. `prune/2` unwraps an atom-tagged edge before this.
+  @doc false
+  def prune_dests(nodes, succ) when is_list(nodes) and is_map(succ) do
     member = MapSet.new(nodes)
 
     {degree, preds} =
@@ -166,7 +180,6 @@ defmodule Muro.Temporal do
         outs =
           succ
           |> Map.get(node, [])
-          |> Enum.map(&dest/1)
           |> Enum.filter(&MapSet.member?(member, &1))
 
         degree = Map.put(degree, node, length(outs))
@@ -221,10 +234,14 @@ defmodule Muro.Temporal do
   """
   def lasso(g, z, conf) when is_list(z) do
     edges = Map.new(z, fn c -> {c, Graph.edges(g, c)} end)
-    run_lasso(edges, z, conf)
+    lasso_edges(edges, z, conf)
   end
 
-  defp run_lasso(edges, z, conf) do
+  # `{stem, loop}` are steps `{tag, src, dest}`. The tag need not be an
+  # atom: a family edge is `{tag, dest}` with a tuple tag. The first
+  # successor that stays in `z` is the one the meeting checker takes.
+  @doc false
+  def lasso_edges(edges, z, conf) when is_list(z) and is_map(edges) do
     walk(edges, MapSet.new(z), conf, MapSet.new(), conf, [])
   end
 
@@ -245,7 +262,7 @@ defmodule Muro.Temporal do
     zset = MapSet.new(z)
 
     if MapSet.member?(zset, Graph.init(g)) do
-      {stem, loop} = run_lasso(edges, z, Graph.init(g))
+      {stem, loop} = lasso_edges(edges, z, Graph.init(g))
       {:no, live_msg(g, {:eventually, src}, [], stem, loop)}
     else
       :yes
@@ -262,7 +279,7 @@ defmodule Muro.Temporal do
         :yes
 
       conf ->
-        {stem, loop} = run_lasso(edges, z, conf)
+        {stem, loop} = lasso_edges(edges, z, conf)
         {:no, live_msg(g, {:leads_to, p, q}, trace(parents, conf), stem, loop)}
     end
   end
@@ -406,7 +423,7 @@ defmodule Muro.Temporal do
 
   defp first_out(edges, zset, conf) do
     Enum.find(Map.get(edges, conf, []), fn
-      {who, dest} when is_atom(who) -> MapSet.member?(zset, dest)
+      {_tag, dest} -> MapSet.member?(zset, dest)
       _ -> false
     end)
   end

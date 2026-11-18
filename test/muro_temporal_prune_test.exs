@@ -56,6 +56,26 @@ defmodule Muro.TemporalPruneTest do
     assert Temporal.prune([0, 1], %{0 => [], 1 => [{:lside, 0}]}) == []
     assert Temporal.prune([0, 1], %{0 => [1, 1], 1 => []}) == []
 
+    # A bare pair whose first cell is an atom is an edge to `prune/2`.
+    # `prune_dests/2` keeps that pair as a node. A tuple tag is not an
+    # edge either: `prune/2` leaves it whole, so the open does not land.
+    # A family unwraps every `{tag, dest}` and then calls `prune_dests/2`.
+    pair = {:held, :absent}
+    assert Temporal.prune([pair], %{pair => [pair]}) == []
+    assert Temporal.prune_dests([pair], %{pair => [pair]}) == [pair]
+
+    other = {:resolved, :held}
+
+    assert Temporal.prune([pair, other], %{
+             pair => [{{:open, 0}, other}],
+             other => [{:stay, other}]
+           }) == [other]
+
+    assert Temporal.prune_dests([pair, other], %{pair => [other], other => [other]}) == [
+             pair,
+             other
+           ]
+
     for {nodes, succ} <- [
           {[0, 1, 2], %{0 => [1], 1 => [2], 2 => []}},
           {[0, 1], %{0 => [{:fin, 0}], 1 => [0]}},

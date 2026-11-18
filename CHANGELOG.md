@@ -16,6 +16,18 @@ The dispatcher is generated code. On the fixed script, an accepted sequence is c
 
 - Version 0.21.21.
 
+## 0.21.20
+
+A family liveness refusal prints the state the cycle returns to after `then forever`. On the `fail stop` script that state is the family stutter, and `a signal` is held there. The path to the cycle is the same. The counts are the same. The check is the Elixir graph. It is not an Agda proof. `Satisfies` and `every-run-fair` cover meetings only. A family has no fairness filter.
+
+### Manual
+
+- Temporal, Limits, and Examples: the cycle state on a family lasso, and that the fairness lemmas cover meetings only.
+
+### Package
+
+- Version 0.21.20.
+
 ## 0.21.19
 
 `--backend c` steps a session with a constructor word. `muro__sess_<name>_step_word` takes the direction, the payload kind, and a `uint64_t`. A data word is the constructor's number in this book: every data declaration, in book order, then that declaration's constructors. The name-string step still works. A pair, a record, a vector, and a constructor with fields stay on that step. The header names the status, the direction, and the payload kind, and it names each constructor twice: the tag inside its type, and the flat word. `MURO_SESS_SEND` is 1 and `MURO_SESS_RECV` is 2. Those are directions. The payload kind is a separate enum: `MURO_SESS_NAT` is 1, `MURO_SESS_BIT` is 2, `MURO_SESS_UNIT` is 3, `MURO_SESS_PICK` is 4, `MURO_SESS_PAIR` is 5, `MURO_SESS_REC` is 6, `MURO_SESS_VEC` is 7, and `MURO_SESS_DATA` is 8. The first constructor of a type is tag 0.

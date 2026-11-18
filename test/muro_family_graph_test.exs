@@ -26,8 +26,10 @@ defmodule Muro.Family.GraphTest do
            end)
 
     assert Enum.any?(search.states, fn state ->
-             match?({:run, _, n, _}, Graph.phase(state, 0)) and
-               elem(Graph.phase(state, 0), 2) > 0 and Graph.phase(state, 1) == :held
+             case Graph.phase(state, 0) do
+               {:run, _, n, _} when n > 0 -> Graph.phase(state, 1) == :held
+               _ -> false
+             end
            end)
 
     assert Enum.any?(search.states, fn state ->
@@ -49,6 +51,21 @@ defmodule Muro.Family.GraphTest do
               "always (false) fails in slots: a init 0: absent; a signal 1: absent; a signal 2: absent; b init 0: absent"}
 
     assert Graph.decide(search, {:eventually, true}) == {:ok, 171_649, 729_184}
+
+    assert {:error, ev} = Graph.decide(search, {:eventually, false})
+    assert ev =~ "eventually (false) fails in slots"
+    [_, forever] = String.split(ev, "; then forever: ")
+
+    # The lasso cycle is the family stutter. The state after the step is
+    # the one that step returns to: every instance has resolved.
+    cycle = {:resolved, :resolved, :resolved, :resolved}
+    assert forever == "the family has finished: " <> Graph.dump(search.g, cycle)
+
+    assert Graph.dump(search.g, cycle) ==
+             "a init 0: resolved; a signal 1: resolved; a signal 2: resolved; b init 0: resolved"
+
+    assert Graph.edges(search.g, cycle) == [{:stay, cycle}]
+    assert Enum.member?(search.states, cycle)
 
     assert Graph.decide(search, {
              :forall,
@@ -101,8 +118,6 @@ defmodule Muro.Family.GraphTest do
     assert Enum.all?(search.states, &Graph.respects?(g, &1))
   end
 
-  @lasso "(held a signal) leads_to (opened a signal) fails in slots after a init 0 opens, a signal 1 held, a init 0 task died, a init 0 server fail stop, a signal 2 held, b init 0 opens, b init 0 task put ok, b init 0 server get (r : Report), b init 0 resolves; then forever: the family has finished"
-
   test "fail stop refuses no-starve and keeps the keys independent" do
     src =
       File.read!("examples/keyed-slots.muro")
@@ -121,7 +136,31 @@ defmodule Muro.Family.GraphTest do
              "k",
              {:dat, "key", []},
              {:leads_to, {:held, "k", "signal"}, {:opened, "k", "signal"}}
-           }) == {:error, @lasso}
+           }) == {:error, Muro.FamilyLasso.text()}
+  end
+
+  test "eventually false keeps a cycle on a pair state" do
+    src = """
+    data Event : Type where
+      init : Event
+    session ping := send Nat end
+    session pong := recv Nat end
+    conform a : ping := put 0 done
+    conform b : pong := get (n : Nat) done
+    meet wire : a with b buffer 1
+    family slots : wire per key of Event
+      init never held
+    """
+
+    {:ok, search} = prepare(src)
+    assert tuple_size(search.g.start) == 2
+
+    assert {:error, msg} = Graph.decide(search, {:eventually, false})
+    assert msg =~ "eventually (false) fails in slots"
+    [_, forever] = String.split(msg, "; then forever: ")
+    assert forever =~ "the family has finished:"
+    assert forever =~ "a init 0:"
+    assert forever =~ "resolved"
   end
 
   test "a server that stops stays unresolved and the signal stays held" do
