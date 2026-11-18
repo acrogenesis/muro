@@ -1,0 +1,55 @@
+-- prefix.muro — a list of directed moves is a legal prefix of a session.
+-- The position is the start, a recursion variable, or a session the
+-- protocol continues as. The numeric position is the C stepper's at.
+
+data Piece : Type where
+  piece-chunk : Piece
+  piece-req : Piece
+
+data Reply : Type where
+  reply-ok : Reply
+  reply-bad : Reply
+
+session ack := send Bit end
+
+session conn :=
+  rec Loop.
+    choose
+      (recv (p : Piece)
+        (case p
+          | piece-chunk => Loop
+          | piece-req => send Reply (choose Loop ack)))
+      end
+
+session peer := dual conn
+
+prefix empty : conn :=
+
+prefix admit : conn :=
+  send pick b0
+  recv piece-req
+  send reply-bad
+  send pick b1
+  send b0
+
+prefix short : conn :=
+  send pick b0
+  recv piece-req
+
+prefix at-ack : conn at ack :=
+  send b0
+
+prefix at-loop : conn at Loop :=
+  send pick b1
+
+prefix peer-start : peer :=
+  recv pick b0
+  send piece-req
+
+prefix peer-ack : peer at ack :=
+  recv b0
+
+-- 5 is the state `--backend c` gives `send Reply` on conn.
+prefix at-reply : conn at 5 :=
+  send reply-ok
+  send pick b0

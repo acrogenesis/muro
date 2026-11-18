@@ -34,6 +34,7 @@ import Muro.Soundness
 import Muro.Productive
 import Muro.IR
 import Muro.Session
+import Muro.Prefix
 import Muro.Rec
 import Muro.Dual
 import Muro.Meet

@@ -284,6 +284,12 @@ defmodule Muro.Parser do
           err -> err
         end
 
+      prefix_start?(s) ->
+        case parse_prefix(s) do
+          {:ok, d, rest} -> noted(s, d, rest, acc)
+          err -> err
+        end
+
       place_start?(s) ->
         case parse_place(s) do
           {:ok, d, rest} -> noted(s, d, rest, acc)
@@ -598,6 +604,8 @@ defmodule Muro.Parser do
 
   defp conform_start?(s), do: word_kw?(s, "conform")
 
+  defp prefix_start?(s), do: word_kw?(s, "prefix")
+
   # session ping := recv Nat (send Nat end)
   # session %1 ping-done := recv Nat (send Nat end)
   # session back := dual ping
@@ -745,6 +753,182 @@ defmodule Muro.Parser do
          steps: steps,
          loc: loc
        }, rest}
+    end
+  end
+
+  # prefix admit : conn at 4 :=
+  #   send pick b0
+  #   recv piece-req
+  # A list of directed moves. Evidence that the list is a legal prefix
+  # of the session from that position. `at` ends the session use. It is
+  # not an argument. An omitted position is the start.
+  defp parse_prefix(s) do
+    loc = here(s)
+
+    with {:ok, rest} <- kw(s, "prefix"),
+         {:ok, name, rest} <- ident(skip(rest)),
+         {:ok, rest} <- tok(skip(rest), ":"),
+         {:ok, session, rest} <- parse_prefix_use(skip(rest)),
+         {:ok, at, rest} <- parse_prefix_at(skip(rest)),
+         {:ok, rest} <- tok(skip(rest), ":="),
+         {:ok, moves, rest} <- parse_pmoves(skip(rest)) do
+      {:ok,
+       %{
+         kind: :prefix,
+         name: name,
+         mode: :evidence,
+         session: session,
+         at: at,
+         moves: moves,
+         loc: loc
+       }, rest}
+    end
+  end
+
+  # `at` and `:=` end the use. `parse_sarg` would take `at` as a name.
+  defp parse_prefix_use(s) do
+    s = skip(s)
+
+    if word_kw?(s, "dual") do
+      with {:ok, rest} <- kw(s, "dual"),
+           {:ok, ref, rest} <- parse_prefix_dual(skip(rest)) do
+        {:ok, {:dual, ref}, rest}
+      end
+    else
+      parse_prefix_session(s)
+    end
+  end
+
+  defp parse_prefix_dual(s) do
+    s = skip(s)
+
+    if has_prefix?(s, "(") do
+      with {:ok, rest} <- tok(s, "("),
+           {:ok, ref, rest} <- parse_prefix_session(skip(rest)),
+           {:ok, rest} <- tok(skip(rest), ")") do
+        {:ok, ref, rest}
+      end
+    else
+      parse_prefix_session(s)
+    end
+  end
+
+  defp parse_prefix_session(s) do
+    with {:ok, name, rest} <- ident(skip(s)) do
+      if reserved_session?(name) do
+        {:error, err(s, "expected a session")}
+      else
+        with {:ok, args, rest} <- parse_prefix_sargs(skip(rest)) do
+          if args == [] do
+            {:ok, name, rest}
+          else
+            {:ok, {:sess, name, args}, rest}
+          end
+        end
+      end
+    end
+  end
+
+  defp parse_prefix_sargs(s) do
+    s = skip(s)
+
+    cond do
+      word_kw?(s, "at") or has_prefix?(s, ":=") ->
+        {:ok, [], s}
+
+      true ->
+        case parse_sarg(s) do
+          {:ok, arg, rest} ->
+            with {:ok, more, rest} <- parse_prefix_sargs(rest) do
+              {:ok, [arg | more], rest}
+            end
+
+          :no ->
+            {:ok, [], s}
+
+          {:error, _} = err ->
+            err
+        end
+    end
+  end
+
+  defp parse_prefix_at(s) do
+    s = skip(s)
+
+    if word_kw?(s, "at") do
+      rest = skip(after_kw(s, "at"))
+
+      cond do
+        number?(rest) ->
+          {digits, more} = take_digits(rest, "")
+          {:ok, {:num, String.to_integer(digits)}, more}
+
+        word_kw?(rest, "start") ->
+          {:ok, {:name, "start"}, after_kw(rest, "start")}
+
+        true ->
+          with {:ok, name, more} <- ident(rest) do
+            {:ok, {:name, name}, more}
+          end
+      end
+    else
+      {:ok, :start, s}
+    end
+  end
+
+  defp parse_pmoves(s) do
+    s = skip(s)
+
+    cond do
+      s == "" or decl_boundary?(s) ->
+        {:ok, [], s}
+
+      word_kw?(s, "send") or word_kw?(s, "recv") ->
+        with {:ok, move, rest} <- parse_pmove(s),
+             {:ok, more, rest} <- parse_pmoves(rest) do
+          {:ok, [move | more], rest}
+        end
+
+      true ->
+        {:error, err(s, "expected send or recv")}
+    end
+  end
+
+  defp parse_pmove(s) do
+    loc = here(s)
+
+    with {:ok, dir, rest} <- parse_pmove_dir(s) do
+      rest = skip(rest)
+
+      cond do
+        word_kw?(rest, "pick") ->
+          rest = skip(after_kw(rest, "pick"))
+
+          cond do
+            word_kw?(rest, "b0") ->
+              {:ok, {dir, :pick, :b0, loc}, after_kw(rest, "b0")}
+
+            word_kw?(rest, "b1") ->
+              {:ok, {dir, :pick, :b1, loc}, after_kw(rest, "b1")}
+
+            true ->
+              {:error, err(rest, "expected b0 or b1")}
+          end
+
+        true ->
+          case parse_pval(rest, MapSet.new()) do
+            {:ok, {_ty, val}, more} -> {:ok, {dir, :data, val, loc}, more}
+            err -> err
+          end
+      end
+    end
+  end
+
+  defp parse_pmove_dir(s) do
+    cond do
+      word_kw?(s, "send") -> {:ok, :send, after_kw(s, "send")}
+      word_kw?(s, "recv") -> {:ok, :recv, after_kw(s, "recv")}
+      true -> {:error, err(s, "expected send or recv")}
     end
   end
 
@@ -3733,8 +3917,11 @@ defmodule Muro.Parser do
 
       ident_start?(s) ->
         case ident(s) do
-          {:ok, name, _} -> not proc_word?(name) and not MapSet.member?(bound, name)
-          _ -> false
+          {:ok, name, _} ->
+            not proc_word?(name) and not decl_word?(name) and not MapSet.member?(bound, name)
+
+          _ ->
+            false
         end
 
       true ->
