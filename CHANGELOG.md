@@ -20,6 +20,20 @@ The Elixir emitter omits a `match` clause whose constructor the scrutinee cannot
 
 - Version 0.21.19.
 
+## 0.21.17
+
+`eventually` and `leads_to` over a keyed family are checked on the same fixed script as `always`. Key `a` runs `init`, then `signal`, then `signal`. Key `b` runs `init`. `no-starve` is `(held k signal) leads_to (opened k signal)`. On `examples/keyed-slots.muro` the failure arm is `done`, and `no-starve` holds in 171649 reachable states, 729184 transitions. That count is a model hypothesis, not data-independence: the script is fixed and a retry happens once. It is the graph `no-overtake` already uses. The checker builds that graph once, and the search is the cost of the check.
+
+The same script with `fail stop` refuses `no-starve`. The task dies, the server takes `fail stop`, and `a signal` stays held. Key `b` runs its meeting and resolves while `a` is blocked. The family then stutters. That lasso is the counterexample. The check is the Elixir graph. It is not an Agda proof, and it is not data-independence. The temporal theorems are unchanged. Emitters still skip the family.
+
+### Manual
+
+- Temporal, Limits, and Examples: `eventually` and `leads_to` on the family graph, and the `fail stop` refusal.
+
+### Package
+
+- Version 0.21.17.
+
 ## 0.21.16
 
 `mix muro.synth` ranks a recursive `State` that does not declare `all-states`. `init` is the state the walk starts from, or a list of them. The cover is every state reached from `init` under `step` of every action in `all-actions`, when that set closes within 256 states. A cover of 256 states is accepted. A successor that would exceed 256 states is refused, and no prefix of that set is certified. The closure is computed in Elixir. It is not an Agda theorem. The predicate that survives is certified on that cover by the same ranking as a declared cover. A book that declares `all-states` is unchanged. Recursion under a product, with no `all-states`, is refused when the environment is opened. A value `step` returns that is not a `State` is refused before any ranking.

@@ -8,8 +8,8 @@ defmodule Muro.Family.Graph do
   Instances of one key may arrive in any order. An earlier creation
   index can arrive after a later one has opened.
 
-  `always` is decided here. `eventually` and `leads_to` are not.
-  Nothing in this module is an Agda proof.
+  `always`, `eventually`, and `leads_to` are decided here, on the
+  same search. Nothing in this module is an Agda proof.
 
   A count of reachable states is a model hypothesis, not
   data-independence. The model is one retry and the fixed script.
@@ -71,8 +71,9 @@ defmodule Muro.Family.Graph do
       start: Tuple.duplicate(:absent, length(instances))
     }
 
-    {states, parents, transitions} = reachable(g)
-    {:ok, %{g: g, states: states, parents: parents, transitions: transitions}}
+    {states, parents, transitions, edges} = reachable(g)
+
+    {:ok, %{g: g, states: states, parents: parents, transitions: transitions, edges: edges}}
   end
 
   # The worked script is about 171649 states. The suite sets
@@ -120,23 +121,23 @@ defmodule Muro.Family.Graph do
   end
 
   @doc """
-  `{:ok, states, transitions}` when every `always` instance holds.
-  `{:error, message}` is the breadth-first trace of the first that
-  does not. A formula that is not `always` is `not yet decided`.
-  A `forall` whose type is not `key` is `forall over <name> is not a key`.
+  `{:ok, states, transitions}` when every instance of the formula holds.
+  `{:error, message}` is the breadth-first trace of the first `always`
+  that does not, or the lasso of the first `eventually` or `leads_to`
+  that does not. A `forall` whose type is not `key` is
+  `forall over <name> is not a key`.
 
-  `states` is a model hypothesis, not data-independence.
+  `states` is a model hypothesis, not data-independence. The successor
+  table this count sums is the one liveness prunes. Keeping it does
+  not add a state or a transition.
   """
-  def decide(%{g: g, states: states, parents: parents, transitions: m}, formula) do
+  def decide(%{g: g, states: states, transitions: m} = search, formula) do
     case formulas(g, formula) do
       {:error, msg} ->
         {:error, msg}
 
-      :live ->
-        {:error, "not yet decided"}
-
       props ->
-        case Enum.find_value(props, &counterexample(g, states, parents, &1)) do
+        case Enum.find_value(props, &verdict(search, &1)) do
           nil -> {:ok, length(states), m}
           {:no, msg} -> {:error, msg}
         end
@@ -183,12 +184,151 @@ defmodule Muro.Family.Graph do
     end)
   end
 
-  defp counterexample(g, states, parents, prop) do
+  defp verdict(search, {:always, prop}) do
+    %{g: g, states: states, parents: parents} = search
+
     case Enum.find(states, fn state -> not holds(g, state, prop) end) do
       nil -> nil
       state -> {:no, safety_msg(g, prop, trace(parents, state), state)}
     end
   end
+
+  # The same prune as `Muro.Temporal.prune`: a state leaves the region
+  # when no successor remains in it, and what remains can reach a cycle
+  # there. Destinations are already unwrapped. A family state can be a
+  # pair whose first cell is an atom, which `Temporal.prune` would read
+  # as an edge tag.
+  defp verdict(%{g: g, states: states} = search, {:eventually, prop}) do
+    region = Enum.filter(states, fn state -> not holds(g, state, prop) end)
+    z = prune(search, region)
+
+    if MapSet.member?(MapSet.new(z), g.start) do
+      {stem, loop} = lasso(search, z, g.start)
+      {:no, live_msg(g, {:eventually, prop}, [], stem, loop)}
+    else
+      nil
+    end
+  end
+
+  defp verdict(%{g: g, states: states, parents: parents} = search, {:leads_to, p, q}) do
+    if Enum.any?(states, &holds(g, &1, p)) do
+      region = Enum.filter(states, fn state -> not holds(g, state, q) end)
+      z = prune(search, region)
+      zset = MapSet.new(z)
+
+      case Enum.find(states, fn state -> holds(g, state, p) and MapSet.member?(zset, state) end) do
+        nil ->
+          nil
+
+        state ->
+          {stem, loop} = lasso(search, z, state)
+          {:no, live_msg(g, {:leads_to, p, q}, trace(parents, state), stem, loop)}
+      end
+    else
+      nil
+    end
+  end
+
+  defp prune(%{edges: edges}, region) when is_map(edges), do: prune_region(region, edges)
+
+  defp prune(%{g: g, states: states}, region) do
+    prune_region(region, Map.new(states, fn state -> {state, edges(g, state)} end))
+  end
+
+  defp prune_region(nodes, succ) do
+    member = MapSet.new(nodes)
+
+    {degree, preds} =
+      Enum.reduce(nodes, {%{}, %{}}, fn node, {degree, preds} ->
+        outs =
+          succ
+          |> Map.get(node, [])
+          |> Enum.map(fn {_tag, dest} -> dest end)
+          |> Enum.filter(&MapSet.member?(member, &1))
+
+        degree = Map.put(degree, node, length(outs))
+
+        preds =
+          Enum.reduce(outs, preds, fn target, preds ->
+            Map.update(preds, target, [node], &[node | &1])
+          end)
+
+        {degree, preds}
+      end)
+
+    queue = Enum.filter(nodes, &(Map.get(degree, &1, 0) == 0))
+    alive = drop_zeros(queue, [], degree, preds, member)
+    Enum.filter(nodes, &MapSet.member?(alive, &1))
+  end
+
+  defp drop_zeros([], [], _degree, _preds, alive), do: alive
+
+  defp drop_zeros([], back, degree, preds, alive) do
+    drop_zeros(:lists.reverse(back), [], degree, preds, alive)
+  end
+
+  defp drop_zeros([node | rest], back, degree, preds, alive) do
+    if MapSet.member?(alive, node) do
+      alive = MapSet.delete(alive, node)
+
+      {degree, back} =
+        Enum.reduce(Map.get(preds, node, []), {degree, back}, fn pred, {degree, back} ->
+          if MapSet.member?(alive, pred) do
+            left = Map.get(degree, pred, 0) - 1
+            degree = Map.put(degree, pred, left)
+            back = if left == 0, do: [pred | back], else: back
+            {degree, back}
+          else
+            {degree, back}
+          end
+        end)
+
+      drop_zeros(rest, back, degree, preds, alive)
+    else
+      drop_zeros(rest, back, degree, preds, alive)
+    end
+  end
+
+  # `{stem, loop}` are steps `{tag, src, dest}`. The first edge that
+  # stays in the region is the one the meeting checker would take.
+  # `leads_to` puts the breadth-first parent trace in front of that pair.
+  defp lasso(%{edges: edges}, z, state) when is_map(edges) do
+    walk(edges, MapSet.new(z), state, MapSet.new(), state, [])
+  end
+
+  defp lasso(%{g: g}, z, state) do
+    edges = Map.new(z, fn node -> {node, edges(g, node)} end)
+    walk(edges, MapSet.new(z), state, MapSet.new(), state, [])
+  end
+
+  defp walk(edges, zset, state, seen, origin, steps) do
+    if MapSet.member?(seen, state) do
+      cut(state, origin, :lists.reverse(steps))
+    else
+      case first_out(edges, zset, state) do
+        {tag, dest} ->
+          walk(edges, zset, dest, MapSet.put(seen, state), origin, [{tag, state, dest} | steps])
+
+        nil ->
+          {[], []}
+      end
+    end
+  end
+
+  defp first_out(edges, zset, state) do
+    Enum.find(Map.get(edges, state, []), fn {_tag, dest} -> MapSet.member?(zset, dest) end)
+  end
+
+  defp cut(target, origin, steps) when target == origin, do: {[], steps}
+  defp cut(target, _origin, steps), do: split_at(target, steps, [])
+
+  defp split_at(_target, [], acc), do: {Enum.reverse(acc), []}
+
+  defp split_at(target, [{_tag, _src, dest} = step | rest], acc) when dest == target do
+    {Enum.reverse([step | acc]), rest}
+  end
+
+  defp split_at(target, [step | rest], acc), do: split_at(target, rest, [step | acc])
 
   defp formulas(g, formula) do
     case peel(formula, []) do
@@ -196,11 +336,27 @@ defmodule Muro.Family.Graph do
         err
 
       {:ok, {binders, {:always, prop}}} ->
-        instantiate(prop, binders, g.keys)
+        tag_all(:always, instantiate(prop, binders, g.keys))
+
+      {:ok, {binders, {:eventually, prop}}} ->
+        tag_all(:eventually, instantiate(prop, binders, g.keys))
+
+      {:ok, {binders, {:leads_to, p, q}}} ->
+        instantiate_to(p, q, binders, g.keys)
 
       {:ok, _} ->
-        :live
+        {:error, "a family formula names opened, held, or resolved"}
     end
+  end
+
+  defp tag_all(kind, props) when is_list(props), do: Enum.map(props, &{kind, &1})
+
+  defp instantiate_to(p, q, [], _keys), do: [{:leads_to, p, q}]
+
+  defp instantiate_to(p, q, [{:key, var} | rest], keys) do
+    Enum.flat_map(keys, fn key ->
+      instantiate_to(subst(p, var, key), subst(q, var, key), rest, keys)
+    end)
   end
 
   defp peel({:forall, x, {:dat, "key", []}, body}, acc), do: peel(body, [{:key, x} | acc])
@@ -289,30 +445,39 @@ defmodule Muro.Family.Graph do
   # `@bound` is one retry. `instances/2` is the fixed script. The
   # length of this search is a model hypothesis, not data-independence.
   defp reachable(g) do
-    drain(g, [g.start], [], MapSet.new([g.start]), %{}, [], 0)
+    drain(g, [g.start], [], MapSet.new([g.start]), %{}, [], 0, [])
   end
 
-  defp drain(_g, [], [], _seen, parents, acc, trans), do: {Enum.reverse(acc), parents, trans}
-
-  defp drain(g, [], back, seen, parents, acc, trans) do
-    drain(g, :lists.reverse(back), [], seen, parents, acc, trans)
+  defp drain(_g, [], [], _seen, parents, acc, trans, edge_acc) do
+    {Enum.reverse(acc), parents, trans, Map.new(edge_acc)}
   end
 
-  defp drain(g, [state | front], back, seen, parents, acc, trans) do
-    {back, seen, parents, n} =
-      Enum.reduce(edges(g, state), {back, seen, parents, 0}, fn {tag, dest},
-                                                                {back, seen, parents, n} ->
-        {back, seen, parents} =
-          if tag == :stay or MapSet.member?(seen, dest) do
-            {back, seen, parents}
-          else
-            {[dest | back], MapSet.put(seen, dest), Map.put(parents, dest, {tag, state})}
-          end
+  defp drain(g, [], back, seen, parents, acc, trans, edge_acc) do
+    drain(g, :lists.reverse(back), [], seen, parents, acc, trans, edge_acc)
+  end
 
-        {back, seen, parents, n + 1}
+  defp drain(g, [state | front], back, seen, parents, acc, trans, edge_acc) do
+    steps = edges(g, state)
+
+    {back, seen, parents} =
+      Enum.reduce(steps, {back, seen, parents}, fn {tag, dest}, {back, seen, parents} ->
+        if tag == :stay or MapSet.member?(seen, dest) do
+          {back, seen, parents}
+        else
+          {[dest | back], MapSet.put(seen, dest), Map.put(parents, dest, {tag, state})}
+        end
       end)
 
-    drain(g, front, back, seen, parents, [state | acc], trans + n)
+    drain(
+      g,
+      front,
+      back,
+      seen,
+      parents,
+      [state | acc],
+      trans + length(steps),
+      [{state, steps} | edge_acc]
+    )
   end
 
   @doc false
@@ -492,41 +657,88 @@ defmodule Muro.Family.Graph do
   end
 
   defp safety_msg(g, prop, steps, state) do
-    body = "always (#{pp(prop)})"
-    place = g.family
+    live_or_safe(g, {:always, prop}, steps, state)
+  end
 
-    if steps == [] do
-      "#{body} fails in #{place}: #{dump(g, state)}"
+  # The prefix is the path to the cycle. An empty stem is not copied
+  # onto that path. The cycle is what follows `then forever`.
+  defp live_msg(g, formula, to_c, stem, loop) do
+    prefix = to_c ++ stem
+    body = pp_form(formula)
+    forever = labels(g, loop)
+
+    if prefix == [] do
+      "#{body} fails in #{g.family}; then forever: #{forever}"
     else
-      "#{body} fails in #{place} after #{labels(g, steps)}: #{dump(g, state)}"
+      "#{body} fails in #{g.family} after #{labels(g, prefix)}; then forever: #{forever}"
     end
   end
 
-  defp labels(g, steps), do: Enum.map_join(steps, ", ", &step_label(g, &1))
+  defp live_or_safe(g, {:always, prop}, steps, state) do
+    body = pp_form({:always, prop})
 
-  defp step_label(g, {tag, src, _dest}), do: step_name(g, src, tag)
-
-  defp step_name(g, _src, {:open, id}), do: "#{who(g, id)} opens"
-  defp step_name(g, _src, {:hold, id}), do: "#{who(g, id)} held"
-  defp step_name(g, _src, {:resolve, id}), do: "#{who(g, id)} resolves"
-  defp step_name(g, _src, {:retry, id}), do: "#{who(g, id)} retries"
-  defp step_name(g, _src, {:give_up, id}), do: "#{who(g, id)} gives up"
-  defp step_name(_g, _src, :stay), do: "the family has finished"
-
-  defp step_name(g, src, {:meet, id, who}) do
-    "#{who(g, id)} #{meet_name(g, who, run_conf(phase(src, id)))}"
+    if steps == [] do
+      "#{body} fails in #{g.family}: #{dump(g, state)}"
+    else
+      "#{body} fails in #{g.family} after #{labels(g, steps)}: #{dump(g, state)}"
+    end
   end
 
-  defp meet_name(g, who, _conf) when who in [:ldie, :rdie] do
+  defp pp_form({:always, prop}), do: "always (#{pp(prop)})"
+  defp pp_form({:eventually, prop}), do: "eventually (#{pp(prop)})"
+  defp pp_form({:leads_to, p, q}), do: "(#{pp(p)}) leads_to (#{pp(q)})"
+
+  defp labels(g, steps), do: Enum.map_join(steps, ", ", &step_label(g, &1))
+
+  defp step_label(g, {tag, src, dest}), do: step_name(g, src, dest, tag)
+
+  defp step_name(g, _src, _dest, {:open, id}), do: "#{who(g, id)} opens"
+  defp step_name(g, _src, _dest, {:hold, id}), do: "#{who(g, id)} held"
+  defp step_name(g, _src, _dest, {:resolve, id}), do: "#{who(g, id)} resolves"
+  defp step_name(g, _src, _dest, {:retry, id}), do: "#{who(g, id)} retries"
+  defp step_name(g, _src, _dest, {:give_up, id}), do: "#{who(g, id)} gives up"
+  defp step_name(_g, _src, _dest, :stay), do: "the family has finished"
+
+  defp step_name(g, src, dest, {:meet, id, who}) do
+    "#{who(g, id)} #{meet_name(g, who, run_conf(phase(src, id)), run_conf(phase(dest, id)))}"
+  end
+
+  defp meet_name(g, who, _src, _dest) when who in [:ldie, :rdie] do
     "#{side_name(g, side(who))} died"
   end
 
-  defp meet_name(g, who, _conf) when who in [:ldrop, :rdrop] do
+  defp meet_name(g, who, _src, _dest) when who in [:ldrop, :rdrop] do
     "#{side_name(g, side(who))} dropped"
   end
 
-  defp meet_name(g, who, conf) do
-    "#{side_name(g, side(who))} #{block_show(g, side(who), conf)}"
+  defp meet_name(g, who, src, dest) do
+    side = side(who)
+
+    if fail_fire?(block_at(g, side, src), dest, side) do
+      "#{side_name(g, side)} #{fail_word(g, side, dest)}"
+    else
+      "#{side_name(g, side)} #{block_show(g, side, src)}"
+    end
+  end
+
+  defp fail_fire?(%{fail: fail}, dest, side) when is_integer(fail), do: ptr(dest, side) == fail
+  defp fail_fire?(_, _, _), do: false
+
+  defp fail_word(g, side, dest) do
+    case block_kind(g, side, dest) do
+      :stop -> "fail stop"
+      :done -> "fail done"
+      _ -> "fail"
+    end
+  end
+
+  defp block_at(g, side, conf) do
+    code = if side == :l, do: g.meet.code_l, else: g.meet.code_r
+
+    case ptr(conf, side) do
+      :dead -> nil
+      i -> Enum.at(code, i)
+    end
   end
 
   defp side(:lside), do: :l
