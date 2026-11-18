@@ -7,21 +7,13 @@ defmodule Muro.FsmFamilyTest do
 
   @path "examples/keyed-slots.muro"
 
-  setup do
-    on_exit(fn ->
-      for {mod, _} <- :code.all_loaded(),
-          name = Atom.to_string(mod),
-          String.starts_with?(name, "Elixir.FsmFam") do
-        :code.purge(mod)
-        :code.delete(mod)
-      end
-    end)
-
-    :ok
+  setup_all do
+    {disp, parent, src} = compile!(@path)
+    on_exit(&purge_fam/0)
+    [disp: disp, parent: parent, src: src]
   end
 
-  test "the production trace holds, opens, and releases" do
-    {disp, parent, _src} = compile!()
+  test "the production trace holds, opens, and releases", %{disp: disp, parent: parent} do
     search = search!()
     assert length(search.states) == 171_649
     assert search.transitions == 729_184
@@ -63,8 +55,7 @@ defmodule Muro.FsmFamilyTest do
     assert {:recv, {:data, "Report", []}} = server.expected(server.init())
   end
 
-  test "resolved of an unknown id is an error and does not raise" do
-    {disp, _parent, _src} = compile!()
+  test "resolved of an unknown id is an error and does not raise", %{disp: disp} do
     state = disp.new()
 
     assert {:error, {:unknown, 0}} = disp.resolved(state, 0)
@@ -82,11 +73,25 @@ defmodule Muro.FsmFamilyTest do
     assert {:error, {:index, -1}} = disp.arrive(state, "a", :signal, -1)
     assert {:error, {:duplicate, "a", 0}} = disp.arrive(state, "a", :signal, 0)
     assert {:ok, [{1, "a", :signal}], state} = disp.resolved(state, 0)
-    assert {:error, {:resolved, 0}} = disp.resolved(state, 0)
+    assert {:error, {:unknown, 0}} = disp.resolved(state, 0)
+    assert {:open, 2, state} = disp.arrive(state, "a", :init, 0)
+    assert {:error, {:duplicate, "a", 1}} = disp.arrive(state, "a", :signal, 1)
+
+    assert {:error, {2, {:unknown, 0}}} =
+             disp.check_trace([
+               {:arrive, "a", :init, 0},
+               {:resolved, 0},
+               {:resolved, 0}
+             ])
+
+    state = disp.new()
+    assert {:open, 0, state} = disp.arrive(state, "a", :signal, 5)
+    assert {:ok, [], state} = disp.resolved(state, 0)
+    assert {:open, 1, _state} = disp.arrive(state, "a", :signal, 3)
   end
 
-  test "a later signal opens before its init arrives, and an earlier signal blocks the next" do
-    {disp, _parent, _src} = compile!()
+  test "a later signal opens before its init arrives, and an earlier signal blocks the next",
+       %{disp: disp} do
     search = search!()
     g = search.g
 
@@ -129,8 +134,7 @@ defmodule Muro.FsmFamilyTest do
     ])
   end
 
-  test "a second init opens at once and the signal waits for both" do
-    {disp, _parent, _src} = compile!()
+  test "a second init opens at once and the signal waits for both", %{disp: disp} do
     state = disp.new()
     assert {:open, 0, state} = disp.arrive(state, "a", :init, 0)
     assert {:open, 1, state} = disp.arrive(state, "a", :init, 1)
@@ -150,8 +154,8 @@ defmodule Muro.FsmFamilyTest do
     ])
   end
 
-  test "every dispatcher-accepted sequence over the script is a run of the family graph" do
-    {disp, _parent, _src} = compile!()
+  test "every dispatcher-accepted sequence over the script is a run of the family graph",
+       %{disp: disp} do
     search = search!()
     assert length(search.states) == 171_649
     assert search.transitions == 729_184
@@ -169,6 +173,253 @@ defmodule Muro.FsmFamilyTest do
       )
 
     assert n > 1
+  end
+
+  test "the state keeps only the live instances", %{disp: disp} do
+    state = disp.new()
+    assert {:open, _, state} = disp.arrive(state, "stay", :init, 0)
+    live = %{by: state.by, id: state.id}
+    n0 = state.n
+
+    state =
+      Enum.reduce(1..40, state, fn n, state ->
+        assert {:open, id, state} = disp.arrive(state, "a", :init, n)
+        assert {:held, sig, state} = disp.arrive(state, "a", :signal, n + 1_000)
+        assert {:open, other, state} = disp.arrive(state, "b", :init, n)
+        assert {:ok, [{^sig, "a", :signal}], state} = disp.resolved(state, id)
+        assert {:ok, [], state} = disp.resolved(state, sig)
+        assert {:ok, [], state} = disp.resolved(state, other)
+        assert map_size(state.id) == 1
+        assert map_size(state.by) == 1
+        assert %{by: state.by, id: state.id} == live
+        rows = state.by |> Map.values() |> Enum.map(&map_size/1) |> Enum.sum()
+        assert map_size(state.id) == rows
+        state
+      end)
+
+    assert state.n == n0 + 120
+    assert state.by["stay"][0] == {0, :init, :open}
+    refute inspect(state.by) =~ ":resolved"
+    refute inspect(state.id) =~ ":resolved"
+  end
+
+  test "a call reads only the key it names", %{disp: disp} do
+    state = disp.new()
+    assert {:open, 0, state} = disp.arrive(state, "b", :init, 0)
+    assert {:held, 1, state} = disp.arrive(state, "b", :signal, 1)
+
+    poisoned =
+      state
+      |> Map.update!(:by, &Map.put(&1, "a", :poison))
+      |> Map.update!(:id, &Map.put(&1, 99, :poison))
+
+    assert {:open, 2, next} = disp.arrive(poisoned, "b", :init, 2)
+    assert next.by["a"] == :poison
+    assert next.id[99] == :poison
+    assert next.by["b"][0] == {0, :init, :open}
+    assert next.by["b"][2] == {2, :init, :open}
+
+    assert {:ok, [{1, "b", :signal}], back} = disp.resolved(next, 0)
+    assert back.by["a"] == :poison
+    assert back.id[99] == :poison
+    refute Map.has_key?(back.id, 0)
+    assert back.by["b"][1] == {1, :signal, :open}
+    assert back.by["b"][2] == {2, :init, :open}
+
+    assert {:error, {:state, _}} = disp.arrive(poisoned, "a", :init, 0)
+    assert {:error, {:state, _}} = disp.resolved(poisoned, 99)
+    assert {:error, {:held, 1}} = disp.resolved(poisoned, 1)
+
+    dirty = put_in(state, [:by, "b", 9], :poison)
+    assert {:open, _, kept} = disp.arrive(dirty, "b", :init, 3)
+    assert kept.by["b"][9] == :poison
+    assert {:error, {:held, 1}} = disp.resolved(dirty, 1)
+    assert {:error, {:state, _}} = disp.resolved(dirty, 0)
+    assert {:error, {:state, _}} = disp.arrive(dirty, "b", :signal, 4)
+  end
+
+  test "finish resolves the instance on the session's end", %{
+    disp: disp,
+    parent: parent,
+    src: src
+  } do
+    assert src =~ "def new, do: %{n: 0, by: %{}, id: %{}}"
+    assert src =~ "def finish(session_state, family_state, id)"
+    assert src =~ "def finish(session_state, step, family_state, id)"
+    assert src =~ "defp party(:server)"
+    refute src =~ "{:error, {:resolved"
+
+    server = Module.concat(parent, ServerWait)
+    task = Module.concat(parent, TaskWork)
+    assert function_exported?(server, :finish, 3)
+    assert function_exported?(server, :finish, 4)
+    assert function_exported?(task, :finish, 3)
+    assert function_exported?(task, :finish, 4)
+
+    state = disp.new()
+    assert {:open, 0, state} = disp.arrive(state, "a", :init, 0)
+    assert {:held, 1, state} = disp.arrive(state, "a", :signal, 1)
+
+    assert {:ok, [{1, "a", :signal}], done} = server.finish(server.init(), :down, state, 0)
+    assert {:error, {:unknown, 0}} = disp.resolved(done, 0)
+    assert {:ok, [], _} = disp.resolved(done, 1)
+
+    assert {:ok, [{1, "a", :signal}], _} = server.finish(server.init(), {:recv, :ok}, state, 0)
+    {:ok, reported} = server.recv(server.init(), :ok)
+    assert server.done?(reported)
+    assert {:ok, [{1, "a", :signal}], _} = server.finish(reported, state, 0)
+
+    assert {:error, _} = server.finish(server.init(), {:send, :ok}, state, 0)
+    assert {:error, _} = server.finish(server.init(), {:recv, :nope}, state, 0)
+    assert {:error, {:step, :nope}} = server.finish(server.init(), :nope, state, 0)
+    assert {:error, _} = server.finish(:nope, state, 0)
+    assert {:error, _} = server.finish(:nope, :down, state, 0)
+    assert {:error, {:held, 1}} = server.finish(server.init(), :down, state, 1)
+    assert {:error, {:unknown, 9}} = server.finish(server.init(), :down, state, 9)
+    assert {:ok, [{1, "a", :signal}], _} = disp.resolved(state, 0)
+
+    state = disp.new()
+    assert {:open, 0, state} = disp.arrive(state, "a", :init, 0)
+    assert {:ok, [], freed} = task.finish(task.init(), {:send, :ok}, state, 0)
+    assert {:error, {:unknown, 0}} = disp.resolved(freed, 0)
+    assert {:error, _} = task.finish(task.init(), :down, state, 0)
+    assert {:ok, [], _} = disp.resolved(state, 0)
+  end
+
+  test "check_trace names an instance whose session finished without resolved", %{disp: disp} do
+    trace = [
+      {:arrive, "a", :init, 0},
+      {:arrive, "a", :signal, 1},
+      {:arrive, "b", :init, 0},
+      {:server, 0, :down},
+      {:resolved, 0},
+      {:task, 1, {:send, :ok}},
+      {:resolved, 1},
+      {:server, 2, {:recv, :ok}},
+      {:resolved, 2}
+    ]
+
+    assert :ok = disp.check_trace(trace)
+
+    leaked = [
+      {:arrive, "a", :init, 0},
+      {:arrive, "a", :signal, 1},
+      {:arrive, "b", :init, 0},
+      {:server, 0, :down}
+    ]
+
+    assert {:error, {:unresolved, 0, "a", :init}} = disp.check_trace(leaked)
+
+    assert {:error, {:unresolved, 0, "a", :init}} =
+             disp.check_trace([
+               {:arrive, "a", :init, 0},
+               {:task, 0, {:send, :ok}}
+             ])
+
+    assert {:error, {0, {:unknown, 4}}} = disp.check_trace([{:server, 4, :down}])
+
+    assert {:error, {2, {:held, 1}}} =
+             disp.check_trace([
+               {:arrive, "a", :init, 0},
+               {:arrive, "a", :signal, 1},
+               {:server, 1, {:recv, :ok}}
+             ])
+
+    assert {:error, {1, {:party, :nope}}} =
+             disp.check_trace([
+               {:arrive, "a", :init, 0},
+               {:nope, 0, :down}
+             ])
+  end
+
+  test "down into stop is not a resolved instance" do
+    {disp, parent, _src} =
+      compile_src!("""
+      data Event : Type where
+        init : Event
+
+      data Report : Type where
+        ok : Report
+
+      session task-work := send Report end
+      session server-wait := recv Report end
+
+      conform task : task-work := put ok done
+
+      conform server : server-wait :=
+        get (r : Report) done
+        fail
+          stop
+
+      meet hold : server with task may fail buffer 1
+
+      family slots : hold per key of Event
+        init never held
+      """)
+
+    server = Module.concat(parent, ServerWait)
+    state = disp.new()
+    assert {:open, 0, state} = disp.arrive(state, "a", :init, 0)
+    assert {:error, {:unfinished, :stop}} = server.finish(server.init(), :down, state, 0)
+    assert {:ok, [], _} = disp.resolved(state, 0)
+
+    assert {:error, {2, {:unfinished, 0}}} =
+             disp.check_trace([
+               {:arrive, "a", :init, 0},
+               {:server, 0, :down},
+               {:resolved, 0}
+             ])
+
+    assert :ok =
+             disp.check_trace([
+               {:arrive, "a", :init, 0},
+               {:server, 0, :down}
+             ])
+  end
+
+  test "a send then a death resolves only when the trace says so" do
+    {disp, parent, _src} =
+      compile_src!("""
+      data Event : Type where
+        init : Event
+
+      data Report : Type where
+        ok : Report
+
+      session task-work := recv Nat (send Report end)
+      session server-work := send Nat (recv Report end)
+
+      conform task : task-work :=
+        get (n : Nat) (put ok done)
+
+      conform server : server-work :=
+        put 0 (get (r : Report) done fail done)
+
+      meet wire : server with task may fail buffer 1
+
+      family slots : wire per key of Event
+        init never held
+      """)
+
+    server = Module.concat(parent, ServerWork)
+    opened = [{:arrive, "a", :init, 0}, {:server, 0, {:send, 0}}]
+
+    assert {:error, {2, {:unfinished, 0}}} = disp.check_trace(opened ++ [{:resolved, 0}])
+
+    assert {:error, {:unresolved, 0, "a", :init}} =
+             disp.check_trace(opened ++ [{:server, 0, {:recv, :ok}}])
+
+    assert :ok = disp.check_trace(opened ++ [{:server, 0, :down}, {:resolved, 0}])
+    assert :ok = disp.check_trace(opened ++ [{:server, 0, {:recv, :ok}}, {:resolved, 0}])
+
+    state = disp.new()
+    assert {:open, 0, state} = disp.arrive(state, "a", :init, 0)
+    assert {:error, {:unfinished, _}} = server.finish(server.init(), {:send, 0}, state, 0)
+    assert {:ok, [], _} = disp.resolved(state, 0)
+    {:ok, mid} = server.send(server.init(), 0)
+    assert {:ok, [], freed} = server.finish(mid, :down, state, 0)
+    assert {:error, {:unknown, 0}} = disp.resolved(freed, 0)
+    assert {:ok, [], _} = server.finish(mid, {:recv, :ok}, state, 0)
   end
 
   defp hold_of(disp, state, id) do
@@ -414,9 +665,9 @@ defmodule Muro.FsmFamilyTest do
     search
   end
 
-  defp compile! do
+  defp compile!(path) do
     parent = Module.concat(["FsmFam#{System.unique_integer([:positive])}"])
-    assert {:ok, src} = Muro.emit_fsm(@path, parent)
+    assert {:ok, src} = Muro.emit_fsm(path, parent)
     assert src =~ "defmodule Slots do"
     assert src =~ "def new"
     assert src =~ "def arrive"
@@ -432,5 +683,22 @@ defmodule Muro.FsmFamilyTest do
     assert warnings == [], inspect(warnings, limit: 20)
     assert parent in Enum.map(mods, &elem(&1, 0))
     {Module.concat(parent, Slots), parent, src}
+  end
+
+  defp compile_src!(src) do
+    dir = System.tmp_dir!() |> Path.join("muro-fsm-fam-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    path = Path.join(dir, "book.muro")
+    File.write!(path, src)
+    compile!(path)
+  end
+
+  defp purge_fam do
+    for {mod, _} <- :code.all_loaded(),
+        name = Atom.to_string(mod),
+        String.starts_with?(name, "Elixir.FsmFam") do
+      :code.purge(mod)
+      :code.delete(mod)
+    end
   end
 end

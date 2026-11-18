@@ -8,9 +8,13 @@ A signal stays held while an earlier arrived instance of its key is unresolved. 
 
 The dispatcher is generated code. On the fixed script, an accepted sequence is checked against the family graph. That check is not an Agda proof. The family counts are unchanged.
 
+`resolved` drops the instance. The state keeps the live instances of each key, and the id of a live instance records its key. A call fetches that key. A repeat of a live instance, the same key and creation index while it is open or held, is an error. A repeat of a forgotten instance is not caught. `resolved` of a forgotten id returns `{:error, {:unknown, id}}`.
+
+Each end of the meeting has `finish/3` and `finish/4`. One call takes that session to its end and resolves the instance, and returns what `resolved` returns. `check_trace/1` also replays that end's sends, receives, and `down`. It reports an instance whose session finished and was never resolved. These checks are the emitted code and the family graph. They are not an Agda proof.
+
 ### Manual
 
-- State machines, Emit, Temporal, Limits, and Examples: the family dispatcher.
+- State machines, Emit, Temporal, Limits, and Examples: the family dispatcher drops a resolved instance, and `finish` ties the session end to that call.
 
 ### Package
 

@@ -106,7 +106,7 @@ A meeting that does not mark a party keeps the graph this page has described so 
 
 ## A keyed family
 
-A family is spec. It names one buffered meeting and one closed kind, and one rule for each constructor of that kind. The state machine emits one dispatcher for a family that checks. Every other emitter skips it. It adds nothing to a term. The dispatcher is [State machines](fsm.md#a-keyed-family).
+A family is spec. It names one buffered meeting and one closed kind, and one rule for each constructor of that kind. The state machine emits one dispatcher for a family that checks. `resolved` drops the instance. Each end of the meeting has `finish`, and the dispatcher's `check_trace` replays that end together with `arrive` and `resolved`. Every other emitter skips the family. It adds nothing to a term. The dispatcher is [State machines](fsm.md#a-keyed-family).
 
 ```
 family slots : slot per key of Event

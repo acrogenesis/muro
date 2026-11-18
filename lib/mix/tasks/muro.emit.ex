@@ -67,6 +67,7 @@ defmodule Mix.Tasks.Muro.Emit do
   name is the stem plus `Fsm` (`meet.muro` is `MeetFsm`). Each session
   is a child module of pure functions. A keyed family that checks is
   one more child: `new/0`, `arrive/4`, `resolved/2`, and `check_trace/1`.
+  `resolved` drops the instance. Each end of the meeting has `finish`.
   The host keeps the transport. Nothing is written next to the book.
 
   `--backend mbi` writes `<stem>.mbi` next to the file and prints that
