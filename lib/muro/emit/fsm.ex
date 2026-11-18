@@ -9,6 +9,12 @@ defmodule Muro.Emit.Fsm do
   that does, and checks the reason the host supplies. Where the protocol
   has no failure arm, `down` is an error. A book that does not mark a
   party emits no `down`.
+
+  A keyed family that checks is one more child. `new/0` starts it.
+  `arrive/4` takes the key, the constructor, and the creation index.
+  `resolved/2` finishes one open instance and lists the instances that
+  opening releases. `check_trace/1` replays those steps. The session
+  children are unchanged. The child does not run the meeting.
   """
 
   alias Muro.{Ast, Emit, Session}
@@ -82,7 +88,11 @@ defmodule Muro.Emit.Fsm do
     end
   end
 
-  defp plan(book, path, opts), do: plan_sessions(book, path, opts)
+  defp plan(book, path, opts) do
+    with {:ok, st} <- plan_sessions(book, path, opts) do
+      {:ok, Map.put(st, :families, ready_families(book))}
+    end
+  end
 
   defp plan_sessions(book, path, opts) do
     label = book_label(path, opts)
@@ -155,13 +165,18 @@ defmodule Muro.Emit.Fsm do
           ] ++ init
       end)
 
+    fams = family_mods(st)
+
     %{
-      names: [inspect(module) | Map.values(aliases)] |> Enum.uniq(),
+      names:
+        [inspect(module) | Map.values(aliases)]
+        |> Enum.uniq()
+        |> Kernel.++(Enum.map(fams, &elem(&1, 1))),
       elixir: Emit.elixir_names(book),
       signatures: signatures,
       layouts:
         Enum.map(signatures, &%{name: &1.source, layout: &1.layout, params: &1.param_layouts}),
-      clauses: clauses
+      clauses: clauses ++ family_clauses(fams)
     }
   end
 
@@ -1182,6 +1197,18 @@ defmodule Muro.Emit.Fsm do
       #{indent(children(module, st), 2)}
       end
       """
+
+    text =
+      case family_source(st) do
+        "" ->
+          text
+
+        disp ->
+          trimmed = String.trim_trailing(text)
+
+          String.replace_suffix(trimmed, "end", String.trim_trailing(disp) <> "\nend") <>
+            "\n"
+      end
 
     text
     |> gate(Enum.any?(book, &Muro.Fail.marked?/1))
@@ -3059,5 +3086,207 @@ defmodule Muro.Emit.Fsm do
       "" -> ""
       line -> pad <> line
     end)
+  end
+
+  # A family that checks becomes one pure child. The rules are the ones
+  # the book wrote. `resolved` does not run the meeting: the host calls
+  # it when that instance should stop blocking. An id the child did not
+  # return is an error tuple, and the call does not raise.
+  defp ready_families(book) do
+    book
+    |> Enum.filter(&(Map.get(&1, :kind) == :family))
+    |> Enum.filter(&family_ready?(book, &1))
+  end
+
+  defp family_ready?(book, family) do
+    Muro.Family.check_decl(book, family, nil) == :ok
+  end
+
+  defp family_mods(st) do
+    used =
+      st.sessions
+      |> Enum.map(& &1.name)
+      |> Emit.elixir_modules()
+      |> Map.values()
+      |> MapSet.new()
+
+    {mods, _} =
+      Enum.map_reduce(st.families, used, fn fam, used ->
+        {mod, used} = Muro.Emit.Name.claim(Emit.elixir_alias(fam.name), used)
+        {{fam, mod}, used}
+      end)
+
+    mods
+  end
+
+  defp family_clauses(fams) do
+    Enum.flat_map(fams, fn {_fam, camel} ->
+      [
+        "defmodule #{camel} do",
+        "def new",
+        "def arrive(state, key, kind, index)",
+        "def resolved(state, id)",
+        "def check_trace(trace)"
+      ]
+    end)
+  end
+
+  defp family_source(st) do
+    st
+    |> family_mods()
+    |> Enum.map_join("\n\n", fn {fam, camel} -> dispatcher(fam, camel) end)
+  end
+
+  defp dispatcher(family, camel) do
+    rules = Enum.map_join(family.rules, "\n", &rule_clause/1)
+
+    """
+    defmodule #{camel} do
+      @moduledoc \"\"\"
+      Dispatcher for family `#{family.name}`. The state is opaque: thread it
+      and compare it with ==. The key is compared with ==. `arrive` takes the
+      creation index. A kind that is never held opens on arrival. A kind held
+      while an earlier instance is unresolved stays held until every earlier
+      arrived instance of its key is resolved. An instance that has not arrived
+      is not unresolved. `resolved` lists the instances this resolution opens.
+      An unknown id is an error and does not raise.
+      \"\"\"
+
+      def new, do: %{n: 0, inst: %{}}
+
+      def arrive(state, key, kind, index) do
+        with {:ok, st} <- read(state),
+             :ok <- index_ok(index),
+             :ok <- kind_ok(kind),
+             :ok <- fresh(st, key, index) do
+          id = st.n
+          phase = if opens?(st, key, kind, index), do: :open, else: :held
+          row = {key, kind, index, phase}
+          {phase, id, %{n: id + 1, inst: Map.put(st.inst, id, row)}}
+        else
+          {:error, reason} -> {:error, reason}
+        end
+      end
+
+      def resolved(state, id) do
+        with {:ok, st} <- read(state),
+             {:ok, {key, _kind, _index, phase}} <- row(st, id),
+             :ok <- open_phase(phase, id) do
+          st = put_phase(st, id, :resolved)
+          released = releasing(st, key)
+          st = Enum.reduce(released, st, fn {rid, _row}, st -> put_phase(st, rid, :open) end)
+          list = Enum.map(released, fn {rid, {k, kind, _ix, _phase}} -> {rid, k, kind} end)
+          {:ok, list, st}
+        else
+          {:error, reason} -> {:error, reason}
+        end
+      end
+
+      def check_trace(trace) when is_list(trace), do: replay(new(), trace, 0)
+      def check_trace(other), do: {:error, {:trace, other}}
+
+      #{rules}
+      defp rule(_kind), do: :error
+
+      defp read(%{n: n, inst: inst} = st) when is_integer(n) and n >= 0 and is_map(inst) do
+        if rows?(inst), do: {:ok, %{n: n, inst: inst}}, else: {:error, {:state, st}}
+      end
+
+      defp read(other), do: {:error, {:state, other}}
+
+      defp rows?(inst) do
+        Enum.all?(inst, fn
+          {id, {_key, kind, index, phase}}
+          when is_integer(id) and id >= 0 and is_atom(kind) and is_integer(index) and index >= 0 and
+                 phase in [:open, :held, :resolved] ->
+            true
+
+          _ ->
+            false
+        end)
+      end
+
+      defp index_ok(index) when is_integer(index) and index >= 0, do: :ok
+      defp index_ok(index), do: {:error, {:index, index}}
+
+      defp kind_ok(kind) do
+        case rule(kind) do
+          :error -> {:error, {:kind, kind}}
+          _hold -> :ok
+        end
+      end
+
+      defp fresh(st, key, index) do
+        if Enum.any?(st.inst, fn {_id, {k, _kind, ix, _phase}} -> k == key and ix == index end) do
+          {:error, {:duplicate, key, index}}
+        else
+          :ok
+        end
+      end
+
+      defp opens?(st, key, kind, index) do
+        rule(kind) == :never or not earlier_unresolved?(st, key, index)
+      end
+
+      defp earlier_unresolved?(st, key, index) do
+        Enum.any?(st.inst, fn {_id, {k, _kind, ix, phase}} ->
+          k == key and ix < index and phase in [:open, :held]
+        end)
+      end
+
+      defp row(st, id) do
+        case Map.fetch(st.inst, id) do
+          {:ok, {key, kind, index, phase}} when phase in [:open, :held, :resolved] ->
+            {:ok, {key, kind, index, phase}}
+
+          {:ok, _} ->
+            {:error, {:state, st}}
+
+          :error ->
+            {:error, {:unknown, id}}
+        end
+      end
+
+      defp open_phase(:open, _id), do: :ok
+      defp open_phase(:held, id), do: {:error, {:held, id}}
+      defp open_phase(:resolved, id), do: {:error, {:resolved, id}}
+
+      defp put_phase(st, id, phase) do
+        %{st | inst: Map.update!(st.inst, id, fn {k, kind, ix, _} -> {k, kind, ix, phase} end)}
+      end
+
+      defp releasing(st, key) do
+        st.inst
+        |> Enum.filter(fn {_id, {k, kind, ix, phase}} ->
+          k == key and phase == :held and opens?(st, k, kind, ix)
+        end)
+        |> Enum.sort_by(fn {id, {_k, _kind, ix, _phase}} -> {ix, id} end)
+      end
+
+      defp replay(_st, [], _i), do: :ok
+
+      defp replay(st, [step | rest], i) do
+        case apply_step(st, step) do
+          {:error, reason} ->
+            {:error, {i, reason}}
+
+          {:ok, _released, st} ->
+            replay(st, rest, i + 1)
+
+          {_phase, _id, st} ->
+            replay(st, rest, i + 1)
+        end
+      end
+
+      defp apply_step(st, {:arrive, key, kind, index}), do: arrive(st, key, kind, index)
+      defp apply_step(st, {:resolved, id}), do: resolved(st, id)
+      defp apply_step(_st, other), do: {:error, {:step, other}}
+    end
+    """
+  end
+
+  defp rule_clause(%{ctor: ctor, hold: hold}) do
+    atom = String.to_atom(Emit.elixir_atom_name(ctor))
+    "defp rule(#{inspect(atom)}), do: #{inspect(hold)}"
   end
 end
