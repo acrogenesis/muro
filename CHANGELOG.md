@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.22.1
+## 0.22.3
 
 Checked arithmetic on U8, U32, and U64 agrees with Nat. `std:word.muro` gives the value lemma and both directions of the fit lemma for `addc`, `subc`, and `mulc`. A bound below the width turns a checked sum into `wsome`, and the payload's `toNat` is the Nat sum. I64 is outside these lemmas: `toNat` of −1 is 2^64−1.
 
@@ -12,7 +12,7 @@ Checked arithmetic on U8, U32, and U64 agrees with Nat. `std:word.muro` gives th
 
 ### Package
 
-- Version 0.22.1.
+- Version 0.22.3.
 
 ## 0.22.0
 
