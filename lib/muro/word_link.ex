@@ -1,32 +1,43 @@
 defmodule Muro.WordLink do
   @moduledoc false
 
-  # The same cases as agda/Muro/WordLink.agda `decide`. Names are the
-  # strings in the term. Agda looks the same strings up by index.
-  # The type is matched as written: plus and Le are not reduced.
+  # The same cases as agda/Muro/WordLink.agda `decide`. Names in the
+  # term are definition names. Agda looks the same definitions up by
+  # index. The type is matched as written: plus and Le are not reduced.
+  #
+  # plus, minus, times, and Le are accepted only as the standard
+  # definitions: plus from the prelude, minus and Le from std:le.muro,
+  # and times from std:word.muro. The comparison is the mode, the type,
+  # and the body, with binder names erased. times calls plus, so times
+  # is standard only when that plus is too. A different binding is refused.
+
+  alias Muro.{Ast, Parser, Prelude, Std}
 
   @unsigned "word-to-Nat lemmas are unsigned"
   @wrap "wlink expected a checked unsigned operation"
   @width "wlink width does not match"
   @op "wlink operation does not match"
   @shape "wlink does not prove this type"
+  @std "wlink expected the standard definition of "
 
   @mod %{u8: 256, u32: 4_294_967_296, u64: 18_446_744_073_709_551_616}
   @nat_ops ["plus", "minus", "times"]
+  @std_key {__MODULE__, :std}
 
   @doc """
-  `:ok` when `hyp` and `goal` are one unsigned word-to-Nat statement.
-  Otherwise `{:error, message}`.
+  `:ok` when `hyp` and `goal` are one unsigned word-to-Nat statement
+  and `plus`, `minus`, `times`, and `Le` in it are the standard
+  definitions. Otherwise `{:error, message}`.
   """
-  def accept(hyp, goal) do
+  def accept(book, hyp, goal) when is_list(book) do
     case hyp do
-      {:idt, a, lhs, rhs} -> from_hyp(a, lhs, rhs, goal)
-      _ -> from_bound(hyp, goal)
+      {:idt, a, lhs, rhs} -> from_hyp(book, a, lhs, rhs, goal)
+      _ -> from_bound(book, hyp, goal)
     end
   end
 
   # fromHyp
-  defp from_hyp(a, lhs, rhs, goal) do
+  defp from_hyp(book, a, lhs, rhs, goal) do
     cond do
       wrap?(lhs) ->
         {:error, @wrap}
@@ -37,7 +48,7 @@ defmodule Muro.WordLink do
       true ->
         case {chk_side(lhs), opt_width(a), some?(rhs)} do
           {{:ok, side, x, y}, {:ok, w}, {:ok, c}} ->
-            best(try_val(side, x, y, c, goal), try_fit(side, w, x, y, goal))
+            best(try_val(book, side, x, y, c, goal), try_fit(book, side, w, x, y, goal))
 
           _ ->
             {:error, @shape}
@@ -46,13 +57,13 @@ defmodule Muro.WordLink do
   end
 
   # fromBound
-  defp from_bound(hyp, goal) do
+  defp from_bound(book, hyp, goal) do
     case goal do
       {:idt, opt, lhs, rhs} ->
         cond do
           wrap?(lhs) -> {:error, @wrap}
           signed_opt?(opt) -> {:error, @unsigned}
-          true -> from_bound_chk(hyp, opt, lhs, rhs)
+          true -> from_bound_chk(book, hyp, opt, lhs, rhs)
         end
 
       _ ->
@@ -60,7 +71,7 @@ defmodule Muro.WordLink do
     end
   end
 
-  defp from_bound_chk(hyp, opt, lhs, rhs) do
+  defp from_bound_chk(book, hyp, opt, lhs, rhs) do
     case chk_side(lhs) do
       :no ->
         {:error, @shape}
@@ -73,14 +84,14 @@ defmodule Muro.WordLink do
           {:ok, w} ->
             case some?(rhs) do
               :no -> {:error, @shape}
-              {:ok, pay} -> from_of(hyp, side, w, x, y, pay)
+              {:ok, pay} -> from_of(book, hyp, side, w, x, y, pay)
             end
         end
     end
   end
 
   # fromOf: toI64 is unsigned, another unsigned width is width.
-  defp from_of(hyp, side, w, x, y, pay) do
+  defp from_of(book, hyp, side, w, x, y, pay) do
     case of_view(pay) do
       :no ->
         {:error, @shape}
@@ -90,8 +101,8 @@ defmodule Muro.WordLink do
 
       {:ok, w2, n} ->
         if w2 == w do
-          case payload_bin(side, x, y, n) do
-            :ok -> bound_hyp(side, w, x, y, hyp)
+          case payload_bin(book, side, x, y, n) do
+            :ok -> bound_hyp(book, side, w, x, y, hyp)
             :shape -> {:error, @shape}
             {:error, _} = err -> err
           end
@@ -102,9 +113,9 @@ defmodule Muro.WordLink do
   end
 
   # tryVal. expect_nat stays outside `with`, so an operation error is kept.
-  defp try_val(side, a, b, c, goal) do
+  defp try_val(book, side, a, b, c, goal) do
     case val_shape(a, b, c, goal) do
-      {:ok, name} -> expect_nat(name, op_name(side))
+      {:ok, name} -> expect_nat(book, name, op_name(side))
       :shape -> {:error, @shape}
     end
   end
@@ -126,12 +137,12 @@ defmodule Muro.WordLink do
   defp val_shape(_, _, _, _), do: :shape
 
   # tryFit
-  defp try_fit(:sub, _w, a, b, goal), do: try_fit_sub(a, b, goal)
+  defp try_fit(book, :sub, _w, a, b, goal), do: try_fit_sub(book, a, b, goal)
 
-  defp try_fit(side, w, a, b, goal) when side in [:add, :mul] do
-    case fit_shape(a, b, goal) do
+  defp try_fit(book, side, w, a, b, goal) when side in [:add, :mul] do
+    case fit_shape(book, a, b, goal) do
       {:ok, name, mod} ->
-        case expect_nat(name, op_name(side)) do
+        case expect_nat(book, name, op_name(side)) do
           :ok -> modulus_msg(w, mod)
           err -> err
         end
@@ -144,17 +155,17 @@ defmodule Muro.WordLink do
     end
   end
 
-  defp try_fit_sub(a, b, {:app, {:app, {:def, j}, x}, y}) do
-    case expect_nat(j, "Le") do
+  defp try_fit_sub(book, a, b, {:app, {:app, {:def, j}, x}, y}) do
+    case expect_nat(book, j, "Le") do
       :ok -> if x == ton(b) and y == ton(a), do: :ok, else: {:error, @shape}
       err -> err
     end
   end
 
-  defp try_fit_sub(_, _, _), do: {:error, @shape}
+  defp try_fit_sub(_, _, _, _), do: {:error, @shape}
 
-  defp fit_shape(a, b, {:app, {:app, {:def, j}, {:su, body}}, mod}) do
-    case expect_nat(j, "Le") do
+  defp fit_shape(book, a, b, {:app, {:app, {:def, j}, {:su, body}}, mod}) do
+    case expect_nat(book, j, "Le") do
       :ok ->
         case binop(body) do
           {:ok, name, x, y} ->
@@ -169,14 +180,14 @@ defmodule Muro.WordLink do
     end
   end
 
-  defp fit_shape(_, _, _), do: :shape
+  defp fit_shape(_, _, _, _), do: :shape
 
   # payloadOf / expectName, then boundHyp.
-  defp payload_bin(side, a, b, term) do
+  defp payload_bin(book, side, a, b, term) do
     case binop(term) do
       {:ok, name, x, y} ->
         if x == ton(a) and y == ton(b) do
-          case expect_nat(name, op_name(side)) do
+          case expect_nat(book, name, op_name(side)) do
             :ok -> :ok
             err -> err
           end
@@ -189,10 +200,10 @@ defmodule Muro.WordLink do
     end
   end
 
-  defp bound_hyp(side, w, a, b, hyp) when side in [:add, :mul] do
+  defp bound_hyp(book, side, w, a, b, hyp) when side in [:add, :mul] do
     case hyp do
       {:app, {:app, {:def, j}, {:su, body}}, mod} ->
-        case expect_nat(j, "Le") do
+        case expect_nat(book, j, "Le") do
           :ok ->
             if body == bin(op_name(side), ton(a), ton(b)) do
               modulus_msg(w, mod)
@@ -209,10 +220,10 @@ defmodule Muro.WordLink do
     end
   end
 
-  defp bound_hyp(:sub, _w, a, b, hyp) do
+  defp bound_hyp(book, :sub, _w, a, b, hyp) do
     case hyp do
       {:app, {:app, {:def, j}, x}, y} ->
-        case expect_nat(j, "Le") do
+        case expect_nat(book, j, "Le") do
           :ok -> if x == ton(b) and y == ton(a), do: :ok, else: {:error, @shape}
           err -> err
         end
@@ -222,10 +233,95 @@ defmodule Muro.WordLink do
     end
   end
 
-  # expectName
-  defp expect_nat(name, want) when name == want, do: :ok
-  defp expect_nat(name, _want) when name in @nat_ops, do: {:error, @op}
-  defp expect_nat(_name, _want), do: {:error, @shape}
+  # expectName. The wanted name is the standard definition, or it is refused.
+  defp expect_nat(book, name, want) when name == want do
+    if standard?(book, name), do: :ok, else: {:error, std_msg(name)}
+  end
+
+  defp expect_nat(_book, name, _want) when name in @nat_ops, do: {:error, @op}
+  defp expect_nat(_book, _name, _want), do: {:error, @shape}
+
+  defp std_msg(name), do: @std <> name
+
+  # times is the word.muro recursion, and the plus it calls is the prelude one.
+  defp standard?(book, "times") do
+    standard_def?(book, "times") and standard_def?(book, "plus")
+  end
+
+  defp standard?(book, name), do: standard_def?(book, name)
+
+  defp standard_def?(book, name) do
+    case find_def(book, name) do
+      %{mode: mode, type: ty, body: body} ->
+        std = canonical(name)
+        mode == std.mode and bare(ty) == std.type and bare(body) == std.body
+
+      _ ->
+        false
+    end
+  end
+
+  defp find_def(book, name) do
+    Enum.find(book, fn
+      %{name: ^name, mode: _, type: _, body: _} -> true
+      _ -> false
+    end)
+  end
+
+  defp canonical(name) do
+    Map.fetch!(library(), name)
+  end
+
+  defp library do
+    case :persistent_term.get(@std_key, nil) do
+      nil ->
+        lib = load_std()
+        :persistent_term.put(@std_key, lib)
+        lib
+
+      lib ->
+        lib
+    end
+  end
+
+  defp load_std do
+    plus = one(Prelude.book(), "plus")
+    le = parsed_std("le.muro")
+    word = parsed_std("word.muro")
+
+    %{
+      "plus" => plus,
+      "minus" => one(le, "minus"),
+      "Le" => one(le, "Le"),
+      "times" => one(word, "times")
+    }
+  end
+
+  defp parsed_std(name) do
+    {:ok, source} = Std.source(name)
+
+    case Parser.parse(source) do
+      {:ok, book} -> book
+      {:error, msg} -> raise "word link standard #{name}: #{msg}"
+    end
+  end
+
+  defp one(book, name) do
+    decl = Enum.find(book, &(&1[:name] == name)) || raise "word link standard: missing #{name}"
+    {:ok, db} = Ast.def_to_db(decl)
+    %{mode: db.mode, type: bare(db.type), body: bare(db.body)}
+  end
+
+  # Binder names are not part of the definition. De Bruijn indices are.
+  defp bare({:pi, q, a, _name, b}), do: {:pi, q, bare(a), bare(b)}
+  defp bare({:lam, q, a, _name, t}), do: {:lam, q, bare(a), bare(t)}
+
+  defp bare(term) when is_tuple(term) do
+    term |> Tuple.to_list() |> Enum.map(&bare/1) |> List.to_tuple()
+  end
+
+  defp bare(terms) when is_list(terms), do: Enum.map(terms, &bare/1)
+  defp bare(other), do: other
 
   # opOrShape
   defp op_or_shape(side, term) do
@@ -285,9 +381,14 @@ defmodule Muro.WordLink do
     if rank(e1) < rank(e2), do: e2, else: e1
   end
 
-  defp rank(@width), do: 2
-  defp rank(@op), do: 1
-  defp rank(_), do: 0
+  defp rank(msg) do
+    cond do
+      String.starts_with?(msg, @std) -> 3
+      msg == @width -> 2
+      msg == @op -> 1
+      true -> 0
+    end
+  end
 
   defp wrap?({:word, op, _}) when op in [:add, :sub, :mul], do: true
   defp wrap?(_), do: false

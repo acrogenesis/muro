@@ -145,6 +145,175 @@ defmodule Muro.WordLinkTest do
     end
   end
 
+  test "Le defined as Unit is refused" do
+    src = """
+    def Le : spec Π (m : Nat) → Π (n : Nat) → Type :=
+      λ (m : Nat) → λ (n : Nat) → Unit
+
+    def bad : evidence
+        Π (a : U8) → Π (b : U8) → Π (c : U8) →
+        Π (h : {addc a b ≡ wsome c : Opt U8}) →
+        Le (suc (plus (toNat a) (toNat b))) 256 :=
+      λ (a : U8) → λ (b : U8) → λ (c : U8) →
+      λ (h : {addc a b ≡ wsome c : Opt U8}) →
+        wlink h
+    """
+
+    assert {:error, msg} = check_src(src)
+    assert msg =~ "wlink expected the standard definition of Le"
+  end
+
+  test "times defined as plus is refused" do
+    src = """
+    def times : run Π (n : Nat) → Π (m : Nat) → Nat := plus
+
+    def bad : evidence #{@val_u8 |> String.replace("addc", "mulc") |> String.replace("plus", "times")} :=
+      λ (a : U8) → λ (b : U8) → λ (c : U8) →
+      λ (h : {mulc a b ≡ wsome c : Opt U8}) →
+        wlink h
+    """
+
+    assert {:error, msg} = check_src(src)
+    assert msg =~ "wlink expected the standard definition of times"
+  end
+
+  test "a redefined minus is refused" do
+    src = """
+    def minus : run Π (m : Nat) → Π (n : Nat) → Nat :=
+      λ (m : Nat) → λ (n : Nat) → m
+
+    def bad : evidence
+        Π (a : U8) → Π (b : U8) → Π (c : U8) →
+        Π (h : {subc a b ≡ wsome c : Opt U8}) →
+        {toNat c ≡ minus (toNat a) (toNat b) : Nat} :=
+      λ (a : U8) → λ (b : U8) → λ (c : U8) →
+      λ (h : {subc a b ≡ wsome c : Opt U8}) →
+        wlink h
+    """
+
+    assert {:error, msg} = check_src(src)
+    assert msg =~ "wlink expected the standard definition of minus"
+  end
+
+  test "a redefined plus is refused" do
+    src = """
+    def plus : run Π (n : Nat) → Π (m : Nat) → Nat :=
+      λ (n : Nat) → λ (m : Nat) → 0
+
+    def bad : evidence #{@val_u8} :=
+      λ (a : U8) → λ (b : U8) → λ (c : U8) →
+      λ (h : {addc a b ≡ wsome c : Opt U8}) →
+        wlink h
+    """
+
+    assert {:error, msg} = check_src(src)
+    assert msg =~ "wlink expected the standard definition of plus"
+  end
+
+  test "a swapped subc fit is refused" do
+    src = """
+    import "std:le.muro"
+    def bad : evidence
+        Π (a : U8) → Π (b : U8) → Π (c : U8) →
+        Π (h : {subc a b ≡ wsome c : Opt U8}) →
+        Le (toNat a) (toNat b) :=
+      λ (a : U8) → λ (b : U8) → λ (c : U8) →
+      λ (h : {subc a b ≡ wsome c : Opt U8}) →
+        wlink h
+    """
+
+    assert {:error, msg} = check_src(src)
+    assert msg =~ "wlink does not prove this type"
+  end
+
+  test "mulc's wsome hypothesis does not prove the plus equation" do
+    src = """
+    def bad : evidence #{@val_u8 |> String.replace("addc", "mulc")} :=
+      λ (a : U8) → λ (b : U8) → λ (c : U8) →
+      λ (h : {mulc a b ≡ wsome c : Opt U8}) →
+        wlink h
+    """
+
+    assert {:error, msg} = check_src(src)
+    assert msg =~ "wlink operation does not match"
+  end
+
+  test "a wsome hypothesis does not prove the mulc some equation" do
+    src = """
+    import "std:word.muro"
+    def bad : evidence
+        Π (a : U8) → Π (b : U8) → Π (c : U8) →
+        Π (h : {mulc a b ≡ wsome c : Opt U8}) →
+        {mulc a b ≡ wsome (toU8 (times (toNat a) (toNat b))) : Opt U8} :=
+      λ (a : U8) → λ (b : U8) → λ (c : U8) →
+      λ (h : {mulc a b ≡ wsome c : Opt U8}) →
+        wlink h
+    """
+
+    assert {:error, msg} = check_src(src)
+    assert msg =~ "wlink does not prove this type"
+  end
+
+  test "a wsome hypothesis does not prove the subc some equation" do
+    src = """
+    import "std:le.muro"
+    def bad : evidence
+        Π (a : U8) → Π (b : U8) → Π (c : U8) →
+        Π (h : {subc a b ≡ wsome c : Opt U8}) →
+        {subc a b ≡ wsome (toU8 (minus (toNat a) (toNat b))) : Opt U8} :=
+      λ (a : U8) → λ (b : U8) → λ (c : U8) →
+      λ (h : {subc a b ≡ wsome c : Opt U8}) →
+        wlink h
+    """
+
+    assert {:error, msg} = check_src(src)
+    assert msg =~ "wlink does not prove this type"
+  end
+
+  test "a bound that is not a modulus is a shape error" do
+    src = """
+    import "std:le.muro"
+    def bad : evidence
+        Π (a : U8) → Π (b : U8) →
+        Π (h : Le (suc (plus (toNat a) (toNat b))) 100) →
+        {addc a b ≡ wsome (toU8 (plus (toNat a) (toNat b))) : Opt U8} :=
+      λ (a : U8) → λ (b : U8) →
+      λ (h : Le (suc (plus (toNat a) (toNat b))) 100) →
+        wlink h
+    """
+
+    assert {:error, msg} = check_src(src)
+    assert msg =~ "wlink does not prove this type"
+    refute msg =~ "wlink width does not match"
+  end
+
+  test "nested operands are accepted and a different nesting is refused" do
+    ok = """
+    def nested : evidence
+        Π (a : U8) → Π (b : U8) → Π (c : U8) → Π (d : U8) →
+        Π (h : {addc (addi a b) c ≡ wsome d : Opt U8}) →
+        {toNat d ≡ plus (toNat (addi a b)) (toNat c) : Nat} :=
+      λ (a : U8) → λ (b : U8) → λ (c : U8) → λ (d : U8) →
+      λ (h : {addc (addi a b) c ≡ wsome d : Opt U8}) →
+        wlink h
+    """
+
+    assert check_src(ok) == :ok
+
+    bad = """
+    def bad : evidence
+        Π (a : U8) → Π (b : U8) → Π (c : U8) → Π (d : U8) →
+        Π (h : {addc (addi a b) c ≡ wsome d : Opt U8}) →
+        {toNat d ≡ plus (toNat a) (toNat c) : Nat} :=
+      λ (a : U8) → λ (b : U8) → λ (c : U8) → λ (d : U8) →
+      λ (h : {addc (addi a b) c ≡ wsome d : Opt U8}) →
+        wlink h
+    """
+
+    assert {:error, msg} = check_src(bad)
+    assert msg =~ "wlink does not prove this type"
+  end
+
   test "a run-mode wlink is a type error before emit" do
     src = "def bad : run U8 := wlink (toU8 0)\n"
 

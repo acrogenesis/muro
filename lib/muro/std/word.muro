@@ -1,8 +1,10 @@
 -- word.muro — unsigned checked arithmetic agrees with Nat.
 --
--- wlink is the evidence. Replacing plus, minus, times, or Le replaces
--- the operation the statement talks about. I64 is not here: toNat of
--- −1 is 2^64−1, so the Nat equation does not hold.
+-- wlink is the evidence. It accepts plus, minus, times, and Le only
+-- as the standard definitions: plus from the prelude, minus and Le
+-- from le.muro, and times from this book. A different binding is
+-- refused. I64 is not here: toNat of −1 is 2^64−1, so the Nat
+-- equation does not hold.
 
 import "le.muro"
 

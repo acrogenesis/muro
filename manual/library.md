@@ -86,7 +86,7 @@ Check on disk with `mix muro.check lib/muro/std/suc_bin.muro`. Import it with `i
 
 ## word.muro
 
-Unsigned checked arithmetic agrees with Nat. It imports `le.muro`, and `minus` is that book's truncated subtraction. `times` is `run internal` here. `I64` is outside this book: `toNat` of −1 is 2^64−1.
+Unsigned checked arithmetic agrees with Nat. It imports `le.muro`, and `minus` is that book's truncated subtraction. `times` is `run internal` here. `wlink` accepts `plus`, `minus`, `times`, and `Le` only as these definitions. A different binding is refused. `I64` is outside this book: `toNat` of −1 is 2^64−1.
 
 For `U8`, `U32`, and `U64`, and for `addc`, `subc`, and `mulc`, the book gives three lemmas. The body of each is `wlink`.
 

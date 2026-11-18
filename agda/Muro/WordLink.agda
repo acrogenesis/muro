@@ -11,23 +11,25 @@
 --
 -- I64 is refused. toNat of −1 is 2^64−1, so the Nat equation is false.
 -- A wrapping addi, subi, or muli is not a checked operation.
--- Replacing the definitions named plus, minus, times, or Le replaces
--- the operation the statement talks about: both checkers look the
--- name up and do not read the body.
+-- plus, minus, times, and Le are accepted only as the standard
+-- definitions: plus from the prelude, minus and Le from le.muro, and
+-- times from word.muro. The mode, the type, and the body are compared.
+-- times calls plus, so times is standard only when that plus is too.
+-- A different binding is refused. Both checkers read the body.
 ------------------------------------------------------------------------
 
 {-# OPTIONS --safe #-}
 module Muro.WordLink where
 
 open import Data.Bool.Base using (Bool; true; false; T; not; if_then_else_; _∧_; _∨_)
-open import Data.Fin.Base using (Fin)
+open import Data.Fin.Base using (Fin) renaming (zero to fz; suc to fs)
 open import Data.Fin.Properties using () renaming (_≟_ to _≟F_)
-open import Data.List.Base using (List; []; _∷_)
+open import Data.List.Base using (List; []; _∷_; length)
 open import Data.Maybe.Base using (Maybe; just; nothing)
 open import Data.Nat.Base using (ℕ; zero; suc; _+_; _*_; _∸_; _<ᵇ_; _≤ᵇ_; _<_; _≤_)
 open import Data.Nat.Properties using (_≟_; <ᵇ⇒<; <⇒<ᵇ; ≤ᵇ⇒≤; ≤⇒≤ᵇ)
 open import Data.Product.Base using (Σ; _,_; _×_)
-open import Data.String.Base using (String)
+open import Data.String.Base using (String; _++_)
 open import Data.String.Properties using () renaming (_≟_ to _≟S_; _==_ to _==S_)
 open import Data.Unit.Base using (tt)
 open import Relation.Binary.PropositionalEquality.Core
@@ -35,7 +37,7 @@ open import Relation.Binary.PropositionalEquality.Core
 open import Relation.Nullary.Decidable.Core using (yes; no)
 
 open import Muro.Base
-  using (Mode; run; spec; Result; ok; fail; _>>=_; Qty; affine; reuse; erased)
+  using (Mode; run; spec; eqMode; Result; ok; fail; _>>=_; Qty; affine; reuse; erased)
 open import Muro.Syntax
 open import Muro.Env using (Sig; Def; mkDef; lookupDef; fromDefs)
 open import Muro.Word
@@ -195,8 +197,16 @@ opMsg = "wlink operation does not match"
 shapeMsg : String
 shapeMsg = "wlink does not prove this type"
 
+stdMsg : String → String
+stdMsg s = "wlink expected the standard definition of " ++ s
+
+isStd : String → Bool
+isStd s =
+  (s ==S stdMsg "plus") ∨ (s ==S stdMsg "minus") ∨
+  (s ==S stdMsg "times") ∨ (s ==S stdMsg "Le")
+
 rank : String → ℕ
-rank s = if s ==S widthMsg then 2 else if s ==S opMsg then 1 else 0
+rank s = if isStd s then 3 else if s ==S widthMsg then 2 else if s ==S opMsg then 1 else 0
 
 best : ∀ {A : Set} → Result A → Result A → Result A
 best (ok x)    _        = ok x
@@ -329,117 +339,6 @@ bin i x y = app (app (def i) x) y
 
 ofT : ∀ {n} → Wdt → Tm n → Tm n
 ofT w x = word (wof (wdtK w)) (x ∷ [])
-
-data Named (σ : Sig) (i : ℕ) (s : String) : Set where
-  named : (d : Def) → lookupDef σ i ≡ ok d → Def.dname d ≡ s → Named σ i s
-
-named? : (σ : Sig) (i : ℕ) (s : String) → Maybe (Named σ i s)
-named? σ i s with lookupDef σ i in eq
-... | fail _ = nothing
-... | ok d with Def.dname d ≟S s
-...   | yes p = just (named d eq p)
-...   | no _  = nothing
-
-nameOf : Sig → ℕ → Maybe String
-nameOf σ i with lookupDef σ i
-... | ok d   = just (Def.dname d)
-... | fail _ = nothing
-
-natOp? : String → Bool
-natOp? s = (s ==S "plus") ∨ (s ==S "minus") ∨ (s ==S "times")
-
-expectName : (σ : Sig) (i : ℕ) (s : String) → Result (Named σ i s)
-expectName σ i s with named? σ i s
-... | just nm = ok nm
-... | nothing with nameOf σ i
-...   | just found = if natOp? found then fail opMsg else fail shapeMsg
-...   | nothing    = fail shapeMsg
-
-diffNat : Sig → Side → ℕ → Bool
-diffNat σ s i with nameOf σ i
-... | just found = natOp? found ∧ not (found ==S sideName s)
-... | nothing    = false
-
-opOrShape : ∀ {n} → Sig → Side → Tm n → String
-opOrShape σ s t with asBin t
-... | just (as-bin i _ _ _) = if diffNat σ s i then opMsg else shapeMsg
-... | nothing               = shapeMsg
-
-isMod : ℕ → Wdt → Bool
-isMod m w with m ≟ modulus (wdtK w)
-... | yes _ = true
-... | no _  = false
-
-otherWidth : ℕ → Wdt → Bool
-otherWidth m dt8  = isMod m dt32 ∨ isMod m dt64
-otherWidth m dt32 = isMod m dt8  ∨ isMod m dt64
-otherWidth m dt64 = isMod m dt8  ∨ isMod m dt32
-
-data ModView {n} (w : Wdt) (t : Tm n) : Set where
-  mod-here : t ≡ numeral (modulus (wdtK w)) → ModView w t
-  mod-else : Bool → ModView w t
-
-mod? : ∀ {n} (w : Wdt) (t : Tm n) → ModView w t
-mod? w t with ℕ← t
-... | nothing = mod-else false
-... | just (m , eq) with m ≟ modulus (wdtK w)
-...   | yes p = mod-here (trans eq (cong numeral p))
-...   | no _  = mod-else (otherWidth m w)
-
-------------------------------------------------------------------------
--- Link. Five constructors: value, fit, and the bound-to-wsome
--- direction, with subtraction's bound written as Le rather than a
--- successor below the modulus.
-------------------------------------------------------------------------
-
-data Link (σ : Sig) {n} : Tm n → Tm n → Set where
-  L-val : ∀ {w s i opt a b c}
-    → IsOpt w opt
-    → Named σ i (sideName s)
-    → Link σ (idt opt (chk s a b) (someT c))
-             (idt nat (ton c) (bin i (ton a) (ton b)))
-
-  L-fit : ∀ {w s i j opt a b c mod}
-    → FitAdd s
-    → IsOpt w opt
-    → Named σ i (sideName s)
-    → Named σ j "Le"
-    → mod ≡ numeral (modulus (wdtK w))
-    → Link σ (idt opt (chk s a b) (someT c))
-             (bin j (su (bin i (ton a) (ton b))) mod)
-
-  L-fit-sub : ∀ {w j opt a b c}
-    → IsOpt w opt
-    → Named σ j "Le"
-    → Link σ (idt opt (chk side-sub a b) (someT c))
-             (bin j (ton b) (ton a))
-
-  L-some : ∀ {w s i j opt a b mod}
-    → FitAdd s
-    → IsOpt w opt
-    → Named σ i (sideName s)
-    → Named σ j "Le"
-    → mod ≡ numeral (modulus (wdtK w))
-    → Link σ (bin j (su (bin i (ton a) (ton b))) mod)
-             (idt opt (chk s a b) (someT (ofT w (bin i (ton a) (ton b)))))
-
-  L-some-sub : ∀ {w i j opt a b}
-    → IsOpt w opt
-    → Named σ i "minus"
-    → Named σ j "Le"
-    → Link σ (bin j (ton b) (ton a))
-             (idt opt (chk side-sub a b)
-                      (someT (ofT w (bin i (ton a) (ton b)))))
-
-castH : ∀ {σ n} {H H′ G : Tm n} → H ≡ H′ → Link σ H′ G → Link σ H G
-castH {G = G} eq l = subst (λ X → Link _ X G) (sym eq) l
-
-castG : ∀ {σ n} {H G G′ : Tm n} → G ≡ G′ → Link σ H G′ → Link σ H G
-castG {H = H} eq l = subst (λ X → Link _ H X) (sym eq) l
-
-castHG : ∀ {σ n} {H H′ G G′ : Tm n} →
-  H ≡ H′ → G ≡ G′ → Link σ H′ G′ → Link σ H G
-castHG eqH eqG l = castH eqH (castG eqG l)
 
 ------------------------------------------------------------------------
 -- Structural equality. The proof is cong, never a match on refl
@@ -578,6 +477,238 @@ mutual
   sameL [] [] = just refl
   sameL (x ∷ xs) (y ∷ ys) = cong₂ _∷_ <$>ᵐ same x y <*>ᵐ sameL xs ys
   sameL _ _ = nothing
+
+------------------------------------------------------------------------
+-- The standard definitions. plus is the prelude's, minus and Le are
+-- le.muro's, and times is word.muro's. A binding is that definition
+-- when the mode, the type, and the body are these terms. times calls
+-- plus, so it is standard only when that plus is. The innermost
+-- variable is var fz. The transcription is the library recursion.
+------------------------------------------------------------------------
+
+natOpTy : Tm 0
+natOpTy =
+  pi affine nat
+    (pi affine nat nat)
+
+timesTy : Tm 0
+timesTy =
+  pi reuse nat
+    (pi affine nat nat)
+
+leTy : Tm 0
+leTy =
+  pi affine nat
+    (pi affine nat typ)
+
+plusBody : ℕ → Tm 0
+plusBody i =
+  lam affine nat
+    (lam affine nat
+      (mNat (var (fs fz)) nat
+        (var fz)
+        (su (app (app (def i) (var fz)) (var (fs fz))))))
+
+minusBody : ℕ → Tm 0
+minusBody i =
+  lam affine nat
+    (lam affine nat
+      (mNat (var fz) nat
+        (var (fs fz))
+        (mNat (var (fs (fs fz))) nat
+          ze
+          (app (app (def i) (var fz)) (var (fs fz))))))
+
+timesBody : ℕ → ℕ → Tm 0
+timesBody p i =
+  lam reuse nat
+    (lam affine nat
+      (mNat (var fz) nat
+        ze
+        (app (app (def p) (var (fs (fs fz))))
+             (app (app (def i) (var (fs (fs fz)))) (var fz)))))
+
+leBody : ℕ → Tm 0
+leBody i =
+  lam affine nat
+    (lam affine nat
+      (mNat (var (fs fz)) typ
+        unit
+        (mNat (var (fs fz)) typ
+          empty
+          (app (app (def i) (var (fs fz))) (var fz)))))
+
+isJust : ∀ {A : Set} → Maybe A → Bool
+isJust (just _) = true
+isJust nothing  = false
+
+modeIs : Def → Mode → Bool
+modeIs d m = eqMode (Def.dmode d) m
+
+tyIs : Def → Tm 0 → Bool
+tyIs d t = isJust (same (Def.dtype d) t)
+
+bodyIs : Def → Tm 0 → Bool
+bodyIs d t = isJust (same (Def.dbody d) t)
+
+stdPlus : Sig → ℕ → Bool
+stdPlus σ i with lookupDef σ i
+... | fail _ = false
+... | ok d =
+  (Def.dname d ==S "plus") ∧ modeIs d run ∧ tyIs d natOpTy ∧ bodyIs d (plusBody i)
+
+stdMinus : Sig → ℕ → Bool
+stdMinus σ i with lookupDef σ i
+... | fail _ = false
+... | ok d =
+  (Def.dname d ==S "minus") ∧ modeIs d run ∧ tyIs d natOpTy ∧ bodyIs d (minusBody i)
+
+stdLe : Sig → ℕ → Bool
+stdLe σ i with lookupDef σ i
+... | fail _ = false
+... | ok d =
+  (Def.dname d ==S "Le") ∧ modeIs d spec ∧ tyIs d leTy ∧ bodyIs d (leBody i)
+
+range : ℕ → List ℕ
+range n = go 0 n
+  where
+  go : ℕ → ℕ → List ℕ
+  go _ zero    = []
+  go i (suc k) = i ∷ go (suc i) k
+
+timesAt : Sig → ℕ → Tm 0 → List ℕ → Bool
+timesAt _ _ _ [] = false
+timesAt σ i body (p ∷ ps) =
+  (stdPlus σ p ∧ isJust (same body (timesBody p i))) ∨ timesAt σ i body ps
+
+stdTimes : Sig → ℕ → Bool
+stdTimes σ i with lookupDef σ i
+... | fail _ = false
+... | ok d =
+  (Def.dname d ==S "times") ∧ modeIs d run ∧ tyIs d timesTy ∧
+  timesAt σ i (Def.dbody d) (range (length (Sig.defs σ)))
+
+std? : Sig → ℕ → String → Bool
+std? σ i s =
+  if s ==S "plus"  then stdPlus σ i  else
+  if s ==S "minus" then stdMinus σ i else
+  if s ==S "times" then stdTimes σ i else
+  if s ==S "Le"    then stdLe σ i    else
+  false
+
+data Named (σ : Sig) (i : ℕ) (s : String) : Set where
+  named : (d : Def) → lookupDef σ i ≡ ok d → Def.dname d ≡ s
+        → T (std? σ i s) → Named σ i s
+
+nameOf : Sig → ℕ → Maybe String
+nameOf σ i with lookupDef σ i
+... | ok d   = just (Def.dname d)
+... | fail _ = nothing
+
+natOp? : String → Bool
+natOp? s = (s ==S "plus") ∨ (s ==S "minus") ∨ (s ==S "times")
+
+expectStd : (σ : Sig) (i : ℕ) (s : String) (d : Def) →
+  lookupDef σ i ≡ ok d → Def.dname d ≡ s → Result (Named σ i s)
+expectStd σ i s d eq p with std? σ i s in stb
+... | true  = ok (named d eq p (subst T (sym stb) tt))
+... | false = fail (stdMsg s)
+
+expectName : (σ : Sig) (i : ℕ) (s : String) → Result (Named σ i s)
+expectName σ i s with lookupDef σ i in lu
+... | fail _ = fail shapeMsg
+... | ok d with Def.dname d ≟S s
+...   | yes p = expectStd σ i s d lu p
+...   | no _ with nameOf σ i
+...     | just found = if natOp? found then fail opMsg else fail shapeMsg
+...     | nothing    = fail shapeMsg
+
+diffNat : Sig → Side → ℕ → Bool
+diffNat σ s i with nameOf σ i
+... | just found = natOp? found ∧ not (found ==S sideName s)
+... | nothing    = false
+
+opOrShape : ∀ {n} → Sig → Side → Tm n → String
+opOrShape σ s t with asBin t
+... | just (as-bin i _ _ _) = if diffNat σ s i then opMsg else shapeMsg
+... | nothing               = shapeMsg
+
+isMod : ℕ → Wdt → Bool
+isMod m w with m ≟ modulus (wdtK w)
+... | yes _ = true
+... | no _  = false
+
+otherWidth : ℕ → Wdt → Bool
+otherWidth m dt8  = isMod m dt32 ∨ isMod m dt64
+otherWidth m dt32 = isMod m dt8  ∨ isMod m dt64
+otherWidth m dt64 = isMod m dt8  ∨ isMod m dt32
+
+data ModView {n} (w : Wdt) (t : Tm n) : Set where
+  mod-here : t ≡ numeral (modulus (wdtK w)) → ModView w t
+  mod-else : Bool → ModView w t
+
+mod? : ∀ {n} (w : Wdt) (t : Tm n) → ModView w t
+mod? w t with ℕ← t
+... | nothing = mod-else false
+... | just (m , eq) with m ≟ modulus (wdtK w)
+...   | yes p = mod-here (trans eq (cong numeral p))
+...   | no _  = mod-else (otherWidth m w)
+
+------------------------------------------------------------------------
+-- Link. Five constructors: value, fit, and the bound-to-wsome
+-- direction, with subtraction's bound written as Le rather than a
+-- successor below the modulus.
+------------------------------------------------------------------------
+
+data Link (σ : Sig) {n} : Tm n → Tm n → Set where
+  L-val : ∀ {w s i opt a b c}
+    → IsOpt w opt
+    → Named σ i (sideName s)
+    → Link σ (idt opt (chk s a b) (someT c))
+             (idt nat (ton c) (bin i (ton a) (ton b)))
+
+  L-fit : ∀ {w s i j opt a b c mod}
+    → FitAdd s
+    → IsOpt w opt
+    → Named σ i (sideName s)
+    → Named σ j "Le"
+    → mod ≡ numeral (modulus (wdtK w))
+    → Link σ (idt opt (chk s a b) (someT c))
+             (bin j (su (bin i (ton a) (ton b))) mod)
+
+  L-fit-sub : ∀ {w j opt a b c}
+    → IsOpt w opt
+    → Named σ j "Le"
+    → Link σ (idt opt (chk side-sub a b) (someT c))
+             (bin j (ton b) (ton a))
+
+  L-some : ∀ {w s i j opt a b mod}
+    → FitAdd s
+    → IsOpt w opt
+    → Named σ i (sideName s)
+    → Named σ j "Le"
+    → mod ≡ numeral (modulus (wdtK w))
+    → Link σ (bin j (su (bin i (ton a) (ton b))) mod)
+             (idt opt (chk s a b) (someT (ofT w (bin i (ton a) (ton b)))))
+
+  L-some-sub : ∀ {w i j opt a b}
+    → IsOpt w opt
+    → Named σ i "minus"
+    → Named σ j "Le"
+    → Link σ (bin j (ton b) (ton a))
+             (idt opt (chk side-sub a b)
+                      (someT (ofT w (bin i (ton a) (ton b)))))
+
+castH : ∀ {σ n} {H H′ G : Tm n} → H ≡ H′ → Link σ H′ G → Link σ H G
+castH {G = G} eq l = subst (λ X → Link _ X G) (sym eq) l
+
+castG : ∀ {σ n} {H G G′ : Tm n} → G ≡ G′ → Link σ H G′ → Link σ H G
+castG {H = H} eq l = subst (λ X → Link _ H X) (sym eq) l
+
+castHG : ∀ {σ n} {H H′ G G′ : Tm n} →
+  H ≡ H′ → G ≡ G′ → Link σ H′ G′ → Link σ H G
+castHG eqH eqG l = castH eqH (castG eqG l)
+
 
 tonEq : ∀ {n} (t x : Tm n) → Maybe (t ≡ ton x)
 tonEq t x with asTon t
@@ -844,12 +975,24 @@ showR : ∀ {A : Set} → Result A → String
 showR (ok _)   = "ok"
 showR (fail e) = e
 
+withBodies : Tm 0 → Tm 0 → Tm 0 → Tm 0 → Sig
+withBodies plusB minusB timesB leB = fromDefs
+  (mkDef "plus"  run  natOpTy plusB  ∷
+   mkDef "minus" run  natOpTy minusB ∷
+   mkDef "times" run  timesTy  timesB ∷
+   mkDef "Le"    spec leTy     leB    ∷ [])
+
 exσ : Sig
-exσ = fromDefs
-  (mkDef "plus"  run  nat ze ∷
-   mkDef "minus" run  nat ze ∷
-   mkDef "times" run  nat ze ∷
-   mkDef "Le"    spec typ ze ∷ [])
+exσ = withBodies (plusBody 0) (minusBody 1) (timesBody 0 2) (leBody 3)
+
+-- A body that is not the library recursion. Le constantly Unit, times
+-- written as the plus recursion, and plus or minus replaced by 0.
+badPlusσ badMinusσ badTimesσ badLeσ : Sig
+badPlusσ  = withBodies ze (minusBody 1) (timesBody 0 2) (leBody 3)
+badMinusσ = withBodies (plusBody 0) ze (timesBody 0 2) (leBody 3)
+badTimesσ = withBodies (plusBody 0) (minusBody 1) (plusBody 2) (leBody 3)
+badLeσ    = withBodies (plusBody 0) (minusBody 1) (timesBody 0 2)
+              (lam affine nat (lam affine nat unit))
 
 a0 : Tm 0
 a0 = wlitT ku8 1
@@ -970,3 +1113,60 @@ ex-other = refl
 
 ex-other-no : otherWidth 7 dt8 ≡ false
 ex-other-no = refl
+
+ex-plus-redef : decide badPlusσ exHyp exGoal ≡ fail (stdMsg "plus")
+ex-plus-redef = refl
+
+ex-minus-redef : decide badMinusσ subHyp subGoal ≡ fail (stdMsg "minus")
+ex-minus-redef = refl
+
+ex-times-redef : decide badTimesσ mulHyp mulGoal ≡ fail (stdMsg "times")
+ex-times-redef = refl
+
+-- times has the library body, and the plus it calls does not.
+ex-times-bad-plus : decide badPlusσ mulHyp mulGoal ≡ fail (stdMsg "times")
+ex-times-bad-plus = refl
+
+ex-le-redef : decide badLeσ exHyp fitGoal ≡ fail (stdMsg "Le")
+ex-le-redef = refl
+
+swapSub : Tm 0
+swapSub = bin 3 (ton a0) (ton b0)
+
+ex-sub-swap : decide exσ subHyp swapSub ≡ fail shapeMsg
+ex-sub-swap = refl
+
+oddMod : Tm 0
+oddMod = bin 3 (su (bin 0 (ton a0) (ton b0))) (numeral 7)
+
+ex-mod-shape : decide exσ exHyp oddMod ≡ fail shapeMsg
+ex-mod-shape = refl
+
+mulSome : Tm 0
+mulSome =
+  idt opt8 (word wcmul (a0 ∷ b0 ∷ []))
+      (word wsome (word (wof ku8) (bin 2 (ton a0) (ton b0) ∷ []) ∷ []))
+
+ex-mul-some-hyp : decide exσ mulHyp mulSome ≡ fail shapeMsg
+ex-mul-some-hyp = refl
+
+ex-sub-some-hyp : decide exσ subHyp subSome ≡ fail shapeMsg
+ex-sub-some-hyp = refl
+
+nestedA : Tm 0
+nestedA = word wadd (a0 ∷ b0 ∷ [])
+
+nestHyp : Tm 0
+nestHyp = idt opt8 (word wcadd (nestedA ∷ c0 ∷ [])) (word wsome (c0 ∷ []))
+
+nestGoal : Tm 0
+nestGoal = idt nat (ton c0) (bin 0 (ton nestedA) (ton c0))
+
+ex-nested : showR (decide exσ nestHyp nestGoal) ≡ "ok"
+ex-nested = refl
+
+nestBad : Tm 0
+nestBad = idt nat (ton c0) (bin 0 (ton a0) (ton c0))
+
+ex-nested-bad : decide exσ nestHyp nestBad ≡ fail shapeMsg
+ex-nested-bad = refl

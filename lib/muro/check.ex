@@ -3600,7 +3600,7 @@ defmodule Muro.Check do
         else
           case infer(k, book, rs, gamma, mode, h) do
             {:ok, {h_ty, uses}} ->
-              case WordLink.accept(h_ty, a) do
+              case WordLink.accept(book, h_ty, a) do
                 :ok -> {:ok, uses}
                 {:error, msg} -> {:error, msg}
               end

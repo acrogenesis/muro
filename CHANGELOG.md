@@ -6,13 +6,15 @@ Checked arithmetic on U8, U32, and U64 agrees with Nat. `std:word.muro` gives th
 
 `wlink` is the evidence the checker accepts for those statements. It is erased. The emitters are unchanged.
 
+`wlink` accepts `plus`, `minus`, `times`, and `Le` only when they are the standard definitions: `plus` from the prelude, `minus` and `Le` from `std:le.muro`, and `times` from `std:word.muro`. A book that defines one of those names differently is refused.
+
 ### Manual
 
 - Machine numbers, Library, Grammar, Limits, and Extending: the unsigned word-to-Nat lemmas, and why I64 is outside them.
 
 ### Package
 
-- Version 0.22.3.
+- Version 0.22.3. The version goes from 0.22.0 to 0.22.3 because 0.22.1 and 0.22.2 are taken by other open pull requests.
 
 ## 0.22.0
 

@@ -853,7 +853,8 @@ data _,_⊢[_]_⇐_ σ Γ where
     → σ , Γ ⊢[ m ] word wsome (t ∷ []) ⇐ word wopt (A ∷ [])
 
   -- wlink is evidence. The hypothesis is inferred and the goal is one
-  -- of the unsigned word-to-Nat statements (Muro.WordLink). Not in run.
+  -- of the unsigned word-to-Nat statements (Muro.WordLink). plus, minus,
+  -- times, and Le in that statement are the standard definitions. Not in run.
   ⇐-wlink : ∀ {m h H G}
     → eqMode m run ≡ false
     → Link σ H G
