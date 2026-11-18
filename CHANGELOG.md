@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.21.20
+
+A family liveness refusal prints the state the cycle returns to after `then forever`. On the `fail stop` script that state is the family stutter, and `a signal` is held there. The path to the cycle is the same. The counts are the same. The check is the Elixir graph. It is not an Agda proof. `Satisfies` and `every-run-fair` cover meetings only. A family has no fairness filter.
+
+### Manual
+
+- Temporal, Limits, and Examples: the cycle state on a family lasso, and that the fairness lemmas cover meetings only.
+
+### Package
+
+- Version 0.21.20.
+
 ## 0.21.17
 
 `eventually` and `leads_to` over a keyed family are checked on the same fixed script as `always`. Key `a` runs `init`, then `signal`, then `signal`. Key `b` runs `init`. `no-starve` is `(held k signal) leads_to (opened k signal)`. On `examples/keyed-slots.muro` the failure arm is `done`, and `no-starve` holds in 171649 reachable states, 729184 transitions. That count is a model hypothesis, not data-independence: the script is fixed and a retry happens once. It is the graph `no-overtake` already uses. The checker builds that graph once, and the search is the cost of the check.
