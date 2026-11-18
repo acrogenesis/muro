@@ -47,7 +47,7 @@ defmodule Muro.Family do
   formula is not walked. `{:error, message}` when a binder or an atom
   is not, or the formula fails. The message has no location and no
   declaration name. A liveness failure is the path to the cycle, then
-  `then forever`.
+  `then forever`, then the state that cycle returns to.
 
   `status` is `check/3` or `check_decl/3`. The three-argument form
   checks the declaration, including its meeting. `prep` is a

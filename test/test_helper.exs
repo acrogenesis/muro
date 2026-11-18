@@ -4,4 +4,6 @@
 # share one explore of a given meeting and script.
 Application.put_env(:muro, :family_graph_cache, true)
 
+Code.require_file("support/family_lasso.exs", __DIR__)
+
 ExUnit.start(exclude: [:slow])
