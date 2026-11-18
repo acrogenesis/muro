@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.21.23
+
+Checked arithmetic on U8, U32, and U64 agrees with Nat. `std:word.muro` gives the value lemma and both directions of the fit lemma for `addc`, `subc`, and `mulc`. A bound below the width turns a checked sum into `wsome`, and the payload's `toNat` is the Nat sum. I64 is outside these lemmas: `toNat` of −1 is 2^64−1.
+
+`wlink` is the evidence the checker accepts for those statements. It is erased. The emitters are unchanged.
+
+### Manual
+
+- Machine numbers, Library, Grammar, Limits, and Extending: the unsigned word-to-Nat lemmas, and why I64 is outside them.
+
+### Package
+
+- Version 0.21.23.
+
 ## 0.21.20
 
 A family liveness refusal prints the state the cycle returns to after `then forever`. On the `fail stop` script that state is the family stutter, and `a signal` is held there. The path to the cycle is the same. The counts are the same. The check is the Elixir graph. It is not an Agda proof. `Satisfies` and `every-run-fair` cover meetings only. A family has no fairness filter.
