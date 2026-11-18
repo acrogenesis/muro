@@ -470,7 +470,7 @@ OTP monitors the marked task. Killing that task before it reports runs the failu
 
 ## keyed-slots.muro
 
-A family names the meeting `slot` and the kind `Event`. `init` opens when it arrives. `signal` opens when no earlier arrived instance of its key is unresolved. `no-overtake` says every counting `init` is resolved, and there may be none. A `signal` before any `init` does not refute it. The hold line is the stronger guard. The declaration is spec. `mix muro.check` prints `family slots: slot per key of Event` and `temporal no-overtake: holds in 171649 reachable states, 729184 transitions`. That count is a model hypothesis, not data-independence. The checker builds the graph once for the family, and that search is the cost of the check.
+A family names the meeting `slot` and the kind `Event`. `init` opens when it arrives. `signal` opens when no earlier arrived instance of its key is unresolved. `no-overtake` says every counting `init` is resolved, and there may be none. A `signal` before any `init` does not refute it. The hold line is the stronger guard. `no-starve` says a held `signal` is opened. The failure arm is `done`, so a dying task resolves the instance. The declaration is spec. `mix muro.check` prints `family slots: slot per key of Event`, then `temporal no-overtake: holds in 171649 reachable states, 729184 transitions`, then the same count for `no-starve`. That count is a model hypothesis, not data-independence. The checker builds the graph once for the family, and that search is the cost of the check. The same script with `fail stop` refuses `no-starve`: the task dies, the server takes `fail stop`, `a signal` stays held, and key `b` resolves while `a` is blocked. That refusal is an Elixir check of the fixed script, not a proof, and not data-independence.
 
 ```
 family slots : slot per key of Event
@@ -478,6 +478,8 @@ family slots : slot per key of Event
   signal held while earlier unresolved
 temporal no-overtake : slots :=
   forall (k : key). always ((opened k signal) implies (resolved k init))
+temporal no-starve : slots :=
+  forall (k : key). (held k signal) leads_to (opened k signal)
 ```
 
 The same book with `signal never held` in place of `signal held while earlier unresolved` is refused: `a signal` opens while `a init` is still running. Deleting the rule outright is `no rule for signal`. The meeting may fail, so Elixir, C, Rust, Zig, JavaScript, assembly, and ExUnit refuse the book with `c:mayfail`, with or without the family. OTP and the state machine omit the family and the formula and emit the meeting. See [Temporal](temporal.md#a-keyed-family).

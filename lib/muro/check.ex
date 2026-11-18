@@ -4955,10 +4955,10 @@ defmodule Muro.Check do
   same recorded outcome and does not walk the meeting again. A temporal
   declaration over a family reads that same check. When the family does
   not check, the formula is `skipped because <family> does not check`
-  and is not walked. `always` explores the family graph once per family,
-  after every formula of that family has been walked and at least one
-  `always` is well-formed, and shares it. An ill-formed formula does
-  not explore it. `eventually` and `leads_to` do not explore it.
+  and is not walked. A well-formed `always`, `eventually`, or
+  `leads_to` explores the family graph once per family, after every
+  formula of that family has been walked, and shares it. An ill-formed
+  formula does not explore it.
   """
   def check_sig(named_book, opts \\ []) do
     note_check()
@@ -5075,9 +5075,9 @@ defmodule Muro.Check do
     meet_slots ++ family_slots
   end
 
-  # One search for every well-formed `always` on this family. The
-  # formulas are walked first. An ill-formed formula, and a liveness
-  # formula, do not build the graph.
+  # One search for every well-formed formula on this family. The
+  # formulas are walked first. An ill-formed formula does not build
+  # the graph. `eventually` and `leads_to` read the same search.
   defp family_prep(book, family, :ok, decls) do
     formulas =
       for {%{meeting: name, formula: formula}, _i} <- decls,

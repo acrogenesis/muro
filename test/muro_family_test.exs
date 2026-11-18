@@ -57,7 +57,8 @@ defmodule Muro.FamilyTest do
 
     assert Check.temporal_lines() == [
              "family slots: slot per key of Event",
-             "temporal no-overtake: holds in 171649 reachable states, 729184 transitions"
+             "temporal no-overtake: holds in 171649 reachable states, 729184 transitions",
+             "temporal no-starve: holds in 171649 reachable states, 729184 transitions"
            ]
   end
 
@@ -337,7 +338,8 @@ defmodule Muro.FamilyTest do
            ]
   end
 
-  test "leads_to over a family is not yet decided" do
+  # The hold line is the count. The same search as no-overtake.
+  test "no-starve holds when the failure arm is done" do
     src =
       @slots <>
         """
@@ -345,8 +347,40 @@ defmodule Muro.FamilyTest do
           forall (k : key). (held k signal) leads_to (opened k signal)
         """
 
+    assert check(src) == :ok
+
+    assert Check.temporal_lines() == [
+             "family slots: slot per key of Event",
+             "temporal no-starve: holds in 171649 reachable states, 729184 transitions"
+           ]
+  end
+
+  # Golden lasso. The task dies, the server takes fail stop, both signals
+  # of key a stay held, and key b runs to resolves while a is blocked.
+  # The cycle is the family stutter. It does not open a signal.
+  @lasso "(held a signal) leads_to (opened a signal) fails in slots after a init 0 opens, a signal 1 held, a init 0 task died, a init 0 server fail stop, a signal 2 held, b init 0 opens, b init 0 task put ok, b init 0 server get (r : Report), b init 0 resolves; then forever: the family has finished"
+
+  test "no-starve is refused when the failure arm is stop" do
+    src =
+      String.replace(@slots, "fail\n    done", "fail\n    stop") <>
+        """
+        temporal no-starve : slots :=
+          forall (k : key). (held k signal) leads_to (opened k signal)
+        """
+
     assert {:error, msg} = check(src)
-    assert msg =~ ~r/\d+:\d+: no-starve: not yet decided/
+    assert msg =~ ~r/\d+:\d+: no-starve: #{Regex.escape(@lasso)}/
+    assert msg =~ "task died"
+    assert msg =~ "fail stop"
+    assert msg =~ "a signal 1 held"
+    assert msg =~ "a signal 2 held"
+    [path, forever] = String.split(msg, "; then forever: ")
+    assert forever == "the family has finished"
+    assert path =~ "b init 0 opens"
+    assert path =~ "b init 0 resolves"
+    refute forever =~ "a signal"
+    refute forever =~ "opens"
+    refute msg =~ "not yet decided"
     refute msg =~ "holds in"
   end
 
@@ -397,6 +431,7 @@ defmodule Muro.FamilyTest do
         """
         temporal loose : slots := always (opened z signal)
         temporal wide : slots := forall (c : Bit). always true
+        temporal live : slots := (held z signal) leads_to (opened z signal)
         """
 
     events =
@@ -404,7 +439,9 @@ defmodule Muro.FamilyTest do
         assert {:error, msg} = check(src)
         assert msg =~ ~r/\d+:\d+: loose: unbound key z/
         assert msg =~ ~r/\d+:\d+: wide: forall over Bit is not a key/
+        assert msg =~ ~r/\d+:\d+: live: unbound key z/
         refute msg =~ "holds in"
+        refute msg =~ "not yet decided"
       end)
 
     refute Enum.any?(events, &match?({:family, _}, &1))
