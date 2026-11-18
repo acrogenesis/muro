@@ -1494,7 +1494,7 @@ defmodule Muro.Emit.C do
   defp find_def(book, name) do
     Enum.find(
       book,
-      &(Map.get(&1, :kind, :def) not in [:data, :repr] and Map.get(&1, :name) == name)
+      &(Map.get(&1, :kind, :def) not in [:data, :repr, :prefix] and Map.get(&1, :name) == name)
     )
   end
 

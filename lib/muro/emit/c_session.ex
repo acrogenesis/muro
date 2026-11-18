@@ -15,6 +15,24 @@ defmodule Muro.Emit.C.Session do
   @err "c:session\n"
 
   @doc false
+  def positions(book, path \\ "prefix.muro") when is_list(book) and is_binary(path) do
+    case Fsm.image(book, path, []) do
+      {:ok, image} ->
+        nm = %{ctors: %{}, structs: %{}, atoms: %{}, taken: MapSet.new()}
+        st = plan(image, book, nm, [])
+
+        if st.error do
+          {:error, st.error}
+        else
+          {:ok, %{nodes: st.positions}}
+        end
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  @doc false
   def fragments(book, path, nm, sigs) when is_list(book) and is_binary(path) do
     if Enum.any?(book, &(Map.get(&1, :kind) == :session)) do
       case Fsm.image(book, path, []) do
@@ -350,6 +368,7 @@ defmodule Muro.Emit.C.Session do
       srcs: MapSet.new(),
       nat_of: false,
       putu: false,
+      positions: %{},
       error: nil
     }
 
@@ -538,46 +557,49 @@ defmodule Muro.Emit.C.Session do
     end
   end
 
-  defp walk1({:send, step, ty, cont}, ctx, st), do: comm(:send, step, nil, ty, cont, ctx, st)
-  defp walk1({:recv, step, ty, cont}, ctx, st), do: comm(:recv, step, nil, ty, cont, ctx, st)
+  defp walk1({:send, step, ty, cont} = proto, ctx, st),
+    do: comm(:send, step, nil, ty, cont, proto, ctx, st)
 
-  defp walk1({:dsend, step, name, ty, cont}, ctx, st),
-    do: comm(:dsend, step, name, ty, cont, ctx, st)
+  defp walk1({:recv, step, ty, cont} = proto, ctx, st),
+    do: comm(:recv, step, nil, ty, cont, proto, ctx, st)
 
-  defp walk1({:drecv, step, name, ty, cont}, ctx, st),
-    do: comm(:drecv, step, name, ty, cont, ctx, st)
+  defp walk1({:dsend, step, name, ty, cont} = proto, ctx, st),
+    do: comm(:dsend, step, name, ty, cont, proto, ctx, st)
 
-  defp walk1({:esend, step, name, bound, cont}, ctx, st) do
-    evidence(:esend, step, name, bound, cont, ctx, st)
+  defp walk1({:drecv, step, name, ty, cont} = proto, ctx, st),
+    do: comm(:drecv, step, name, ty, cont, proto, ctx, st)
+
+  defp walk1({:esend, step, name, bound, cont} = proto, ctx, st) do
+    evidence(:esend, step, name, bound, cont, proto, ctx, st)
   end
 
-  defp walk1({:erecv, step, name, bound, cont}, ctx, st) do
-    evidence(:erecv, step, name, bound, cont, ctx, st)
+  defp walk1({:erecv, step, name, bound, cont} = proto, ctx, st) do
+    evidence(:erecv, step, name, bound, cont, proto, ctx, st)
   end
 
-  defp walk1({:isend, step, name, left, right}, ctx, st) do
-    split(:isend, step, name, left, right, ctx, st)
+  defp walk1({:isend, step, name, left, right} = proto, ctx, st) do
+    split(:isend, step, name, left, right, proto, ctx, st)
   end
 
-  defp walk1({:irecv, step, name, left, right}, ctx, st) do
-    split(:irecv, step, name, left, right, ctx, st)
+  defp walk1({:irecv, step, name, left, right} = proto, ctx, st) do
+    split(:irecv, step, name, left, right, proto, ctx, st)
   end
 
-  defp walk1({:choose, step, left, right}, ctx, st),
-    do: split(:choose, step, nil, left, right, ctx, st)
+  defp walk1({:choose, step, left, right} = proto, ctx, st),
+    do: split(:choose, step, nil, left, right, proto, ctx, st)
 
-  defp walk1({:branch, step, left, right}, ctx, st),
-    do: split(:branch, step, nil, left, right, ctx, st)
+  defp walk1({:branch, step, left, right} = proto, ctx, st),
+    do: split(:branch, step, nil, left, right, proto, ctx, st)
 
-  defp walk1({:end, step}, ctx, st), do: finish(step, ctx, st)
+  defp walk1({:end, step} = proto, ctx, st), do: finish(proto, step, ctx, st)
 
   defp walk1(_other, ctx, st) do
     {_ok, st} = ill(st, ctx.template, "ill-formed protocol")
     {{:stuck}, st}
   end
 
-  defp comm(kind, step, name, ty, cont, ctx, st) do
-    open_node(ctx.template, step, ctx.owner, st, fn id, st ->
+  defp comm(kind, step, name, ty, cont, proto, ctx, st) do
+    open_node(ctx.template, step, ctx.owner, proto, ctx.recs, st, fn id, st ->
       {slot, st} = if ty == :nat and name, do: slot_for(st, ctx.template, name), else: {nil, st}
       st = ensure_check(st, ctx.template, ty)
 
@@ -610,8 +632,8 @@ defmodule Muro.Emit.C.Session do
     end)
   end
 
-  defp evidence(kind, step, name, bound, cont, ctx, st) do
-    open_node(ctx.template, step, ctx.owner, st, fn id, st ->
+  defp evidence(kind, step, name, bound, cont, proto, ctx, st) do
+    open_node(ctx.template, step, ctx.owner, proto, ctx.recs, st, fn id, st ->
       {slot, st} = slot_for(st, ctx.template, name)
       {ix, st} = ix_of_bound(st, ctx.template, bound)
 
@@ -636,10 +658,10 @@ defmodule Muro.Emit.C.Session do
     end)
   end
 
-  defp split(kind, step, name, left, right, ctx, st) do
+  defp split(kind, step, name, left, right, proto, ctx, st) do
     _ = name
 
-    open_node(ctx.template, step, ctx.owner, st, fn id, st ->
+    open_node(ctx.template, step, ctx.owner, proto, ctx.recs, st, fn id, st ->
       arm = %{ctx | mode: :expose, seen: [], bound: nil, live: true, ty: nil}
       {lprog, st} = walk(left, arm, st)
       {rprog, st} = walk(right, arm, st)
@@ -662,8 +684,8 @@ defmodule Muro.Emit.C.Session do
     end)
   end
 
-  defp finish(step, ctx, st) do
-    open_node(ctx.template, step, ctx.owner, st, fn id, st ->
+  defp finish(proto, step, ctx, st) do
+    open_node(ctx.template, step, ctx.owner, proto, ctx.recs, st, fn id, st ->
       node = %{
         id: id,
         template: ctx.template,
@@ -682,7 +704,7 @@ defmodule Muro.Emit.C.Session do
     end)
   end
 
-  defp open_node(template, step, owner, st, build) do
+  defp open_node(template, step, owner, proto, recs, st, build) do
     if st.error do
       {{:stuck}, st}
     else
@@ -703,7 +725,15 @@ defmodule Muro.Emit.C.Session do
                 st
                 | next: id + 1,
                   keys: Map.put(st.keys, key, id),
-                  owners: Map.put(st.owners, id, MapSet.new([owner]))
+                  owners: Map.put(st.owners, id, MapSet.new([owner])),
+                  positions:
+                    Map.put(st.positions, id, %{
+                      session: owner,
+                      template: template,
+                      proto: proto,
+                      recs: recs,
+                      step: step
+                    })
               }
             end
 

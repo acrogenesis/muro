@@ -69,6 +69,7 @@ defmodule Muro.Session do
   def dual({:rec, x, s}), do: {:rec, x, dual(s)}
   def dual({:svar, x}), do: {:svar, x}
   def dual({:sjump, target, args}), do: {:sjump, flip_jump(target), args}
+  def dual({:sess, target, args}), do: {:sess, flip_jump(target), args}
 
   def dual({:case, scrut, arms}) do
     {:case, scrut, Enum.map(arms, fn {c, s} -> {c, dual(s)} end)}
@@ -6469,7 +6470,8 @@ defmodule Muro.Session do
               :link,
               :relay,
               :import,
-              :param
+              :param,
+              :prefix
             ],
        do: false
 

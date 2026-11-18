@@ -894,7 +894,8 @@ defmodule Muro.Temporal do
           :relay,
           :import,
           :param,
-          :temporal
+          :temporal,
+          :prefix
         ]
     end)
   end

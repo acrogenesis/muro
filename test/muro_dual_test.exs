@@ -33,6 +33,9 @@ defmodule Muro.DualTest do
     choice = {:choose, :end, {:send, {:pair, :bit, :nat}, :end}}
     assert Session.dual(choice) == {:branch, :end, {:recv, {:pair, :bit, :nat}, :end}}
     assert Session.dual(Session.dual(choice)) == choice
+
+    assert Session.dual({:sess, "ack", []}) == {:sess, {:dual, "ack"}, []}
+    assert Session.dual({:sess, {:dual, "ack"}, []}) == {:sess, "ack", []}
   end
 
   test "dual.muro checks, and emit keeps the run" do

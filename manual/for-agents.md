@@ -86,6 +86,7 @@ lib/muro/print.ex       surface syntax, locations, hole messages
 lib/muro/subst.ex       de Bruijn subst
 lib/muro/check.ex       Elixir mirror of ⊢
 lib/muro/session.ex     session / conform, mirror of decide and finishes; `rec X. S` unfolds one action and a repeated head conforms
+lib/muro/prefix.ex      a list of directed moves is a legal prefix of a session from a position; the finite forms follow the Agda derivation; recursion, a named continuation, a dependent payload, an evidence bound, an indexed bit, a case, and the numeric position are this checker
 lib/muro/fail.ex        a party of a two-party meeting may stop; a receive from that party has a failure arm; OTP and fsm emit it; other backends are `c:mayfail`
 lib/muro/talk.ex        one description of an exchange, mirror of seen
 lib/muro/choreo.ex      a global type projected to each role pair, mirror of project
@@ -116,6 +117,7 @@ agda/Muro/SubstLemmas.agda  renaming / substitution algebra
 agda/Muro/Env.agda      Sig, Ctx, uses, mode order (shared by Check and ⊢)
 agda/Muro/Check.agda    the decision procedure: structural on the term, fuel only where it reduces
 agda/Muro/Session.agda  affine session judgment; a payload is a nat, a bit, unit, a pair, a record, a vector whose length is a received nat, a nat at most a bound the sender owes evidence for, or a non-indexed declared data type; a received bit selects one of two arms; a name is a session declared earlier, opened on the declaration prefix with no fuel; a parameter is a nat; %1 must finish; decide searches, skel is the OTP actions
+agda/Muro/Prefix.agda   a legal prefix of end, send, recv, choose, and branch; a derivation is the prefix; the decision procedure accepts a list only when that list has a derivation; completeness is not claimed; recursion, a named continuation, and the numeric position are not this theorem; `--safe`; not a Tm
 agda/Muro/Rec.agda      equi-recursive `rec X. S` unfolded to a guarded coinductive protocol (`--safe --guardedness`); a guarded self-call of a parameterised session is the same coinduction (`stream`); `dual∞`, conformance, and meet are bisimulations; a declared data payload inside `rec` meets when `sent` holds; `Finishes` stays finite, so a jump is not `%1`. `agda/Muro.agda` imports it, so that file carries the same pragma
 agda/Muro/Dual.agda     the other end of a session; send swaps with recv, a dependent receive swaps with a dependent send, an evidence send swaps with an evidence receive, an indexed bit keeps its index and each arm dualises, and the payload type stays; `session name := dual name` follows it
 agda/Muro/Meet.agda     two processes on one channel; a send meets a receive of the same payload type and the value inhabits it; a received nat instantiates a vector length; an evidence payload meets as a nat; a literal bit meets the arm of that bit; a variable meets a receive at its innermost binding; `meet name : left with right` follows it

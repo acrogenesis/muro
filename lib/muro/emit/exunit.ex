@@ -286,7 +286,7 @@ defmodule Muro.Emit.ExUnitSuite do
 
   defp find_def(book, name) do
     Enum.find(book, fn d ->
-      Map.get(d, :kind, :def) != :data and Map.get(d, :name) == name
+      Map.get(d, :kind, :def) not in [:data, :prefix] and Map.get(d, :name) == name
     end)
   end
 
