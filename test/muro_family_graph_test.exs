@@ -60,6 +60,7 @@ defmodule Muro.Family.GraphTest do
     # the one that step returns to: every instance has resolved.
     cycle = {:resolved, :resolved, :resolved, :resolved}
     assert forever == "the family has finished: " <> Graph.dump(search.g, cycle)
+
     assert Graph.dump(search.g, cycle) ==
              "a init 0: resolved; a signal 1: resolved; a signal 2: resolved; b init 0: resolved"
 
