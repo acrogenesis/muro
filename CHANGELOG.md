@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.21.21
+
+`--backend fsm` emits one dispatcher per keyed family, beside the session machines. `new/0` starts it. `arrive/4` takes the state, the key, the constructor, and the creation index, and returns `{:open, id, state}` or `{:held, id, state}`. `resolved/2` returns the instances that opening releases. `check_trace/1` replays a list of those steps. An unknown id is an error and does not raise.
+
+A signal stays held while an earlier arrived instance of its key is unresolved. An init is not held. Instances of a key need not arrive in creation order. The key is the workflow, compared with `==`, and a dispatcher keyed that way holds slightly more across runs of one workflow. The session machines are unchanged. Elixir, C, Rust, Zig, JavaScript, assembly, OTP, `--node`, and ExUnit still omit the family. A meeting marked `may fail` is still refused by C, Rust, Zig, JavaScript, assembly, `--node`, and ExUnit.
+
+The dispatcher is generated code. On the fixed script, an accepted sequence is checked against the family graph. That check is not an Agda proof. The family counts are unchanged.
+
+### Manual
+
+- State machines, Emit, Temporal, Limits, and Examples: the family dispatcher.
+
+### Package
+
+- Version 0.21.21.
+
 ## 0.21.17
 
 `eventually` and `leads_to` over a keyed family are checked on the same fixed script as `always`. Key `a` runs `init`, then `signal`, then `signal`. Key `b` runs `init`. `no-starve` is `(held k signal) leads_to (opened k signal)`. On `examples/keyed-slots.muro` the failure arm is `done`, and `no-starve` holds in 171649 reachable states, 729184 transitions. That count is a model hypothesis, not data-independence: the script is fixed and a retry happens once. It is the graph `no-overtake` already uses. The checker builds that graph once, and the search is the cost of the check.

@@ -43,7 +43,7 @@ mix muro.synth path.muro                    # version space; exit 0 is the check
 mix muro.synth path.muro --out out.muro --oracle trace
 mix muro --version                          # the copy that ran
 mix muro.init                               # muro.exs and priv/muro/
-mix muro.emit path.muro --backend fsm           # one state machine per session, on stdout
+mix muro.emit path.muro --backend fsm           # one state machine per session, and one dispatcher per keyed family, on stdout
 mix muro.emit path.muro --backend exunit       # ExUnit suite on stdout; a param library is accepted
 mix muro.emit path.muro --backend exunit --imports  # also that book's direct imports
 mix muro.gen                                 # write the modules the manifest names
@@ -55,7 +55,7 @@ make agda                                   # Job B only; needs vendor/agda-stdl
 
 `mix muro.synth` discovers features from `step`. A `Feature` the book declares is an optional hint. A state name is not a feature.
 
-The archive installs those tasks in any directory: `mix archive.install hex muro`. A pinned version: `mix archive.install hex muro 0.21.17`. From a checkout: `mix archive.build && mix archive.install muro-0.21.17.ez`. From GitHub: `mix archive.install github murolang/muro`. Inside a project that depends on muro, the project's copy runs after `app.start`. Inside any other project, or outside a project, the archive's copy runs and the host is neither compiled nor started. A script run with `mix run --no-start` does not see the archive; use the Mix tasks. A project without Elixir installs the self-contained executable: `mise use -g github:murolang/muro@0.21.17`. See [The executable](manual/binary.md).
+The archive installs those tasks in any directory: `mix archive.install hex muro`. A pinned version: `mix archive.install hex muro 0.21.21`. From a checkout: `mix archive.build && mix archive.install muro-0.21.21.ez`. From GitHub: `mix archive.install github murolang/muro`. Inside a project that depends on muro, the project's copy runs after `app.start`. Inside any other project, or outside a project, the archive's copy runs and the host is neither compiled nor started. A script run with `mix run --no-start` does not see the archive; use the Mix tasks. A project without Elixir installs the self-contained executable: `mise use -g github:murolang/muro@0.21.21`. See [The executable](manual/binary.md).
 
 Success from `mix muro.check`: a `Muro v…` line, then `All terms check. Evidence never becomes a run.` A keyed family prints `family <name>: <meeting> per key of <kind>`, and a temporal declaration prints one line per declaration. Those lines are in book order. A choreography prints one line per projected pair. All of them sit between the version and that sentence. A book with none of them prints the two lines. A book that imports packages then prints one `conforms to <name> <version> (sha256 <hash>)` line per package. See [Packages](manual/packages.md).
 
@@ -71,7 +71,7 @@ mix muro.emit path.muro --backend rust      # <name>.rs
 mix muro.emit path.muro --backend zig       # <name>.zig
 mix muro.emit path.muro --backend asm       # <name>.s, Cortex-M0, Nat run
 mix muro.emit path.muro --backend js        # <name>.mjs and <name>.d.ts; node runs the module
-mix muro.emit path.muro --backend fsm       # one state machine per session, on stdout
+mix muro.emit path.muro --backend fsm       # one state machine per session, and one dispatcher per keyed family, on stdout
 mix muro.emit path.muro --backend mbi       # <stem>.mbi, exactly one graded run for muro-beam
 ```
 
