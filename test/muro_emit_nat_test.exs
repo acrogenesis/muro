@@ -33,6 +33,33 @@ defmodule Muro.EmitNatTest do
     assert mod.half(2_000_001) == 1_000_000
   end
 
+  # A host that passes something other than a Nat gets an error, not a
+  # predecessor that keeps going down.
+  test "a match on zero and suc refuses a negative integer and a float" do
+    mod =
+      compile!("""
+      def half : run Π (n : Nat) → Nat :=
+        λ (n : Nat) →
+          match n motive (λ _ → Nat)
+            | 0 => 0
+            | suc m =>
+                (match m motive (λ _ → Nat)
+                  | 0 => 0
+                  | suc k => suc (half k))
+      def isZero : run Π (n : Nat) → Nat :=
+        λ (n : Nat) →
+          match n motive (λ _ → Nat)
+            | 0 => suc 0
+            | suc m => 0
+      """)
+
+    assert_raise CaseClauseError, fn -> mod.half(-1) end
+    assert_raise CaseClauseError, fn -> mod.half(1.5) end
+    assert_raise CaseClauseError, fn -> mod.half({:suc, 0}) end
+    assert_raise CaseClauseError, fn -> mod.isZero(-3) end
+    assert mod.isZero(7) == 0
+  end
+
   test "library Nat runs are the integer operation at any size" do
     mod =
       compile!("""
@@ -50,9 +77,10 @@ defmodule Muro.EmitNatTest do
     assert mod.max(big, 0) == big
   end
 
-  # The host operation replaces a checked body only because it computes the
-  # same function. Each one is compared with its own recursion, emitted
-  # under another name so the replacement does not apply.
+  # The replacement is trusted; agda/Muro/NatPrim.agda is the proof. This is
+  # the regression test: each operation is compared with its own recursion,
+  # emitted under another name so the replacement does not apply, on every
+  # argument up to 40 and on seeded pairs up to 50_000.
   for {name, src} <- @prims do
     @name name
     @src src
@@ -63,12 +91,19 @@ defmodule Muro.EmitNatTest do
       fun = String.to_atom(Emit.elixir_base(@name))
       ref = String.to_atom(Emit.elixir_base(@name <> "-ref"))
 
-      for args <- args(arity(slow, ref)) do
+      arity = arity(slow, ref)
+
+      for args <- args(arity) do
         assert apply(fast, fun, args) == apply(slow, ref, args), "#{@name}#{inspect(args)}"
       end
 
+      for bad <- [-1, 1.5, {:suc, 0}] do
+        args = List.duplicate(bad, arity)
+        assert_raise FunctionClauseError, fn -> apply(fast, fun, args) end
+      end
+
       assert source!(library_source(@src)) =~
-               ~r/def(p)? #{fun}\(x0(, x1)?\) do\n    [^\n]*(Kernel|\+|cond)/
+               ~r/def(p)? #{fun}\(x0(, x1)?\) when [^\n]* do\n    [^\n]*(Kernel|\+|cond)/
     end
   end
 
@@ -115,8 +150,21 @@ defmodule Muro.EmitNatTest do
     Enum.find_value([1, 2], fn n -> if function_exported?(mod, fun, n), do: n end)
   end
 
-  defp args(1), do: for(a <- 0..12, do: [a])
-  defp args(2), do: for(a <- 0..12, b <- 0..12, do: [a, b])
+  @wide 50_000
+
+  defp args(1), do: for(a <- 0..40, do: [a]) ++ for(a <- sample(64, 1), do: [a])
+
+  defp args(2) do
+    for(a <- 0..40, b <- 0..40, do: [a, b]) ++
+      Enum.zip_with(sample(64, 1), sample(64, 2), &[&1, &2]) ++
+      for(a <- sample(16, 3), do: [a, a])
+  end
+
+  # Seeded, so a failure names the same pair on every run.
+  defp sample(k, salt) do
+    :rand.seed(:exsss, {7, 11, salt})
+    for _ <- 1..k, do: :rand.uniform(@wide)
+  end
 
   defp source!(text) do
     {:ok, book} = Parser.parse(text)

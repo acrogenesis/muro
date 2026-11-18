@@ -263,7 +263,11 @@ The BEAM runs this call. The proof stops at the move.
 
 A `Nat` is a non-negative integer of any size, the same integer on the wire, in a `repr`, and in an ExUnit suite. A closed numeral is that integer literal. A `match` on `0` and `suc` is a `case` on `0`, and the `suc` arm rebinds the predecessor as the integer minus one, so a run that recurses still takes one call per unit.
 
-A run whose type and body are exactly a library definition is emitted as the integer operation that definition computes: `pred` and `plus` from the prelude, `max`, `min`, and `minus` from `std:le.muro`, and `compare` from `std:ord.muro`. `plus 1000000 3` is one addition. A file that redefines one of those names, or a mutant of its body, is not that definition and keeps the emitted recursion. Each operation is tested against the recursion it replaces.
+A `match` on a `Nat` takes `0` or a positive integer. A negative integer, a float, or any other term raises `CaseClauseError`, so a host that passes something that is not a `Nat` gets an error, not a predecessor that keeps going down. A recursive run that is not a library operation still takes one call per unit of the value it recurses on: `half` of a billion is half a billion calls.
+
+A run whose name, type, and body are exactly a library definition is emitted as the integer operation that definition computes: `pred` and `plus` from the prelude, `max`, `min`, and `minus` from `std:le.muro`, and `compare` from `std:ord.muro`. `plus 1000000 3` is one addition. The function is guarded to take only non-negative integers and raises `FunctionClauseError` otherwise. A file that redefines one of those names, or a mutant of its body, is not that definition and keeps the emitted recursion.
+
+That replacement is trusted: the emitted body is not the checked term. `agda/Muro/NatPrim.agda` proves under `--safe` that each operation, read over ℤ, equals a clause-for-clause transcription of its library definition at every natural number. The transcription is not checked against the `.muro` text, and Elixir integer arithmetic being ℤ arithmetic is assumed. `test/muro_emit_nat_test.exs` compares each operation with the emitted recursion as a regression test.
 
 C, Rust, Zig, JavaScript, and Cortex-M keep their own `Nat` representation, described in each section above.
 

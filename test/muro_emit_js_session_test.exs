@@ -425,8 +425,8 @@ defmodule Muro.EmitJSSessionTest do
     book = parse!(cap)
     parent = compile_fsm!(book, "cap.muro")
     sess = child(parent, "s")
-    # The Elixir machine passes the integer to the run. A JavaScript run
-    # still takes a Peano Nat, so that machine keeps its cap.
+    # The Elixir machine passes the integer to the run. The JavaScript
+    # machine still caps a nat passed to a run at 100_000.
     assert {:ok, _} = sess.recv(sess.init(), {:box, 100_001})
 
     {_source, _types, dir} = emit_book!(book, "cap.muro")

@@ -180,7 +180,7 @@ defmodule Muro.EmitCSessionTest do
     over = {:wire, :data, "box", [{:wire, :nat, 100_001}]}
 
     # The Elixir machine passes the integer to the run. A C run still takes
-    # a Peano Nat, so the C machine keeps its cap.
+    # a Peano Nat, so the C machine keeps its cap of 100_000.
     assert {:ok, _} = mod.recv(state, {:box, 100_001})
 
     capped =

@@ -407,7 +407,6 @@ defmodule Muro.Synth.Feature do
     end
   end
 
-  defp closed_nat?(0), do: true
   defp closed_nat?(n) when is_integer(n) and n >= 0, do: true
   defp closed_nat?(_reward), do: false
 

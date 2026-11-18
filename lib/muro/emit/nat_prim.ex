@@ -4,10 +4,19 @@ defmodule Muro.Emit.NatPrim do
 
   A `Nat` is a non-negative integer in emitted Elixir, so the checked
   recursion of `plus` would still take one call per unit. A run whose
-  type and body are exactly a library definition's is emitted as the
-  integer operation that definition computes. A file that redefines the
-  name, or a mutant of the body, is not that definition and keeps the
+  name, type, and body are exactly a library definition's is emitted as
+  the integer operation that definition computes. A file that redefines
+  the name, or a mutant of the body, is not that definition and keeps the
   emitted recursion.
+
+  The replacement is trusted: the emitted body is not the checked term.
+  `agda/Muro/NatPrim.agda` proves, under `--safe`, that each operation
+  below, read over ℤ, equals a clause-for-clause transcription of its
+  library definition at every natural number. The transcription is not
+  checked against the `.muro` text, and Elixir integer arithmetic being
+  ℤ arithmetic is assumed. The emitted function is guarded to take only
+  non-negative integers. `test/muro_emit_nat_test.exs` compares each
+  operation with the emitted recursion as a regression test.
   """
 
   alias Muro.{Ast, Grade, Parser, Prelude, Std}

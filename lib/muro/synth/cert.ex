@@ -672,7 +672,6 @@ defmodule Muro.Synth.Cert do
     left != right and right == winner
   end
 
-  defp closed_nat?(0), do: true
   defp closed_nat?(n) when is_integer(n) and n >= 0, do: true
   defp closed_nat?(_value), do: false
 

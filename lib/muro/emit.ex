@@ -282,8 +282,8 @@ defmodule Muro.Emit do
 
   @doc """
   Render a closed de Bruijn value as the Elixir literal `emit_module/2`
-  builds: `0`, `{:suc, n}`, `:tt`, an atom, a constructor tuple, or a
-  pair.
+  builds: a non-negative integer for a `Nat`, `:tt`, an atom, a
+  constructor tuple, or a pair.
 
   `book` is the named book, so declared constructors are recognized.
   Returns `{:ok, source}` or `{:error, reason}` where `reason` is
@@ -339,10 +339,12 @@ defmodule Muro.Emit do
     end
   end
 
-  # A library Nat run, emitted as the integer operation it computes.
+  # A library Nat run, emitted as the integer operation it computes. The
+  # guard admits only a Nat, so any other term raises `FunctionClauseError`.
   defp host_def(d, fun, params, src) do
     kw = if Map.get(d, :export, true), do: "def", else: "defp"
-    "#{kw} #{fun}(#{Enum.join(params, ", ")}) do\n#{indent(src, 2)}\nend"
+    guard = Enum.map_join(params, " and ", &"is_integer(#{&1}) and #{&1} >= 0")
+    "#{kw} #{fun}(#{Enum.join(params, ", ")}) when #{guard} do\n#{indent(src, 2)}\nend"
   end
 
   defp checked_def(%{name: name, type: ty, body: body} = d, book, names) do
@@ -517,14 +519,18 @@ defmodule Muro.Emit do
     |> String.trim()
   end
 
-  # The suc arm binds the predecessor: the scrutinee is rebound to one less.
+  # The suc arm takes a positive integer and binds the predecessor: the
+  # scrutinee is rebound to one less. A negative integer, a float, or any
+  # other term matches neither arm and raises `CaseClauseError`.
   defp emit_db({:mnat, e, _p, z, s}, d, book, names) do
     suc = with_kinds([nil], fn -> emit_db(s, d + 1, book, names) end)
+    x = "x#{d}"
+    guard = "#{x} when is_integer(#{x}) and #{x} > 0"
 
     arm =
       case bound_name(s, 0, d, book) do
-        "_" -> "_ -> #{suc}"
-        x -> "#{x} -> (#{x} = #{x} - 1; #{suc})"
+        "_" -> "#{guard} -> #{suc}"
+        ^x -> "#{guard} -> (#{x} = #{x} - 1; #{suc})"
       end
 
     """
