@@ -80,7 +80,7 @@ The same book emits the same text on every run, including from two working direc
 
 `check_trace/1` takes a list of `{:send, value}`, `{:recv, value}`, `:down`, and `{:down, reason}` in the order this end performed them. `:down` is a step when the book marks a party. It returns `:ok`, or `{:error, {index, reason}}` for the first bad step. `index` is zero-based. `reason` is the same `{:unexpected, step, expected, value}`. A reason `down/2` rejects names `{:down, type}` as what was expected.
 
-A prefix is a valid trace. A log may be cut short, and a `rec` protocol never reaches `end`. `check_trace(trace, complete: true)` also requires `done?` and otherwise returns `{:error, {length, {:incomplete, step, expected}}}`.
+A prefix is a valid trace of the emitted machine. A log may be cut short, and a `rec` protocol never reaches `end`. That test is the machine. The book judgment is `prefix`: a list of directed moves is a legal prefix of the declared session from a position. The page is [Sessions](sessions.md#a-legal-prefix). `check_trace(trace, complete: true)` also requires `done?` and otherwise returns `{:error, {length, {:incomplete, step, expected}}}`.
 
 ```elixir
 :ok = MeetFsm.Ping.check_trace([{:recv, 0}, {:send, 1}], complete: true)

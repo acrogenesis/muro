@@ -317,6 +317,27 @@ meet stream-wire : up with down
 
 See [Sessions](sessions.md#a-named-continuation).
 
+## prefix.muro
+
+A list of directed moves is a legal prefix of a session from a position.
+
+```
+prefix admit : conn :=
+  send pick b0
+  recv piece-req
+  send reply-bad
+  send pick b1
+  send b0
+
+prefix at-reply : conn at 5 :=
+  send reply-ok
+  send pick b0
+```
+
+`conn` chooses, receives a `Piece`, and either loops or sends a `Reply` and then chooses `Loop` or `ack`. `admit` is five moves from the start. `at-ack` continues at the session `ack`. `at-loop` continues at the recursion variable. `at-reply` continues at state `5`, the node `--backend c` assigns to `send Reply` on `conn` in this file. `peer` is `dual conn`. `peer-ack` receives the bit at `ack`. The finite forms `end`, `send`, `recv`, `choose`, and `branch` are proved. The recursion, the named continuation `ack`, the `case` on `Piece`, and state `5` are the Elixir checker. The C program is not proved.
+
+See [Sessions](sessions.md#a-legal-prefix).
+
 ## value-protocols.muro
 
 A protocol continues by the value just exchanged. One form follows the constructor. The other follows a `run` of it.

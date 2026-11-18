@@ -5,13 +5,18 @@
 #ifndef muro__ALLOC
 #define muro__ALLOC(n) malloc(n)
 #endif
+#ifndef MURO__PRELUDE
+#define MURO__PRELUDE
 typedef struct muro__nat muro__nat;
 struct muro__nat { uint8_t muro__field_tag; muro__nat *muro__field_suc; }; /* 0 = zero, 1 = suc */
 typedef struct muro__unit muro__unit;
 struct muro__unit { uint8_t muro__field_tag; };
+#endif
+#ifndef MURO__SLICE
+#define MURO__SLICE
 #include <stddef.h>
 typedef struct { const uint8_t *p; size_t n; } muro__slice;
-static const uint8_t muro__empty_bytes[1] = {0};
+__attribute__((unused)) static const uint8_t muro__empty_bytes[1] = {0};
 __attribute__((unused)) static inline muro__slice muro__slice_empty(void) {
   return (muro__slice){muro__empty_bytes, 0};
 }
@@ -19,8 +24,12 @@ __attribute__((unused)) static inline muro__slice muro__slice_of(const uint8_t *
   if (n == 0 || p == 0) return muro__slice_empty();
   return (muro__slice){p, n};
 }
+#endif
+#ifndef MURO__OPT_U8
+#define MURO__OPT_U8
 typedef struct muro__opt_u8 muro__opt_u8;
 struct muro__opt_u8 { uint8_t tag; uint8_t val; };
+#endif
 muro__slice hello(void);
 muro__slice ff(void);
 muro__slice nul(void);

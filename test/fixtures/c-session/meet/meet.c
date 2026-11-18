@@ -488,6 +488,51 @@ static void muro__sess_fill(muro__sess_res *res) {
   muro__sess_exp_at(res->state.at, &res->state, res->expected, sizeof res->expected);
 }
 
+static muro__sess_res muro__sess_word_bad(muro__sess_st st) {
+  muro__sess_res bad;
+  memset(&bad, 0, sizeof bad);
+  bad.status = MURO_SESS_UNEXPECTED;
+  bad.state = st;
+  bad.step = "";
+  muro__sess_lit(bad.expected, sizeof bad.expected, "word");
+  return bad;
+}
+
+static const char *muro__sess_word_name(uint64_t word) {
+  (void)word;
+  return 0;
+}
+
+static muro__sess_res muro__sess_word_step(
+    muro__sess_st st, int dir, int tag, uint64_t word,
+    muro__sess_res (*step)(muro__sess_st, int, const muro__sess_val *)) {
+  muro__sess_val value;
+  memset(&value, 0, sizeof value);
+  if (tag == MURO_SESS_NAT) {
+    value.tag = MURO_SESS_NAT;
+    value.nat = word;
+    return step(st, dir, &value);
+  }
+  if (tag == MURO_SESS_BIT || tag == MURO_SESS_PICK) {
+    if (word > 1) return muro__sess_word_bad(st);
+    value.tag = tag == MURO_SESS_BIT ? (uint8_t)MURO_SESS_BIT : (uint8_t)MURO_SESS_PICK;
+    value.bit = (uint8_t)word;
+    return step(st, dir, &value);
+  }
+  if (tag == MURO_SESS_UNIT) {
+    value.tag = MURO_SESS_UNIT;
+    return step(st, dir, &value);
+  }
+  if (tag == MURO_SESS_DATA) {
+    const char *ctor = muro__sess_word_name(word);
+    if (!ctor) return muro__sess_word_bad(st);
+    value.tag = MURO_SESS_DATA;
+    value.ctor = ctor;
+    return step(st, dir, &value);
+  }
+  return muro__sess_word_bad(st);
+}
+
 muro__sess_res muro__sess_ping_init(void) {
   muro__sess_res out;
   muro__sess_res *res = &out;
@@ -620,6 +665,10 @@ muro__sess_res muro__sess_ping_step(muro__sess_st st, int dir, const muro__sess_
       break;
   }
   return out;
+}
+
+muro__sess_res muro__sess_ping_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_ping_step);
 }
 
 int muro__sess_ping_done(muro__sess_st st) {
@@ -773,6 +822,10 @@ muro__sess_res muro__sess_back_step(muro__sess_st st, int dir, const muro__sess_
       break;
   }
   return out;
+}
+
+muro__sess_res muro__sess_back_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_back_step);
 }
 
 int muro__sess_back_done(muro__sess_st st) {
@@ -936,6 +989,10 @@ muro__sess_res muro__sess_choice_step(muro__sess_st st, int dir, const muro__ses
   return out;
 }
 
+muro__sess_res muro__sess_choice_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_choice_step);
+}
+
 int muro__sess_choice_done(muro__sess_st st) {
   if (st.key != 3) return 0;
   return muro__sess_is_done(st.key, st.at, st.stuck);
@@ -1097,6 +1154,10 @@ muro__sess_res muro__sess_offered_step(muro__sess_st st, int dir, const muro__se
   return out;
 }
 
+muro__sess_res muro__sess_offered_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_offered_step);
+}
+
 int muro__sess_offered_done(muro__sess_st st) {
   if (st.key != 4) return 0;
   return muro__sess_is_done(st.key, st.at, st.stuck);
@@ -1215,6 +1276,10 @@ muro__sess_res muro__sess_open_k_step(muro__sess_st st, int dir, const muro__ses
       break;
   }
   return out;
+}
+
+muro__sess_res muro__sess_open_k_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_open_k_step);
 }
 
 int muro__sess_open_k_done(muro__sess_st st) {
@@ -1337,6 +1402,10 @@ muro__sess_res muro__sess_closed_step(muro__sess_st st, int dir, const muro__ses
   return out;
 }
 
+muro__sess_res muro__sess_closed_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_closed_step);
+}
+
 int muro__sess_closed_done(muro__sess_st st) {
   if (st.key != 6) return 0;
   return muro__sess_is_done(st.key, st.at, st.stuck);
@@ -1457,6 +1526,10 @@ muro__sess_res muro__sess_box_step(muro__sess_st st, int dir, const muro__sess_v
   return out;
 }
 
+muro__sess_res muro__sess_box_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_box_step);
+}
+
 int muro__sess_box_done(muro__sess_st st) {
   if (st.key != 7) return 0;
   return muro__sess_is_done(st.key, st.at, st.stuck);
@@ -1575,6 +1648,10 @@ muro__sess_res muro__sess_boxed_step(muro__sess_st st, int dir, const muro__sess
       break;
   }
   return out;
+}
+
+muro__sess_res muro__sess_boxed_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_boxed_step);
 }
 
 int muro__sess_boxed_done(muro__sess_st st) {
@@ -1733,6 +1810,10 @@ muro__sess_res muro__sess_sizzed_step(muro__sess_st st, int dir, const muro__ses
   return out;
 }
 
+muro__sess_res muro__sess_sizzed_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_sizzed_step);
+}
+
 int muro__sess_sizzed_done(muro__sess_st st) {
   if (st.key != 9) return 0;
   return muro__sess_is_done(st.key, st.at, st.stuck);
@@ -1887,6 +1968,10 @@ muro__sess_res muro__sess_sizzedzdback_step(muro__sess_st st, int dir, const mur
       break;
   }
   return out;
+}
+
+muro__sess_res muro__sess_sizzedzdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_sizzedzdback_step);
 }
 
 int muro__sess_sizzedzdback_done(muro__sess_st st) {
@@ -2057,6 +2142,10 @@ muro__sess_res muro__sess_window_step(muro__sess_st st, int dir, const muro__ses
   return out;
 }
 
+muro__sess_res muro__sess_window_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_window_step);
+}
+
 int muro__sess_window_done(muro__sess_st st) {
   if (st.key != 11) return 0;
   return muro__sess_is_done(st.key, st.at, st.stuck);
@@ -2225,6 +2314,10 @@ muro__sess_res muro__sess_grantzdend_step(muro__sess_st st, int dir, const muro_
   return out;
 }
 
+muro__sess_res muro__sess_grantzdend_step_word(muro__sess_st st, int dir, int tag, uint64_t word) {
+  return muro__sess_word_step(st, dir, tag, word, muro__sess_grantzdend_step);
+}
+
 int muro__sess_grantzdend_done(muro__sess_st st) {
   if (st.key != 12) return 0;
   return muro__sess_is_done(st.key, st.at, st.stuck);
@@ -2311,6 +2404,32 @@ muro__sess_res muro__sess_step(const char *name, muro__sess_st st, int dir, cons
   if (strcmp(name, "sized-back") == 0) return muro__sess_sizzedzdback_step(st, dir, value);
   if (strcmp(name, "window") == 0) return muro__sess_window_step(st, dir, value);
   if (strcmp(name, "grant-end") == 0) return muro__sess_grantzdend_step(st, dir, value);
+  return res;
+}
+
+muro__sess_res muro__sess_step_word(const char *name, muro__sess_st st, int dir, int tag, uint64_t word) {
+  muro__sess_res res;
+  memset(&res, 0, sizeof res);
+  res.status = MURO_SESS_UNEXPECTED;
+  res.state = st;
+  res.step = "";
+  muro__sess_lit(res.expected, sizeof res.expected, "done");
+  (void)dir;
+  (void)tag;
+  (void)word;
+  if (!name) return res;
+  if (strcmp(name, "ping") == 0) return muro__sess_ping_step_word(st, dir, tag, word);
+  if (strcmp(name, "back") == 0) return muro__sess_back_step_word(st, dir, tag, word);
+  if (strcmp(name, "choice") == 0) return muro__sess_choice_step_word(st, dir, tag, word);
+  if (strcmp(name, "offered") == 0) return muro__sess_offered_step_word(st, dir, tag, word);
+  if (strcmp(name, "open") == 0) return muro__sess_open_k_step_word(st, dir, tag, word);
+  if (strcmp(name, "closed") == 0) return muro__sess_closed_step_word(st, dir, tag, word);
+  if (strcmp(name, "box") == 0) return muro__sess_box_step_word(st, dir, tag, word);
+  if (strcmp(name, "boxed") == 0) return muro__sess_boxed_step_word(st, dir, tag, word);
+  if (strcmp(name, "sized") == 0) return muro__sess_sizzed_step_word(st, dir, tag, word);
+  if (strcmp(name, "sized-back") == 0) return muro__sess_sizzedzdback_step_word(st, dir, tag, word);
+  if (strcmp(name, "window") == 0) return muro__sess_window_step_word(st, dir, tag, word);
+  if (strcmp(name, "grant-end") == 0) return muro__sess_grantzdend_step_word(st, dir, tag, word);
   return res;
 }
 

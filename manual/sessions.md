@@ -49,7 +49,7 @@ The meeting is evidence. It is not a run term. A run definition has no seat. The
 
 `mix muro.emit path.muro --backend fsm` prints each end as a state machine the host steps itself. The transport stays with the host. See [State machines](fsm.md).
 
-`mix muro.emit path.muro --backend c` writes a step for each end next to the runs. The generated name is `muro__sess_` followed by the source spelling of the session, then `_init` or `_step`. A hyphen in the source name is `zd` in that spelling. Init starts one end and takes each initial nat as `uint64_t`, so a negative cannot be supplied. Step takes the state, a direction, and the event, and returns the next state and the action. An event the protocol does not allow is refused and the state stays. A key that is not this session, and a position that is not a step, are that same refusal. The host keeps the transport. The actions are the ones the state machine takes. A walk of at most 14 states and depth at most 6 checks that agreement, including events the protocol does not allow. `down` is not part of that step.
+`mix muro.emit path.muro --backend c` writes a step for each end next to the runs. The generated name is `muro__sess_` followed by the source spelling of the session, then `_init`, `_step`, or `_step_word`. A hyphen in the source name is `zd` in that spelling. Init starts one end and takes each initial nat as `uint64_t`, so a negative cannot be supplied. `_step` takes the state, a direction, and the event. `_step_word` takes the state, a direction, a payload kind, and a `uint64_t`. A data word is that constructor's number in this book, one space across every data declaration, in book order. A nat word is the nat. A bit or a choice is 0 or 1. A unit ignores the word. A pair, a record, a vector, and a constructor with fields stay on `_step`. The header names the status, the direction (`MURO_SESS_SEND` is 1, `MURO_SESS_RECV` is 2), and the payload kind (`MURO_SESS_PICK` is 4, `MURO_SESS_DATA` is 8). Each constructor has a tag enum for its type, and the book has one flat word enum. `struct muro__nat` and `struct muro__unit` sit under one include guard, so two headers can share a translation unit. Two session headers with the same number of nat slots share the state struct. A different count is a compile error. Both steps return the next state and the action. An event the protocol does not allow is refused and the state stays. A key that is not this session, and a position that is not a step, are that same refusal. The host keeps the transport. The actions are the ones the state machine takes. A walk of at most 14 states and depth at most 6 checks that agreement, including events the protocol does not allow. `down` is not part of that step.
 
 Places are where the parties sit. When the places are the same, the meeting stays. When the places differ, the meeting crosses once. The boundary is the seating. The payload stays on the session.
 
@@ -109,7 +109,7 @@ conform echo : ping := get (k : Nat) (put k done)
 
 A data definition may be a payload when it has no indices and every constructor field is a payload: a nat, a bit, unit, a pair of those, a parameter, that same data type, or another such data type. The constructors are the ones that definition has. The other end receives the same type. The meeting checks that the sent value inhabits the type. `put (just 0)` does not inhabit `Bool`. `nothing` and `(just 0)` inhabit `Maybe Nat`. The OTP image carries the atom `true`, or the tagged tuple `{:just, 0}`.
 
-A payload argument stops before a token that begins something else. The words are `def`, `data`, `session`, `conform`, `meet`, `place`, `scheme`, `move`, `endpoint`, `read`, `talk`, `choreography`, `seat`, `link`, `relay`, `import`, `param`, `where`, `nu`, `ν`, `end`, `send`, `recv`, `choose`, `branch`, `rec`, `case`, `on`, `done`, `stop`, `put`, `get`, `pick0`, `pick1`, `cover`, `over`, `say`, and `offer`. `temporal <name> :`, `family <name> :`, and `repr <name> :=` stop as well. A name followed by `->`, `→`, `chooses`, or `:` stops, and so do `)` and `}`. A recursion variable in scope is the continuation (`send Bool X`). Parentheses group a payload (`(Reply)`, `(Maybe (List Nat))`). Omitting `end` after the payload is a parse error at that point, and the message says `end` was expected. The next declaration stays where it is. The declaration takes exactly as many arguments as it has parameters. `Reply takes 0 arguments, given 2` names the count at that declaration, and one parameter is `argument`. A matching count whose declaration is indexed, or whose parameter is not `Type`, stays `ill-formed payload`.
+A payload argument stops before a token that begins something else. The words are `def`, `data`, `session`, `conform`, `prefix`, `meet`, `place`, `scheme`, `move`, `endpoint`, `read`, `talk`, `choreography`, `seat`, `link`, `relay`, `import`, `param`, `where`, `nu`, `ν`, `end`, `send`, `recv`, `choose`, `branch`, `rec`, `case`, `on`, `done`, `stop`, `put`, `get`, `pick0`, `pick1`, `cover`, `over`, `say`, and `offer`. `temporal <name> :`, `family <name> :`, and `repr <name> :=` stop as well. A name followed by `->`, `→`, `chooses`, or `:` stops, and so do `)` and `}`. A recursion variable in scope is the continuation (`send Bool X`). Parentheses group a payload (`(Reply)`, `(Maybe (List Nat))`). Omitting `end` after the payload is a parse error at that point, and the message says `end` was expected. The next declaration stays where it is. The declaration takes exactly as many arguments as it has parameters. `Reply takes 0 arguments, given 2` names the count at that declaration, and one parameter is `argument`. A matching count whose declaration is indexed, or whose parameter is not `Type`, stays `ill-formed payload`.
 
 ```muro
 data Bool : Type where
@@ -611,6 +611,76 @@ conform server : server-wait :=
 A `put` has no failure arm. A message sent to a party that has stopped is dropped. The stop is handled at the survivor's next receive from that party. A receive from a party that was not marked refuses a failure arm: `server: get (r : Report) has a failure arm, and task may not fail`. A missing arm is refused on the meeting, and the message names the process, the receive, and the party: `server: get (r : Report) does not handle failure of task`.
 
 The meeting is checked. `--backend otp` monitors the marked peer. A `:DOWN` that is not a halt, while the survivor is at a receive from that peer, runs the failure arm. A reason on the arm is the `:DOWN` reason. The OTP image does not check that reason against its type. `:kill` arrives as `:killed`. A `match` on that name selects the arm and binds the constructor's fields. A reason that matches no arm stops `{:shutdown, {:unexpected, reason}}`. A `put` to a peer already observed dead is consumed and is not an error. Protocol `done` is `:normal`, and that exit is a halt only after the protocol has finished. A `:normal` exit before that runs the failure arm. Protocol `stop` sends `{:muro_halt, _}` and then exits `{:shutdown, :abandon}`. That exit is a halt even when the halt message has not arrived, and the failure arm does not run. On one node, a message that reached the mailbox, including the settled mark, is applied before `:DOWN`. The checker also counts a run that drops a message already queued. The OTP image does not take that run. `--backend fsm` adds `down/1` and `down/2` when the book marks a party. A book that does not mark a party emits no `down`. `down` takes the failure arm of the receive this end is on. `down/2` supplies the reason and checks it. Where the protocol has no failure arm, `down` is an error. An arm the machine cannot resolve is not done. C, Rust, Zig, JavaScript, assembly, `--node`, and the ExUnit backend still refuse the book with `c:mayfail`. `examples/may-fail-free.muro` is the worked book. The server holds a slot until the task reports or the task stops, and the failure arm releases the slot. The runs are [Temporal](temporal.md).
+
+## A legal prefix
+
+`prefix` names a list of directed moves and says that list is a legal prefix of a session from a position. The declaration is evidence. The emitters omit it. The checker decides the list. It does not call a `run`.
+
+```muro
+prefix admit : conn :=
+  send pick b0
+  recv piece-req
+  send reply-bad
+  send pick b1
+  send b0
+```
+
+An omitted position is the start. `at start` is the same position. The empty list is a legal prefix at every position.
+
+```muro
+prefix empty : conn :=
+
+prefix at-ack : conn at ack :=
+  send b0
+
+prefix at-loop : conn at Loop :=
+  send pick b1
+
+prefix at-reply : conn at 5 :=
+  send reply-ok
+  send pick b0
+```
+
+A position is one of four things.
+
+- `start` is the start of the session.
+- A recursion variable of that session is the protocol where that variable stands. `Loop` is the head of `rec Loop.` in `conn`.
+- A session the source protocol continues as is that session, read on the source before earlier sessions are inlined. `ack` in `conn` is `send Bit end`. The session's own name is a position when the protocol continues as that name.
+- A numeral is the number `--backend c` assigns to a node of this session. In `examples/prefix.muro` the number `5` is the node of `conn` whose step is `send Reply`. Another book assigns its own numbers. `0` is not a position. A number that belongs to another session is not a position of this one. `dual conn` has no nodes of its own. `session peer := dual conn` does, and those numbers are `peer`'s.
+
+`at` ends the session use. It is not an argument. `frames 3 at 1` is the session `frames` at `3`, then position `1`. `dual (stream 0)` is the other end of that application. `def prefix : run Nat := 0` is a definition. `start` and `pick` are keywords in this form. `def start : run Nat := 0` and `def pick : run Nat := 0` are definitions. A prefix name is not a term: `admit is a prefix, not a definition`.
+
+A move is `send` or `recv`. `pick b0` takes the left arm and `pick b1` takes the right arm. A value is the payload a `put` writes: a numeral, `tt`, `b0`, `b1`, a constructor, a pair, or a record. `send b0` sends the bit. `send pick b0` selects the arm. An indexed bit is the bit, `send b0` or `send b1`. After a payload whose continuation is a `case` on the constructor just exchanged, the next moves are the arm that constructor selects, and the `case` itself is not a move. A `case` on a `run` is not a prefix step when a move remains. When no move remains, the prefix stops before that `case`.
+
+An evidence bound is a closed numeral. `send (d : Nat) {d ≤ 3}` accepts `send 2`. A name is not known at that position, including a name received earlier in the same prefix: `bound n is not known at start`.
+
+The finite forms `end`, `send`, `recv`, `choose`, and `branch` are proved in Agda. A derivation is a legal prefix. The decision procedure accepts a list only when that list has a derivation. Completeness is not claimed. The empty list is a prefix of every protocol, including one outside those five forms.
+
+Recursion, a named continuation, a dependent payload, an evidence bound, an indexed bit, a `case` on the constructor just exchanged, and the numeric position are the Elixir checker. A yes on those forms is that check. It is not an Agda derivation. The C program `--backend c` writes is not proved. `check_trace` tests the emitted machine, and a log cut short there is that test. The page is [State machines](fsm.md#check_trace).
+
+A refusal names the prefix and the move. The line and column are the move. A position the session does not have is reported on the declaration.
+
+```
+move 1 has the wrong direction: expected send pick, wrote recv pick b0
+```
+
+```
+move 2 is not a legal continuation of conn at start: unknown constructor nope of Piece
+```
+
+```
+not enabled at 5, expected send Reply, wrote send pick b0
+```
+
+```
+at 0 is not a position of conn
+```
+
+The wrong direction is reported when the move sends where the protocol receives, or receives where it sends. An unknown constructor is a constructor the payload type does not have. A move the protocol does not allow at that position is `not enabled at <pos>`. From the second move on, the same sentence is wrapped: `move N is not a legal continuation of <session> at <pos>`. `<pos>` is `start`, the name, or the numeral. `case (late b) is not a prefix step` is the refusal when a move remains after a `case` on a `run`.
+
+A book whose next moves come from a `run` states each offer as its own `prefix`, in the session's vocabulary, at the position those offers leave. `send pick b0`, then `recv piece-req`, then `send reply-bad` is one offer. The position is a name in that session, or the number `--backend c` assigns on that book's session. The checker reads the list. It does not call the `run`. A `run` is not this judgment, and a `conform` is not this judgment.
+
+`examples/prefix.muro` is the worked book.
 
 ## Where a check fails
 

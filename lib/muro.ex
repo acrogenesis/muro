@@ -104,11 +104,13 @@ defmodule Muro do
   """
   def emit_c(path, opts \\ []) do
     nif? = Keyword.get(opts, :nif, true)
+    prefix = Keyword.get(opts, :c_prefix, "")
     stem = Path.basename(path, ".muro")
     dir = Path.dirname(path)
 
     with {:ok, book} <- checked_book(path, opts),
-         {:ok, header, source, sigs} <- Emit.C.prepare(book, stem, path: path) do
+         {:ok, header, source, sigs} <-
+           Emit.C.prepare(book, stem, path: path, c_prefix: prefix) do
       if nif?, do: Emit.Nif.ensure_make!(sigs), else: :ok
       # Claimed for every run, before `nat_export?` drops internal and non-Nat runs.
       names = Emit.elixir_names(book)

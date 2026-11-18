@@ -649,7 +649,8 @@ defmodule Muro.Ast do
             :repr,
             :seat,
             :link,
-            :relay
+            :relay,
+            :prefix
           ] ->
             {:ok, d}
 

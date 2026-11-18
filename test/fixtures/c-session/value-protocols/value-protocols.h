@@ -5,45 +5,76 @@
 #ifndef muro__ALLOC
 #define muro__ALLOC(n) malloc(n)
 #endif
+#ifndef MURO__PRELUDE
+#define MURO__PRELUDE
 typedef struct muro__nat muro__nat;
 struct muro__nat { uint8_t muro__field_tag; muro__nat *muro__field_suc; }; /* 0 = zero, 1 = suc */
 typedef struct muro__unit muro__unit;
 struct muro__unit { uint8_t muro__field_tag; };
+#endif
 typedef struct Frame Frame;
 typedef struct Ctl Ctl;
 typedef struct Goaway Goaway;
 typedef struct Body Body;
 typedef struct Bool Bool;
+typedef enum muro__tag_Frame {
+  muro__tag_Frame_bytes = 0,
+  muro__tag_Frame_trailers = 1,
+  muro__tag_Frame_headers = 2
+} muro__tag_Frame;
 struct Frame {
   uint8_t muro__field_tag; /* bytes = 0, trailers = 1, headers = 2 */
   union {
     char muro__unused;
   } muro__as;
 };
+typedef enum muro__tag_Ctl {
+  muro__tag_Ctl_rst = 0
+} muro__tag_Ctl;
 struct Ctl {
   uint8_t muro__field_tag; /* rst = 0 */
   union {
     char muro__unused;
   } muro__as;
 };
+typedef enum muro__tag_Goaway {
+  muro__tag_Goaway_goaway = 0
+} muro__tag_Goaway;
 struct Goaway {
   uint8_t muro__field_tag; /* goaway = 0 */
   union {
     char muro__unused;
   } muro__as;
 };
+typedef enum muro__tag_Body {
+  muro__tag_Body_chunk = 0
+} muro__tag_Body;
 struct Body {
   uint8_t muro__field_tag; /* chunk = 0 */
   union {
     char muro__unused;
   } muro__as;
 };
+typedef enum muro__tag_Bool {
+  muro__tag_Bool_true_k = 0,
+  muro__tag_Bool_false_k = 1
+} muro__tag_Bool;
 struct Bool {
   uint8_t muro__field_tag; /* true = 0, false = 1 */
   union {
     char muro__unused;
   } muro__as;
 };
+typedef enum muro__word_valuezdprotocols {
+  muro__word_valuezdprotocols_Frame_bytes = 0,
+  muro__word_valuezdprotocols_Frame_trailers = 1,
+  muro__word_valuezdprotocols_Frame_headers = 2,
+  muro__word_valuezdprotocols_Ctl_rst = 3,
+  muro__word_valuezdprotocols_Goaway_goaway = 4,
+  muro__word_valuezdprotocols_Body_chunk = 5,
+  muro__word_valuezdprotocols_Bool_true_k = 6,
+  muro__word_valuezdprotocols_Bool_false_k = 7
+} muro__word_valuezdprotocols;
 Bool *late(Frame *f);
 Frame *aszdbytes(void);
 Frame *aszdheaders(void);
@@ -51,19 +82,21 @@ Frame *aszdheaders(void);
 #include <stddef.h>
 #include <stdint.h>
 
-enum {
+#ifndef MURO__SESS_ABI
+#define MURO__SESS_ABI
+typedef enum muro__sess_status {
   MURO_SESS_OK = 0,
   MURO_SESS_UNEXPECTED = 1,
   MURO_SESS_BAD = 2,
   MURO_SESS_INIT = 3
-};
+} muro__sess_status;
 
-enum {
+typedef enum muro__sess_dir {
   MURO_SESS_SEND = 1,
   MURO_SESS_RECV = 2
-};
+} muro__sess_dir;
 
-enum {
+typedef enum muro__sess_tag {
   MURO_SESS_NAT = 1,
   MURO_SESS_BIT = 2,
   MURO_SESS_UNIT = 3,
@@ -72,7 +105,7 @@ enum {
   MURO_SESS_REC = 6,
   MURO_SESS_VEC = 7,
   MURO_SESS_DATA = 8
-};
+} muro__sess_tag;
 
 typedef struct muro__sess_val {
   uint8_t tag;
@@ -84,7 +117,11 @@ typedef struct muro__sess_val {
   const struct muro__sess_val *a;
   const struct muro__sess_val *b;
 } muro__sess_val;
+#endif
 
+#ifndef MURO__SESS_ST
+#define MURO__SESS_ST
+#define MURO__SESS_SLOTS 3
 typedef struct muro__sess_st {
   uint16_t key;
   uint16_t at;
@@ -100,116 +137,141 @@ typedef struct muro__sess_res {
   char expected[1024];
   int done;
 } muro__sess_res;
+#elif MURO__SESS_SLOTS != 3
+#error muro session state slot count differs between headers
+#endif
 
+#ifndef MURO__SESS_API
+#define MURO__SESS_API
 muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n);
 muro__sess_res muro__sess_step(const char *name, muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_step_word(const char *name, muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_done(const char *name, muro__sess_st st);
 const char *muro__sess_at(const char *name, muro__sess_st st);
 void muro__sess_expected(const char *name, muro__sess_st st, char *buf, size_t n);
+#endif
 muro__sess_res muro__sess_server_init(void);
 muro__sess_res muro__sess_server_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_server_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_server_done(muro__sess_st st);
 const char *muro__sess_server_at(muro__sess_st st);
 void muro__sess_server_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_client_init(void);
 muro__sess_res muro__sess_client_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_client_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_client_done(muro__sess_st st);
 const char *muro__sess_client_at(muro__sess_st st);
 void muro__sess_client_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_gate_init(void);
 muro__sess_res muro__sess_gate_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_gate_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_gate_done(muro__sess_st st);
 const char *muro__sess_gate_at(muro__sess_st st);
 void muro__sess_gate_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_gatezdback_init(void);
 muro__sess_res muro__sess_gatezdback_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_gatezdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_gatezdback_done(muro__sess_st st);
 const char *muro__sess_gatezdback_at(muro__sess_st st);
 void muro__sess_gatezdback_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_loop_init(void);
 muro__sess_res muro__sess_loop_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_loop_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_loop_done(muro__sess_st st);
 const char *muro__sess_loop_at(muro__sess_st st);
 void muro__sess_loop_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_loopzdback_init(void);
 muro__sess_res muro__sess_loopzdback_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_loopzdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_loopzdback_done(muro__sess_st st);
 const char *muro__sess_loopzdback_at(muro__sess_st st);
 void muro__sess_loopzdback_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_spin_init(void);
 muro__sess_res muro__sess_spin_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_spin_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_spin_done(muro__sess_st st);
 const char *muro__sess_spin_at(muro__sess_st st);
 void muro__sess_spin_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_spinzdback_init(void);
 muro__sess_res muro__sess_spinzdback_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_spinzdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_spinzdback_done(muro__sess_st st);
 const char *muro__sess_spinzdback_at(muro__sess_st st);
 void muro__sess_spinzdback_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_ack_init(void);
 muro__sess_res muro__sess_ack_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_ack_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_ack_done(muro__sess_st st);
 const char *muro__sess_ack_at(muro__sess_st st);
 void muro__sess_ack_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_srv_init(void);
 muro__sess_res muro__sess_srv_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_srv_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_srv_done(muro__sess_st st);
 const char *muro__sess_srv_at(muro__sess_st st);
 void muro__sess_srv_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_srvzdback_init(void);
 muro__sess_res muro__sess_srvzdback_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_srvzdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_srvzdback_done(muro__sess_st st);
 const char *muro__sess_srvzdback_at(muro__sess_st st);
 void muro__sess_srvzdback_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_sizzed_init(uint64_t a0);
 muro__sess_res muro__sess_sizzed_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_sizzed_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_sizzed_done(muro__sess_st st);
 const char *muro__sess_sizzed_at(muro__sess_st st);
 void muro__sess_sizzed_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_sizzed3_init(void);
 muro__sess_res muro__sess_sizzed3_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_sizzed3_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_sizzed3_done(muro__sess_st st);
 const char *muro__sess_sizzed3_at(muro__sess_st st);
 void muro__sess_sizzed3_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_sizzed3zdback_init(void);
 muro__sess_res muro__sess_sizzed3zdback_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_sizzed3zdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_sizzed3zdback_done(muro__sess_st st);
 const char *muro__sess_sizzed3zdback_at(muro__sess_st st);
 void muro__sess_sizzed3zdback_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_counted_init(void);
 muro__sess_res muro__sess_counted_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_counted_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_counted_done(muro__sess_st st);
 const char *muro__sess_counted_at(muro__sess_st st);
 void muro__sess_counted_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_countedzdback_init(void);
 muro__sess_res muro__sess_countedzdback_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_countedzdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_countedzdback_done(muro__sess_st st);
 const char *muro__sess_countedzdback_at(muro__sess_st st);
 void muro__sess_countedzdback_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_once_init(void);
 muro__sess_res muro__sess_once_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_once_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_once_done(muro__sess_st st);
 const char *muro__sess_once_at(muro__sess_st st);
 void muro__sess_once_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_relay_init(void);
 muro__sess_res muro__sess_relay_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_relay_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_relay_done(muro__sess_st st);
 const char *muro__sess_relay_at(muro__sess_st st);
 void muro__sess_relay_expected(muro__sess_st st, char *buf, size_t n);
