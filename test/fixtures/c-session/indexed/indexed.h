@@ -5,29 +5,34 @@
 #ifndef muro__ALLOC
 #define muro__ALLOC(n) malloc(n)
 #endif
+#ifndef MURO__PRELUDE
+#define MURO__PRELUDE
 typedef struct muro__nat muro__nat;
 struct muro__nat { uint8_t muro__field_tag; muro__nat *muro__field_suc; }; /* 0 = zero, 1 = suc */
 typedef struct muro__unit muro__unit;
 struct muro__unit { uint8_t muro__field_tag; };
+#endif
 muro__nat *on(void);
 muro__nat *kept(void);
 
 #include <stddef.h>
 #include <stdint.h>
 
-enum {
+#ifndef MURO__SESS_ABI
+#define MURO__SESS_ABI
+typedef enum muro__sess_status {
   MURO_SESS_OK = 0,
   MURO_SESS_UNEXPECTED = 1,
   MURO_SESS_BAD = 2,
   MURO_SESS_INIT = 3
-};
+} muro__sess_status;
 
-enum {
+typedef enum muro__sess_dir {
   MURO_SESS_SEND = 1,
   MURO_SESS_RECV = 2
-};
+} muro__sess_dir;
 
-enum {
+typedef enum muro__sess_tag {
   MURO_SESS_NAT = 1,
   MURO_SESS_BIT = 2,
   MURO_SESS_UNIT = 3,
@@ -36,7 +41,7 @@ enum {
   MURO_SESS_REC = 6,
   MURO_SESS_VEC = 7,
   MURO_SESS_DATA = 8
-};
+} muro__sess_tag;
 
 typedef struct muro__sess_val {
   uint8_t tag;
@@ -48,7 +53,11 @@ typedef struct muro__sess_val {
   const struct muro__sess_val *a;
   const struct muro__sess_val *b;
 } muro__sess_val;
+#endif
 
+#ifndef MURO__SESS_ST
+#define MURO__SESS_ST
+#define MURO__SESS_SLOTS 1
 typedef struct muro__sess_st {
   uint16_t key;
   uint16_t at;
@@ -64,32 +73,43 @@ typedef struct muro__sess_res {
   char expected[1024];
   int done;
 } muro__sess_res;
+#elif MURO__SESS_SLOTS != 1
+#error muro session state slot count differs between headers
+#endif
 
+#ifndef MURO__SESS_API
+#define MURO__SESS_API
 muro__sess_res muro__sess_init(const char *name, const uint64_t *args, size_t n);
 muro__sess_res muro__sess_step(const char *name, muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_step_word(const char *name, muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_done(const char *name, muro__sess_st st);
 const char *muro__sess_at(const char *name, muro__sess_st st);
 void muro__sess_expected(const char *name, muro__sess_st st, char *buf, size_t n);
+#endif
 muro__sess_res muro__sess_route_init(void);
 muro__sess_res muro__sess_route_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_route_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_route_done(muro__sess_st st);
 const char *muro__sess_route_at(muro__sess_st st);
 void muro__sess_route_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_routezdback_init(void);
 muro__sess_res muro__sess_routezdback_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_routezdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_routezdback_done(muro__sess_st st);
 const char *muro__sess_routezdback_at(muro__sess_st st);
 void muro__sess_routezdback_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_echozdbit_init(void);
 muro__sess_res muro__sess_echozdbit_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_echozdbit_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_echozdbit_done(muro__sess_st st);
 const char *muro__sess_echozdbit_at(muro__sess_st st);
 void muro__sess_echozdbit_expected(muro__sess_st st, char *buf, size_t n);
 
 muro__sess_res muro__sess_echozdback_init(void);
 muro__sess_res muro__sess_echozdback_step(muro__sess_st st, int dir, const muro__sess_val *value);
+muro__sess_res muro__sess_echozdback_step_word(muro__sess_st st, int dir, int tag, uint64_t word);
 int muro__sess_echozdback_done(muro__sess_st st);
 const char *muro__sess_echozdback_at(muro__sess_st st);
 void muro__sess_echozdback_expected(muro__sess_st st, char *buf, size_t n);
