@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.22.6
+## 0.22.4
 
 A keyed family's dispatcher has `finish`. `Events.finish(state, id, session, step)` takes that session to its end. The outcome is `:resolve` or `:rerun`. `:resolve` is the default: the instance leaves, and the call returns what `resolved` returns. `:rerun` keeps the instance unresolved. Its row stays, and a held row of its key stays held. The host starts a new session for that id. There is no bound on reruns. A later `:resolve` drops the instance, on success, on a permanent error, or on the attempt that gives up.
 
@@ -16,7 +16,7 @@ The family graph is unchanged. It still allows one rerun, then give-up. This out
 
 ### Package
 
-- Version 0.22.6. The version goes from 0.22.3 to 0.22.6 because 0.22.4 and 0.22.5 are taken by other open pull requests.
+- Version 0.22.4.
 
 ## 0.22.3
 
