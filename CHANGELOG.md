@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.22.5
+## 0.22.4
 
 `mix muro.fill path.muro --def name` writes a body for that definition. The definition starts as `?`. The search tries terms in order of size, up to `--bound` (default 8): variables in scope, constructors, applications of other names, and a match on a binder. It does not call the definition being filled. The checker decides. A run is kept only when the book's closed equations about that name still check. Evidence is kept when the type checks. The first term that passes is written by a rename in the same directory. Past the bound, the file is left unchanged and the command exits non-zero.
 
@@ -12,7 +12,7 @@ This is a search. It is not `mix muro.synth`, and it certifies nothing beyond th
 
 ### Package
 
-- Version 0.22.5.
+- Version 0.22.4.
 
 ## 0.22.3
 
