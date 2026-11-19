@@ -3134,6 +3134,7 @@ defmodule Muro.Emit.Fsm do
         "def resolved(state, id)",
         "def finish(state, id, session_state)",
         "def finish(state, id, session_state, step)",
+        "def finish(state, id, session_state, outcome)",
         "def finish(state, id, session_state, step, outcome)",
         "def check_trace(trace)"
       ]
@@ -3143,7 +3144,7 @@ defmodule Muro.Emit.Fsm do
   defp finish_blurb(nil), do: ""
 
   defp finish_blurb([_camel]) do
-    " `finish/3` and `finish/4` take this end to `done` and resolve the family instance. The outcome `:rerun` leaves that instance unresolved."
+    " `finish/3`, `finish/4`, and `finish/5` take this end to `done` and resolve the family instance. The outcome `:rerun` leaves that instance unresolved."
   end
 
   defp finish_blurb(_cams) do

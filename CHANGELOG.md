@@ -4,9 +4,9 @@
 
 A keyed family's dispatcher has `finish`. `Events.finish(state, id, session, step)` takes that session to its end. The outcome is `:resolve` or `:rerun`. `:resolve` is the default: the instance leaves, and the call returns what `resolved` returns. `:rerun` keeps the instance unresolved. Its row stays, and a held row of its key stays held. The host starts a new session for that id. There is no bound on reruns. A later `:resolve` drops the instance, on success, on a permanent error, or on the attempt that gives up.
 
-When one family uses a session, that session's `finish` takes the same outcome. When two families share the session, that call is `{:error, {:family, names, form}}` and it does not resolve. `form` is `finish(family_state, id, session_state, step)`. Each family's `finish` releases only that family's rows.
+When one family uses a session, that session's `finish` takes the same outcome. When two families share the session, that call is `{:error, {:family, names, form}}` and it does not resolve. The old 2-tuple `{:family, names}` is removed. `form` is `finish(family_state, id, session_state, step)`. Each family's `finish` releases only that family's rows.
 
-`check_trace` accepts `{:rerun, id}` after the attempt has reached `done`. A later step for that id starts a new session. An attempt that reaches `done` and is neither rerun nor resolved is still reported as unresolved.
+`check_trace` accepts `{:rerun, id}` after every stepped party of that id is at `done`. A later step for that id starts a new session. An attempt that reaches `done` and is neither rerun nor resolved is still reported as unresolved.
 
 The family graph is unchanged. It still allows one rerun, then give-up. This outcome is the emitted dispatcher. It is not an Agda proof.
 

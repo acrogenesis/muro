@@ -664,7 +664,57 @@ defmodule Muro.FsmFamilyTest do
                {:resolved, 0}
              ])
 
+    assert {:error, {1, {:unfinished, 0}}} =
+             disp.check_trace([
+               {:arrive, "a", :init, 0},
+               {:rerun, 0}
+             ])
+
+    assert {:error, {2, {:held, 1}}} =
+             disp.check_trace([
+               {:arrive, "a", :init, 0},
+               {:arrive, "a", :signal, 1},
+               {:rerun, 1}
+             ])
+
     assert {:error, {0, {:unknown, 4}}} = disp.check_trace([{:rerun, 4}])
+  end
+
+  test "finish/3 and finish/4 with :rerun take a session that is already at done", %{
+    disp: disp,
+    parent: parent
+  } do
+    server = Module.concat(parent, ServerWait)
+    state = disp.new()
+    assert {:open, 0, state} = disp.arrive(state, "a", :init, 0)
+    assert {:held, 1, state} = disp.arrive(state, "a", :signal, 1)
+    {:ok, done} = server.recv(server.init(), :ok)
+    assert server.done?(done)
+
+    assert {:ok, [], kept} = disp.finish(state, 0, done, :rerun)
+    assert kept.by["a"][0] == {0, :init, :open}
+    assert kept.by["a"][1] == {1, :signal, :held}
+    assert {:error, {:held, 1}} = disp.resolved(kept, 1)
+
+    assert {:ok, [{1, "a", :signal}], opened} = disp.finish(kept, 0, done)
+    assert {:error, {:unknown, 0}} = disp.resolved(opened, 0)
+    assert {:ok, [], _} = disp.resolved(opened, 1)
+  end
+
+  test "a bad outcome is refused on the family and on the session", %{
+    disp: disp,
+    parent: parent
+  } do
+    server = Module.concat(parent, ServerWait)
+    state = disp.new()
+    assert {:open, 0, state} = disp.arrive(state, "a", :init, 0)
+    session = server.init()
+
+    assert {:error, {:outcome, :nope}} = disp.finish(state, 0, session, :nope)
+    assert {:error, {:outcome, :nope}} = disp.finish(state, 0, session, :down, :nope)
+    assert {:error, {:outcome, :nope}} = server.finish(session, state, 0, :nope)
+    assert {:error, {:outcome, :nope}} = server.finish(session, :down, state, 0, :nope)
+    assert state.by["a"][0] == {0, :init, :open}
   end
 
   defp hold_of(disp, state, id) do
