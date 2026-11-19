@@ -89,7 +89,7 @@ pages:
   - file: library.md
     slug: library
     title: Library
-    summary: The ordinary library, imported as std:. Bool, Le, List, Maybe, comparison, and a binary successor.
+    summary: The ordinary library, imported as std:. Bool, Le, List, Maybe, comparison, a binary successor, and unsigned word arithmetic.
   - file: grammar.md
     slug: grammar
     title: Grammar
@@ -126,6 +126,10 @@ pages:
     slug: synth
     title: Synthesis
     summary: mix muro.synth searches a version space of predicate programs on a checked environment.
+  - file: fill.md
+    slug: fill
+    title: Fill
+    summary: mix muro.fill writes one definition body by search. The checker decides.
   - file: explorer.md
     slug: explorer
     title: Visual explorer

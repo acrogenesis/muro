@@ -1,12 +1,62 @@
 # Changelog
 
-## 0.22.2
+## 0.22.6
 
-`--backend fsm` and `--backend otp` print a declaration's map with its keys sorted. Since OTP 26 a small map with atom keys iterates in atom-table order, and that order depends on what the VM loaded first. The same book emitted `%{ctors: …, order: …, np: …}` in a fresh VM and another order inside a long test run, so `mix muro.gen --check` failed in a host's test suite on a module `mix muro.gen` had just written. The FSM literals and the OTP declarations and skeletons now pass `custom_options: [sort_maps: true]` to `inspect`. A book whose emitted maps had one key, or no map, emits the same text. Run `mix muro.gen` once to rewrite a committed module that has a declaration with more than one key.
+`--backend fsm` and `--backend otp` print a declaration's map with its keys sorted. Since OTP 26 a small map with atom keys iterates in atom-table order, and that order depends on what the VM loaded first. The same book emitted `%{ctors: …, order: …, np: …}` in a fresh VM and another order inside a long test run, so `mix muro.gen --check` failed in a host's test suite on a module `mix muro.gen` had just written. The FSM literals and the OTP declarations and skeletons now pass `custom_options: [sort_maps: true]` to `inspect`. The FSM emitter also sorts the outer pair lists of the declarations, fail tables, and host-atom maps before printing them. A book whose emitted maps had one key, or no map, emits the same text. Run `mix muro.gen` once to rewrite a committed module that has a declaration with more than one key.
 
 ### Package
 
-- Version 0.22.2.
+- Version 0.22.6.
+
+## 0.22.5
+
+`mix muro.fill path.muro --def name` writes a body for that definition. The definition starts as `?`. The search tries terms in order of size, up to `--bound` (default 8): variables in scope, constructors, applications of other names and of functions in scope, and a match on a binder. A term already tried at the same normal form is skipped, including a redex inside a match branch. It does not call the definition being filled. The checker decides. A run is kept only when the book's closed equations about that name still check. Evidence is kept when the type checks, and a spec is kept the same way. The written text is checked again, then a rename in the same directory puts it in place. Past the bound, the file is left unchanged and the command exits non-zero. `out of fuel` is not acceptance.
+
+An import, a param, a body that is not `?`, and a second hole are refused. An application is saturated. An erased argument is not synthesized. An indexed datatype is not searched. A partial application is not a candidate, and neither is a match on `Unit`, `Empty`, a word, or an atom.
+
+This is a search. It is not `mix muro.synth`, and it certifies nothing beyond the checker.
+
+### Manual
+
+- Fill: a definition body filled by search.
+
+### Package
+
+- Version 0.22.5.
+
+## 0.22.4
+
+A keyed family's dispatcher has `finish`. `Events.finish(state, id, session, step)` takes that session to its end. The outcome is `:resolve` or `:rerun`. `:resolve` is the default: the instance leaves, and the call returns what `resolved` returns. `:rerun` keeps the instance unresolved. Its row stays, and a held row of its key stays held. The host starts a new session for that id. There is no bound on reruns. A later `:resolve` drops the instance, on success, on a permanent error, or on the attempt that gives up.
+
+When one family uses a session, that session's `finish` takes the same outcome. When two families share the session, that call is `{:error, {:family, names, form}}` and it does not resolve. The old 2-tuple `{:family, names}` is removed. `form` is `finish(family_state, id, session_state, step)`. Each family's `finish` releases only that family's rows.
+
+`check_trace` accepts `{:rerun, id}` after every stepped party of that id is at `done`. A later step for that id starts a new session. An attempt that reaches `done` and is neither rerun nor resolved is still reported as unresolved.
+
+The family graph is unchanged. It still allows one rerun, then give-up. This outcome is the emitted dispatcher. It is not an Agda proof.
+
+### Manual
+
+- State machines, Emit, Temporal, Limits, Examples, and Extending: `finish` on the family, and a rerun that leaves the instance unresolved.
+
+### Package
+
+- Version 0.22.4.
+
+## 0.22.3
+
+Checked arithmetic on U8, U32, and U64 agrees with Nat. `std:word.muro` gives the value lemma and both directions of the fit lemma for `addc`, `subc`, and `mulc`. A bound below the width turns a checked sum into `wsome`, and the payload's `toNat` is the Nat sum. I64 is outside these lemmas: `toNat` of −1 is 2^64−1.
+
+`wlink` is the evidence the checker accepts for those statements. It is erased. The emitters are unchanged.
+
+`wlink` accepts `plus`, `minus`, `times`, and `Le` only when they are the standard definitions: `plus` from the prelude, `minus` and `Le` from `std:le.muro`, and `times` from `std:word.muro`. A book that defines one of those names differently is refused.
+
+### Manual
+
+- Machine numbers, Library, Grammar, Limits, and Extending: the unsigned word-to-Nat lemmas, and why I64 is outside them.
+
+### Package
+
+- Version 0.22.3. The version goes from 0.22.0 to 0.22.3 because 0.22.1 and 0.22.2 are taken by other open pull requests.
 
 ## 0.22.1
 

@@ -130,7 +130,7 @@ atom       ::= "Type" | "Nat" | "String" | sliteral | "Bytes" | "Slice" | bliter
              | ident
 
 word       ::= "U8" | "U32" | "U64" | "WBool" | "wtrue" | "wfalse" | "wnone"
-             | "Opt" atom | "wsome" atom
+             | "Opt" atom | "wsome" atom | "wlink" atom
              | "toU8" atom | "toU32" atom | "toU64" atom | "toI64" atom | "toNat" atom
              | "noti" atom | "asU8" atom | "asU32" atom | "asU64" atom | "asI64" atom
              | "addi" atom atom | "subi" atom atom | "muli" atom atom
@@ -215,7 +215,7 @@ Inside a `data` block each constructor declaration `ident ":" term` begins on it
 
 A `ν` block has one destructor, `uncons`. `ν Stream (A : Type)` is checked for shape and dropped. Any other name declares a family: its binders are the indices, at least one, and the type of `uncons` must be the family applied to them in order, `→` the body ([Streams](streams.md#declared-families)).
 
-`?` is an unsolved goal. It parses. It never checks. See [Terms](language.md#holes).
+`?` is an unsolved goal. It parses. It never checks. `mix muro.fill` replaces a `?` that is the whole body of one definition. See [Terms](language.md#holes) and [Fill](fill.md).
 
 Not in the surface (present in the kernel AST only): `matchUnit`, annotations `{e : A}`, raw de Bruijn.
 
