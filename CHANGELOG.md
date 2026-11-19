@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.22.5
+
+`mix muro.fill path.muro --def name` writes a body for that definition. The definition starts as `?`. The search tries terms in order of size, up to `--bound` (default 8): variables in scope, constructors, applications of other names, and a match on a binder. It does not call the definition being filled. The checker decides. A run is kept only when the book's closed equations about that name still check. Evidence is kept when the type checks. The first term that passes is written by a rename in the same directory. Past the bound, the file is left unchanged and the command exits non-zero.
+
+This is a search. It is not `mix muro.synth`, and it certifies nothing beyond the checker.
+
+### Manual
+
+- Fill: a definition body filled by search.
+
+### Package
+
+- Version 0.22.5.
+
 ## 0.22.0
 
 Emitted Elixir carries a `Nat` as a non-negative integer. It was `0` and `{:suc, n}`, so a run that took a large number built and walked one tuple per unit: `plus 1000000 3` allocated a million tuples, and the state machine refused a nat above 100_000 for a run it called. A closed numeral is that integer literal. `suc` adds one. A `match` on `0` and `suc` is a `case` on `0` and on a positive integer, and the `suc` arm rebinds the predecessor as the integer minus one. A negative integer, a float, or any other term raises `CaseClauseError`, as `{:suc, _}` did not match before. A recursive run that is not a library operation still takes one call per unit of the value it recurses on. Nat stays Peano in the book. The checker, the proofs, and every other backend are unchanged.
