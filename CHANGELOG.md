@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.22.4
+## 0.22.5
 
 `mix muro.fill path.muro --def name` writes a body for that definition. The definition starts as `?`. The search tries terms in order of size, up to `--bound` (default 8): variables in scope, constructors, applications of other names and of functions in scope, and a match on a binder. A term already tried at the same normal form is skipped, including a redex inside a match branch. It does not call the definition being filled. The checker decides. A run is kept only when the book's closed equations about that name still check. Evidence is kept when the type checks, and a spec is kept the same way. The written text is checked again, then a rename in the same directory puts it in place. Past the bound, the file is left unchanged and the command exits non-zero. `out of fuel` is not acceptance.
 
@@ -11,6 +11,24 @@ This is a search. It is not `mix muro.synth`, and it certifies nothing beyond th
 ### Manual
 
 - Fill: a definition body filled by search.
+
+### Package
+
+- Version 0.22.5.
+
+## 0.22.4
+
+A keyed family's dispatcher has `finish`. `Events.finish(state, id, session, step)` takes that session to its end. The outcome is `:resolve` or `:rerun`. `:resolve` is the default: the instance leaves, and the call returns what `resolved` returns. `:rerun` keeps the instance unresolved. Its row stays, and a held row of its key stays held. The host starts a new session for that id. There is no bound on reruns. A later `:resolve` drops the instance, on success, on a permanent error, or on the attempt that gives up.
+
+When one family uses a session, that session's `finish` takes the same outcome. When two families share the session, that call is `{:error, {:family, names, form}}` and it does not resolve. The old 2-tuple `{:family, names}` is removed. `form` is `finish(family_state, id, session_state, step)`. Each family's `finish` releases only that family's rows.
+
+`check_trace` accepts `{:rerun, id}` after every stepped party of that id is at `done`. A later step for that id starts a new session. An attempt that reaches `done` and is neither rerun nor resolved is still reported as unresolved.
+
+The family graph is unchanged. It still allows one rerun, then give-up. This outcome is the emitted dispatcher. It is not an Agda proof.
+
+### Manual
+
+- State machines, Emit, Temporal, Limits, Examples, and Extending: `finish` on the family, and a rerun that leaves the instance unresolved.
 
 ### Package
 
