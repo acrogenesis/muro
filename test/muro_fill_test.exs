@@ -109,6 +109,273 @@ defmodule Muro.FillTest do
     assert length(terms) == 60
   end
 
+  test "a function in scope is applied, and a constant does not close the hole" do
+    src = """
+    def apply : run Π (f : Nat → Nat) → Π (n : Nat) → Nat :=
+      ?
+
+    def apply-id0 : evidence {apply (λ (k : Nat) → k) 0 ≡ 0 : Nat} :=
+      refl
+
+    def apply-suc : evidence {apply (λ (k : Nat) → suc(k)) suc(0) ≡ suc(suc(0)) : Nat} :=
+      refl
+
+    def apply-const : evidence {apply (λ (k : Nat) → 0) suc(0) ≡ 0 : Nat} :=
+      refl
+    """
+
+    dir = tmp_dir()
+    path = Path.join(dir, "apply.muro")
+    File.write!(path, src)
+
+    capture_io(fn ->
+      assert Mix.Tasks.Muro.Fill.run([path, "--def", "apply"]) == :ok
+    end)
+
+    expected =
+      String.replace(
+        src,
+        "?",
+        "λ (f : Π (_ : Nat) → Nat) → λ (n : Nat) → (f n)"
+      )
+
+    assert File.read!(path) == expected
+    assert Muro.check_file(path) == :ok
+  end
+
+  test "a redex inside a data match is one normal form" do
+    src = """
+    data Bool : Type where
+      true : Bool
+      false : Bool
+
+    def k : run Π (b : Bool) → Nat :=
+      ?
+    """
+
+    assert {:ok, terms} = Muro.Fill.candidates(src, "k", 6)
+    pred0 = {:app, {:var, "pred"}, :ze}
+    zero = match_term(:ze, :ze)
+    redex = match_term(:ze, pred0)
+
+    assert zero in terms
+    assert redex in terms
+    assert zero != redex
+    assert {:ok, 1} = Muro.Fill.distinct_count(src, "k", [zero, redex])
+
+    dir = tmp_dir()
+    path = Path.join(dir, "k.muro")
+
+    refused = """
+    data Bool : Type where
+      true : Bool
+      false : Bool
+
+    def k : run Π (b : Bool) → Nat :=
+      ?
+
+    def k-no : evidence {k true ≡ suc(suc(suc(suc(suc(0))))) : Nat} :=
+      refl
+    """
+
+    File.write!(path, refused)
+
+    assert {:error, {:bound, info}} = Muro.Fill.fill(path, name: "k", bound: 6)
+    assert {:ok, candidates} = Muro.Fill.candidates(refused, "k", 6)
+    assert {:ok, distinct} = Muro.Fill.distinct_count(refused, "k", candidates)
+    assert distinct == info.tried
+    assert File.read!(path) == refused
+  end
+
+  test "a match candidate is parsed and checked before it is written" do
+    src = """
+    data Bool : Type where
+      true : Bool
+      false : Bool
+
+    def bitNat : run Π (b : Bool) → Nat :=
+      ?
+
+    def bitNat-t : evidence {bitNat true ≡ 0 : Nat} :=
+      refl
+
+    def bitNat-f : evidence {bitNat false ≡ suc(0) : Nat} :=
+      refl
+    """
+
+    dir = tmp_dir()
+    path = Path.join(dir, "bitNat.muro")
+    File.write!(path, src)
+
+    capture_io(fn ->
+      assert Mix.Tasks.Muro.Fill.run([path, "--def", "bitNat"]) == :ok
+    end)
+
+    expected =
+      String.replace(
+        src,
+        "?",
+        "λ (b : Bool) → (match b motive (λ _ → Nat) | true => 0 | false => suc(0))"
+      )
+
+    assert File.read!(path) == expected
+    assert Muro.check_file(path) == :ok
+    refute Enum.any?(File.ls!(dir), &String.contains?(&1, ".muro-fill-"))
+  end
+
+  test "a spec is kept when its type checks" do
+    src = """
+    def carrier : spec Type :=
+      ?
+    """
+
+    dir = tmp_dir()
+    path = Path.join(dir, "carrier.muro")
+    File.write!(path, src)
+
+    capture_io(fn ->
+      assert Mix.Tasks.Muro.Fill.run([path, "--def", "carrier"]) == :ok
+    end)
+
+    assert File.read!(path) == String.replace(src, "?", "Nat")
+    assert Muro.check_file(path) == :ok
+  end
+
+  test "an import is refused" do
+    src = """
+    import "std:bool.muro"
+
+    def k : run Nat :=
+      ?
+    """
+
+    assert_unchanged(src, "k", "fill reads one file and the prelude")
+  end
+
+  test "a param is refused" do
+    src = """
+    param A : spec Type
+
+    def k : run Nat :=
+      ?
+    """
+
+    assert_unchanged(src, "k", "fill reads one file and the prelude")
+  end
+
+  test "a body that is not ? is refused" do
+    concrete = """
+    def k : run Nat :=
+      0
+    """
+
+    assert_unchanged(concrete, "k", "k: the body is not ?")
+
+    nested = """
+    def k : run Π (n : Nat) → Nat :=
+      λ (n : Nat) → ?
+    """
+
+    assert_unchanged(nested, "k", "k: the body is not ?")
+  end
+
+  test "an unknown definition is refused" do
+    src = """
+    def k : run Nat :=
+      ?
+    """
+
+    assert_unchanged(src, "missing", "unknown definition missing")
+  end
+
+  test "a missing --def is refused" do
+    dir = tmp_dir()
+    path = Path.join(dir, "k.muro")
+
+    src = """
+    def k : run Nat :=
+      ?
+    """
+
+    File.write!(path, src)
+    assert {:error, "missing --def"} = Muro.Fill.fill(path, [])
+
+    assert_raise Mix.Error, "missing --def", fn ->
+      Mix.Tasks.Muro.Fill.run([path])
+    end
+
+    assert File.read!(path) == src
+  end
+
+  test "another hole is not reported as a closed-equation failure" do
+    src = """
+    def other : run Nat :=
+      ?
+
+    def k : run Nat :=
+      ?
+    """
+
+    message = assert_unchanged(src, "k", "the book has another hole")
+    refute message =~ "closed equations"
+  end
+
+  test "a book check is not a closed-equation failure" do
+    src = """
+    def bad : run Nat :=
+      tt
+
+    def k : run Nat :=
+      ?
+    """
+
+    dir = tmp_dir()
+    path = Path.join(dir, "bad.muro")
+    File.write!(path, src)
+
+    assert {:error, {:bound, info}} = Muro.Fill.fill(path, name: "k", bound: 1)
+    assert info.equations_failed == 0
+    assert info.book_failed > 0
+    refute Muro.Fill.bound_message(info) =~ "closed equations"
+    assert File.read!(path) == src
+  end
+
+  test "too-low fuel is not acceptance" do
+    dir = tmp_dir()
+    path = Path.join(dir, "add1.muro")
+    before = File.read!(@add1)
+    File.write!(path, before)
+
+    assert {:error, {:bound, info}} =
+             Muro.Fill.fill(path, name: "add1", bound: 8, fuel: 1)
+
+    assert File.read!(path) == before
+    assert info.fuel_failed > 0
+    assert info.equations_failed == 0
+    message = Muro.Fill.bound_message(info)
+    refute message =~ "closed equations"
+    assert message =~ "ran out of fuel"
+  end
+
+  defp match_term(left, right) do
+    {:lam, :affine, {:var, "Bool"}, "b",
+     {:mdata, {:var, "b"}, "_", :nat,
+      [
+        {"true", [], left},
+        {"false", [], right}
+      ]}}
+  end
+
+  defp assert_unchanged(src, name, message) do
+    dir = tmp_dir()
+    path = Path.join(dir, "book.muro")
+    File.write!(path, src)
+
+    assert {:error, ^message} = Muro.Fill.fill(path, name: name, bound: 4)
+    assert File.read!(path) == src
+    message
+  end
+
   defp tmp_dir do
     dir = Path.join(System.tmp_dir!(), "muro_fill_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)

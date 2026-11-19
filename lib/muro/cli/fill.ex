@@ -38,7 +38,7 @@ defmodule Muro.CLI.Fill do
   def help do
     Muro.CLI.Text.page([
       Muro.CLI.Text.prose("""
-      muro fill writes a body for one definition. The definition starts as ?. The search tries terms in order of size: variables in scope, constructors, applications of other names, and a match on a binder. It does not call the definition being filled. The checker decides. A run is kept only when the book's closed equations about that name still check. Evidence is kept when the type checks. The first term that passes is written by a rename in the same directory. This is a search. It is not muro synth, and it certifies nothing beyond the checker.
+      muro fill writes a body for one definition. The definition starts as ?. The search tries terms in order of size: variables in scope, constructors, applications of other names and of functions in scope, and a match on a binder. It does not call the definition being filled. The checker decides. A run is kept only when the book's closed equations about that name still check. Evidence is kept when the type checks. A spec is kept the same way. The written text is checked again, then a rename in the same directory puts it in place. This is a search. It is not muro synth, and it certifies nothing beyond the checker.
       """),
       Muro.CLI.Text.section(
         "USAGE",
@@ -65,7 +65,7 @@ defmodule Muro.CLI.Fill do
         Muro.CLI.Text.exits([
           {"0", "A body was written and the book checks."},
           {"1",
-           "The bound was reached, the body is not ?, the name is missing or repeated, the file has an import, or a flag is not usable. The file is unchanged when the bound is reached."}
+           "The bound was reached, the body is not ?, the name is missing or repeated, the file has an import or param, the book has another hole, or a flag is not usable. The file is unchanged when the bound is reached."}
         ])
       ),
       Muro.CLI.Text.section(

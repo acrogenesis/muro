@@ -2,7 +2,9 @@
 
 ## 0.22.4
 
-`mix muro.fill path.muro --def name` writes a body for that definition. The definition starts as `?`. The search tries terms in order of size, up to `--bound` (default 8): variables in scope, constructors, applications of other names, and a match on a binder. It does not call the definition being filled. The checker decides. A run is kept only when the book's closed equations about that name still check. Evidence is kept when the type checks. The first term that passes is written by a rename in the same directory. Past the bound, the file is left unchanged and the command exits non-zero.
+`mix muro.fill path.muro --def name` writes a body for that definition. The definition starts as `?`. The search tries terms in order of size, up to `--bound` (default 8): variables in scope, constructors, applications of other names and of functions in scope, and a match on a binder. A term already tried at the same normal form is skipped, including a redex inside a match branch. It does not call the definition being filled. The checker decides. A run is kept only when the book's closed equations about that name still check. Evidence is kept when the type checks, and a spec is kept the same way. The written text is checked again, then a rename in the same directory puts it in place. Past the bound, the file is left unchanged and the command exits non-zero. `out of fuel` is not acceptance.
+
+An import, a param, a body that is not `?`, and a second hole are refused. An application is saturated. An erased argument is not synthesized. An indexed datatype is not searched. A partial application is not a candidate, and neither is a match on `Unit`, `Empty`, a word, or an atom.
 
 This is a search. It is not `mix muro.synth`, and it certifies nothing beyond the checker.
 

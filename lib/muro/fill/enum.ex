@@ -1,9 +1,10 @@
 defmodule Muro.Fill.Enum do
   @moduledoc false
 
-  # Type-directed enumeration of named terms. A Π goal is always a λ, so a
-  # name of function type is not a candidate of that size. The definition
-  # being filled is not in `env.defs`, so a candidate does not call it.
+  # Type-directed enumeration of named terms. A Π goal is always a λ.
+  # A function in scope is applied when the goal is its result: saturated,
+  # and only a visible binder that is not erased. The definition being
+  # filled is not in `env.defs`, so a candidate does not call it.
   # Size counts a variable, a constructor, an application, a lambda, or a
   # match. A match motive is the goal and is not counted. The scrutinee is
   # a binder, so it contributes one.
@@ -135,19 +136,40 @@ defmodule Muro.Fill.Enum do
   end
 
   defp fun_apps(env, goal, size) do
-    Enum.flat_map(env.defs, fn d ->
-      case telescope(d.type) do
-        {[_ | _] = fields, result} ->
-          if concrete?(fields) and result_ok?(result, goal, env) do
-            applications({:var, d.name}, fields, env, size)
-          else
-            []
-          end
+    def_apps(env, goal, size) ++ binder_apps(env, goal, size)
+  end
 
-        _ ->
-          []
+  defp def_apps(env, goal, size) do
+    Enum.flat_map(env.defs, fn d ->
+      saturated({:var, d.name}, d.type, env, env, goal, size)
+    end)
+  end
+
+  # Definitions first, then binders from the outside in. An affine or
+  # linear head is consumed, so an argument is not that same variable.
+  defp binder_apps(env, goal, size) do
+    Enum.flat_map(visible(env.binders), fn binder ->
+      if binder.qty == :erased do
+        []
+      else
+        env2 = consume(env, binder.name, binder.qty)
+        saturated({:var, binder.name}, binder.type, env, env2, goal, size)
       end
     end)
+  end
+
+  defp saturated(head, type, goal_env, arg_env, goal, size) do
+    case telescope(type) do
+      {[_ | _] = fields, result} ->
+        if concrete?(fields) and result_ok?(result, goal, goal_env) do
+          applications(head, fields, arg_env, size)
+        else
+          []
+        end
+
+      _ ->
+        []
+    end
   end
 
   defp applications(head, fields, env, size) do

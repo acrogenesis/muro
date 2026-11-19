@@ -234,6 +234,8 @@ defmodule Muro.CliHelpTest do
     assert fill =~ "Default: #{Muro.Fill.default_bound()}."
     assert fill =~ "Default: #{Muro.Check.default_fuel()}."
     assert fill =~ "https://muro-lang.dev/docs/fill"
+    assert fill =~ "import or param"
+    assert fill =~ "A spec is kept the same way."
   end
 
   test "an unknown command or a bad flag names itself on stderr" do

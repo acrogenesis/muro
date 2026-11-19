@@ -5,8 +5,9 @@ defmodule Muro.Fill do
   The book already declares the definition and its type. Candidates are
   terms the checker already accepts. The first one the checker accepts is
   written back. A run is kept only when the book's closed equations about
-  that name still check. Evidence is kept when the type checks. Nothing
-  here is a new judgment, and nothing here is `mix muro.synth`.
+  that name still check. Evidence is kept when the type checks, and a spec
+  is kept the same way. Nothing here is a new judgment, and nothing here
+  is `mix muro.synth`.
   """
 
   @default_bound 8
@@ -67,9 +68,57 @@ defmodule Muro.Fill do
   def refers?(term, name) when is_binary(name), do: Muro.Fill.Enum.refers?(term, name)
 
   @doc false
-  def bound_message(%{bound: bound, tried: tried, equations_failed: failed}) do
-    "bound #{bound} reached: tried #{tried} #{plural(tried, "candidate")}, #{failed} type-checked but failed the closed equations"
+  def distinct_count(source, name, terms, fuel \\ Muro.Check.default_fuel())
+      when is_binary(source) and is_binary(name) and is_list(terms) and is_integer(fuel) do
+    with {:ok, book} <- Muro.Parser.parse(source),
+         {:ok, _d} <- one_def(book, name),
+         user = stamp(book, "fill-distinct.muro"),
+         full = Muro.Prelude.for_check(user),
+         {:ok, db_book} <- Muro.Ast.book_to_db(full) do
+      count =
+        terms
+        |> Enum.reduce({0, MapSet.new()}, fn term, {n, seen} ->
+          case observe(term, seen, db_book, fuel) do
+            {:dup, seen} -> {n, seen}
+            {:new, _db, seen} -> {n + 1, seen}
+            {:bad, seen} -> {n + 1, seen}
+          end
+        end)
+        |> elem(0)
+
+      {:ok, count}
+    end
   end
+
+  @doc false
+  def bound_message(%{
+        bound: bound,
+        tried: tried,
+        equations_failed: equations,
+        book_failed: book,
+        fuel_failed: fuel
+      }) do
+    head = "bound #{bound} reached: tried #{tried} #{plural(tried, "candidate")}"
+
+    parts =
+      Enum.reject(
+        [
+          equation_clause(equations, book, fuel),
+          if(book > 0, do: "#{book} failed the book"),
+          if(fuel > 0, do: "#{fuel} ran out of fuel")
+        ],
+        &is_nil/1
+      )
+
+    Enum.join([head | parts], ", ")
+  end
+
+  defp equation_clause(equations, book, fuel)
+       when equations > 0 or (book == 0 and fuel == 0) do
+    "#{equations} type-checked but failed the closed equations"
+  end
+
+  defp equation_clause(_equations, _book, _fuel), do: nil
 
   defp fill_file(path, name, bound, fuel) do
     expanded = Path.expand(path)
@@ -79,6 +128,7 @@ defmodule Muro.Fill do
          :ok <- no_import(book),
          {:ok, d} <- one_def(book, name),
          {:ok, loc} <- hole_loc(d),
+         :ok <- no_other_hole(book, name),
          user = stamp(book, expanded),
          full = Muro.Prelude.for_check(user),
          {:ok, db_book} <- Muro.Ast.book_to_db(full) do
@@ -97,11 +147,11 @@ defmodule Muro.Fill do
         }
 
         case search(env, d.type, bound, ctx) do
-          {:ok, term, tried, failed} ->
-            write_body(expanded, src, loc, term, name, tried, failed, bound)
+          {:ok, term, state} ->
+            write_body(expanded, src, loc, term, name, state, bound, fuel)
 
-          {:bound, tried, failed} ->
-            {:error, {:bound, %{bound: bound, tried: tried, equations_failed: failed}}}
+          {:bound, state} ->
+            {:error, {:bound, bound_info(state, bound)}}
         end
       after
         Muro.Fill.Enum.clear()
@@ -110,7 +160,7 @@ defmodule Muro.Fill do
   end
 
   defp search(env, goal, bound, ctx) do
-    initial = %{tried: 0, failed: 0, seen: MapSet.new()}
+    initial = %{tried: 0, equations_failed: 0, book_failed: 0, fuel_failed: 0, seen: MapSet.new()}
 
     1..bound
     |> Enum.reduce_while(initial, fn size, state ->
@@ -120,8 +170,8 @@ defmodule Muro.Fill do
       end
     end)
     |> case do
-      {:accept, term, state} -> {:ok, term, state.tried, state.failed}
-      state -> {:bound, state.tried, state.failed}
+      {:accept, term, state} -> {:ok, term, state}
+      state -> {:bound, state}
     end
   end
 
@@ -135,19 +185,32 @@ defmodule Muro.Fill do
   end
 
   defp consider(term, state, ctx) do
+    case observe(term, state.seen, ctx.db_book, ctx.fuel) do
+      {:dup, _seen} ->
+        state
+
+      {:bad, _seen} ->
+        %{state | tried: state.tried + 1}
+
+      {:new, db, seen} ->
+        state = %{state | seen: seen, tried: state.tried + 1}
+        judge(term, db, state, ctx)
+    end
+  end
+
+  # One normal form is tried once. `distinct_count/4` uses this same key,
+  # so a redex that normalizes away is not a second candidate.
+  defp observe(term, seen, db_book, fuel) do
     case Muro.Ast.to_db(term) do
       {:ok, db} ->
-        key = nf_key(ctx.db_book, db, ctx.fuel)
+        key = nf_key(db_book, db, fuel)
 
-        if MapSet.member?(state.seen, key) do
-          state
-        else
-          state = %{state | seen: MapSet.put(state.seen, key), tried: state.tried + 1}
-          judge(term, db, state, ctx)
-        end
+        if MapSet.member?(seen, key),
+          do: {:dup, seen},
+          else: {:new, db, MapSet.put(seen, key)}
 
       {:error, _} ->
-        %{state | tried: state.tried + 1}
+        {:bad, seen}
     end
   end
 
@@ -159,14 +222,14 @@ defmodule Muro.Fill do
         if ctx.mode == :run do
           case check_equations(book, ctx) do
             :ok -> accept_sig(term, state, ctx)
-            {:error, _} -> bump_failed(state)
+            {:error, msg} -> note_failure(state, msg, :equations_failed)
           end
         else
           accept_sig(term, state, ctx)
         end
 
-      {:error, _} ->
-        state
+      {:error, msg} ->
+        if Muro.Check.out_of_fuel?(msg), do: bump(state, :fuel_failed), else: state
     end
   end
 
@@ -175,7 +238,24 @@ defmodule Muro.Fill do
 
     case Muro.Check.check_sig(Muro.Prelude.for_check(named), fuel: ctx.fuel) do
       :ok -> {:accept, term, state}
-      {:error, _} -> bump_failed(state)
+      {:error, msg} -> note_failure(state, msg, :book_failed)
+    end
+  end
+
+  # A closed equation that does not hold is the equation counter. Fuel,
+  # another hole, and any other book failure are not that counter.
+  defp note_failure(state, msg, :equations_failed) do
+    cond do
+      Muro.Check.out_of_fuel?(msg) -> bump(state, :fuel_failed)
+      String.contains?(msg, "unsolved hole") -> bump(state, :book_failed)
+      true -> bump(state, :equations_failed)
+    end
+  end
+
+  defp note_failure(state, msg, :book_failed) do
+    cond do
+      Muro.Check.out_of_fuel?(msg) -> bump(state, :fuel_failed)
+      true -> bump(state, :book_failed)
     end
   end
 
@@ -188,7 +268,17 @@ defmodule Muro.Fill do
     end)
   end
 
-  defp bump_failed(state), do: %{state | failed: state.failed + 1}
+  defp bump(state, key), do: Map.update!(state, key, &(&1 + 1))
+
+  defp bound_info(state, bound) do
+    %{
+      bound: bound,
+      tried: state.tried,
+      equations_failed: state.equations_failed,
+      book_failed: state.book_failed,
+      fuel_failed: state.fuel_failed
+    }
+  end
 
   defp nf_key(book, term, fuel) do
     case nf_term(book, term, fuel, 0) do
@@ -224,6 +314,21 @@ defmodule Muro.Fill do
     end
   end
 
+  # The motive sits under one binder. Each branch body sits under that
+  # branch's arity. A stuck scrutinee stays a match, so a redex in a
+  # branch is still part of the normal form.
+  defp open_binders(book, {:mdata, scrut, motive, branches}, fuel, depth) do
+    with {:ok, scrut1} <- nf_term(book, scrut, fuel, depth + 1),
+         {:ok, motive1} <- nf_term(book, motive, fuel, depth + 2),
+         {:ok, branches1} <- nf_mdata_branches(book, branches, fuel, depth) do
+      rebuilt = {:mdata, scrut1, motive1, branches1}
+
+      if rebuilt == {:mdata, scrut, motive, branches},
+        do: {:ok, rebuilt},
+        else: nf_term(book, rebuilt, fuel, depth + 1)
+    end
+  end
+
   defp open_binders(book, {:su, term}, fuel, depth) do
     with {:ok, term} <- nf_term(book, term, fuel, depth + 1), do: {:ok, {:su, term}}
   end
@@ -240,6 +345,15 @@ defmodule Muro.Fill do
   end
 
   defp open_binders(_book, term, _fuel, _depth), do: {:ok, term}
+
+  defp nf_mdata_branches(_book, [], _fuel, _depth), do: {:ok, []}
+
+  defp nf_mdata_branches(book, [{name, arity, body} | rest], fuel, depth) do
+    with {:ok, body1} <- nf_term(book, body, fuel, depth + 1 + arity),
+         {:ok, rest1} <- nf_mdata_branches(book, rest, fuel, depth) do
+      {:ok, [{name, arity, body1} | rest1]}
+    end
+  end
 
   defp equation_names(user, path, name) do
     user
@@ -304,6 +418,37 @@ defmodule Muro.Fill do
     end
   end
 
+  defp no_other_hole(book, name) do
+    if other_holes(book, name) == [], do: :ok, else: {:error, "the book has another hole"}
+  end
+
+  defp other_holes(book, name) do
+    Enum.flat_map(book, fn d ->
+      holes = entry_holes(d)
+
+      case d do
+        %{name: ^name, body: {:hole, _} = hole} -> List.delete(holes, hole)
+        _ -> holes
+      end
+    end)
+  end
+
+  defp entry_holes(d) when is_map(d) do
+    d
+    |> Map.drop([:file, :loc, :name, :mode, :kind, :export, :type_span, :body_span])
+    |> Map.values()
+    |> Enum.flat_map(&holes_in/1)
+  end
+
+  defp holes_in({:hole, _} = hole), do: [hole]
+
+  defp holes_in(term) when is_tuple(term),
+    do: term |> Tuple.to_list() |> Enum.flat_map(&holes_in/1)
+
+  defp holes_in(term) when is_list(term), do: Enum.flat_map(term, &holes_in/1)
+  defp holes_in(term) when is_map(term), do: term |> Map.values() |> Enum.flat_map(&holes_in/1)
+  defp holes_in(_other), do: []
+
   defp stamp(book, path), do: Enum.map(book, &Map.put(&1, :file, path))
 
   defp install(book, name, body) do
@@ -331,27 +476,39 @@ defmodule Muro.Fill do
     end
   end
 
-  defp write_body(path, src, loc, term, name, tried, failed, bound) do
-    case splice(src, loc, show(term)) do
-      {:ok, text} ->
-        case write_atomic(path, text) do
-          :ok ->
-            {:ok,
-             %{
-               status: :filled,
-               name: name,
-               tried: tried,
-               equations_failed: failed,
-               bound: bound,
-               body: term
-             }}
+  defp write_body(path, src, loc, term, name, state, bound, fuel) do
+    with {:ok, written} <- surface(term),
+         {:ok, text} <- splice(src, loc, written),
+         :ok <- round_trip(text, path, fuel),
+         :ok <- write_atomic(path, text) do
+      {:ok,
+       %{
+         status: :filled,
+         name: name,
+         tried: state.tried,
+         equations_failed: state.equations_failed,
+         book_failed: state.book_failed,
+         fuel_failed: state.fuel_failed,
+         bound: bound,
+         body: term
+       }}
+    end
+  end
 
-          {:error, _} = err ->
-            err
-        end
+  defp surface(term) do
+    try do
+      {:ok, show(term)}
+    catch
+      :muro_fill_show -> {:error, "the candidate has no surface form"}
+    end
+  end
 
-      {:error, _} = err ->
-        err
+  defp round_trip(text, path, fuel) do
+    with {:ok, book} <- parse(text) do
+      case Muro.Check.check_sig(Muro.Prelude.for_check(stamp(book, path)), fuel: fuel) do
+        :ok -> :ok
+        {:error, msg} -> {:error, msg}
+      end
     end
   end
 
@@ -387,7 +544,7 @@ defmodule Muro.Fill do
     tmp = Path.join(Path.dirname(path), ".muro-fill-#{System.unique_integer([:positive])}.tmp")
 
     try do
-      File.write!(tmp, text)
+      File.write!(tmp, text, [:sync])
       File.rename!(tmp, path)
       :ok
     rescue
@@ -449,7 +606,7 @@ defmodule Muro.Fill do
     wrap(prec, :app, text)
   end
 
-  defp show(other, _), do: inspect(other)
+  defp show(_other, _), do: throw(:muro_fill_show)
 
   defp spine({:app, fun, arg}, acc), do: spine(fun, [arg | acc])
   defp spine(head, acc), do: {head, acc}

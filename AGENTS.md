@@ -56,7 +56,7 @@ make agda                                   # Job B only; needs vendor/agda-stdl
 
 `mix muro.synth` discovers features from `step`. A `Feature` the book declares is an optional hint. A state name is not a feature.
 
-`mix muro.fill path.muro --def name` writes a body for a definition whose body is `?`. It tries terms in order of size. A run is kept when the book's closed equations about that name still check. Evidence is kept when the type checks. It is a search. It is not `mix muro.synth`. See [Fill](manual/fill.md).
+`mix muro.fill path.muro --def name` writes a body for a definition whose body is `?`. It tries terms in order of size. A run is kept when the book's closed equations about that name still check. Evidence is kept when the type checks. A spec is kept the same way. It is a search. It is not `mix muro.synth`. See [Fill](manual/fill.md).
 
 The archive installs those tasks in any directory: `mix archive.install hex muro`. A pinned version: `mix archive.install hex muro 0.22.4`. From a checkout: `mix archive.build && mix archive.install muro-0.22.4.ez`. From GitHub: `mix archive.install github murolang/muro`. Inside a project that depends on muro, the project's copy runs after `app.start`. Inside any other project, or outside a project, the archive's copy runs and the host is neither compiled nor started. A script run with `mix run --no-start` does not see the archive; use the Mix tasks. A project without Elixir installs the self-contained executable: `mise use -g github:murolang/muro@0.22.4`. See [The executable](manual/binary.md).
 
