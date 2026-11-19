@@ -2950,8 +2950,16 @@ defmodule Muro.Emit.Fsm do
     |> String.trim()
   end
 
+  # Since OTP 26 a small map with atom keys iterates in atom-table order,
+  # which depends on what the VM loaded first. Sorting the keys keeps the
+  # emitted text the same in every VM.
   defp lit(term) do
-    inspect(term, limit: :infinity, printable_limit: :infinity, charlists: :as_lists)
+    inspect(term,
+      limit: :infinity,
+      printable_limit: :infinity,
+      charlists: :as_lists,
+      custom_options: [sort_maps: true]
+    )
   end
 
   defp children(module, st) do

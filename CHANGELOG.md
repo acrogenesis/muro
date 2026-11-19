@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.22.2
+
+`--backend fsm` and `--backend otp` print a declaration's map with its keys sorted. Since OTP 26 a small map with atom keys iterates in atom-table order, and that order depends on what the VM loaded first. The same book emitted `%{ctors: …, order: …, np: …}` in a fresh VM and another order inside a long test run, so `mix muro.gen --check` failed in a host's test suite on a module `mix muro.gen` had just written. The FSM literals and the OTP declarations and skeletons now pass `custom_options: [sort_maps: true]` to `inspect`. A book whose emitted maps had one key, or no map, emits the same text. Run `mix muro.gen` once to rewrite a committed module that has a declaration with more than one key.
+
+### Package
+
+- Version 0.22.2.
+
 ## 0.22.1
 
 `--backend fsm` emits one dispatcher per keyed family, beside the session machines. `new/0` starts it. `arrive/4` takes the state, the key, the constructor, and the creation index, and returns `{:open, id, state}` or `{:held, id, state}`. `resolved/2` returns the instances that opening releases. `check_trace/1` replays a list of those steps. An unknown id is an error and does not raise.
