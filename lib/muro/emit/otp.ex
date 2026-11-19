@@ -1689,7 +1689,7 @@ defmodule Muro.Emit.Otp do
     |> Map.new()
     |> Map.to_list()
     |> Enum.sort()
-    |> inspect(limit: :infinity, charlists: :as_lists)
+    |> inspect(limit: :infinity, charlists: :as_lists, custom_options: [sort_maps: true])
   end
 
   defp indent(code, n) do
