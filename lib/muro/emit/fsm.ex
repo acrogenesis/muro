@@ -3475,19 +3475,25 @@ defmodule Muro.Emit.Fsm do
       defp walk(_disp, _seen, [other | _rest], i), do: {:error, {i, {:step, other}}}
 
       defp resolve_step(disp, seen, id) do
-        sessions = for {{^id, _party}, sess} <- seen, do: sess
+        sessions = sessions_of(seen, id)
 
         cond do
           sessions == [] ->
             commit(disp, seen, id)
 
-          Enum.all?(sessions, &at_done?/1) ->
+          settled?(sessions) ->
             commit(disp, drop_id(seen, id), id)
 
           true ->
             {:error, {:unfinished, id}}
         end
       end
+
+      defp sessions_of(seen, id) do
+        for {{^id, _party}, sess} <- seen, do: sess
+      end
+
+      defp settled?(sessions), do: sessions != [] and Enum.all?(sessions, &at_done?/1)
 
       defp commit(disp, seen, id) do
         case resolved(disp, id) do
@@ -3580,15 +3586,15 @@ defmodule Muro.Emit.Fsm do
 
       defp leaked(disp, seen) do
         ids =
-          Enum.flat_map(seen, fn {{id, _party}, sess} ->
-            if at_done?(sess) and match?({:ok, _phase, _key, _kind}, live(disp, id)) do
-              [id]
-            else
-              []
-            end
+          seen
+          |> Enum.map(fn {{id, _party}, _sess} -> id end)
+          |> Enum.uniq()
+          |> Enum.filter(fn id ->
+            settled?(sessions_of(seen, id)) and match?({:ok, _phase, _key, _kind}, live(disp, id))
           end)
+          |> Enum.sort()
 
-        case ids |> Enum.uniq() |> Enum.sort() do
+        case ids do
           [] ->
             :ok
 

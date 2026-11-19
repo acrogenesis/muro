@@ -422,6 +422,105 @@ defmodule Muro.FsmFamilyTest do
     assert {:ok, [], _} = server.finish(mid, {:recv, :ok}, state, 0)
   end
 
+  test "a meeting still in progress is not unresolved" do
+    {disp, _parent, _src} =
+      compile_src!("""
+      data Event : Type where
+        init : Event
+
+      data Report : Type where
+        ok : Report
+
+      session task-work := recv Nat (send Report end)
+      session server-work := send Nat (recv Report end)
+
+      conform task : task-work :=
+        get (n : Nat) (put ok done)
+
+      conform server : server-work :=
+        put 0 (get (r : Report) done fail done)
+
+      meet wire : server with task may fail buffer 1
+
+      family slots : wire per key of Event
+        init never held
+      """)
+
+    # The server has reached done. The task has received and has not sent.
+    open = [
+      {:arrive, "a", :init, 0},
+      {:server, 0, {:send, 0}},
+      {:task, 0, {:recv, 0}},
+      {:server, 0, {:recv, :ok}}
+    ]
+
+    assert :ok = disp.check_trace(open)
+    assert {:error, {4, {:unfinished, 0}}} = disp.check_trace(open ++ [{:resolved, 0}])
+
+    done = open ++ [{:task, 0, {:send, :ok}}]
+    assert {:error, {:unresolved, 0, "a", :init}} = disp.check_trace(done)
+    assert :ok = disp.check_trace(done ++ [{:resolved, 0}])
+  end
+
+  test "finish refuses an end two families share and does not resolve" do
+    {disp, parent, src} =
+      compile_src!("""
+      data Event : Type where
+        init : Event
+
+      data Report : Type where
+        ok : Report
+
+      session server-wait := recv Report end
+      session task-work := send Report end
+      session peer-work := send Report end
+
+      conform server : server-wait :=
+        get (r : Report) done
+        fail
+          done
+
+      conform other : server-wait :=
+        get (r : Report) done
+        fail
+          done
+
+      conform task : task-work := put ok done
+
+      conform peer : peer-work := put ok done
+
+      meet slot : server with task may fail buffer 1
+
+      meet side : other with peer may fail buffer 1
+
+      family slots : slot per key of Event
+        init never held
+
+      family spare : side per key of Event
+        init never held
+      """)
+
+    assert src =~ "{:error, {:family, [:Slots, :Spare]}}"
+
+    server = Module.concat(parent, ServerWait)
+    task = Module.concat(parent, TaskWork)
+    state = disp.new()
+    assert {:open, 0, state} = disp.arrive(state, "a", :init, 0)
+
+    assert {:error, {:family, [:Slots, :Spare]}} =
+             server.finish(server.init(), {:recv, :ok}, state, 0)
+
+    assert {:ok, [], _} = disp.resolved(state, 0)
+
+    {:ok, done} = server.recv(server.init(), :ok)
+    assert server.done?(done)
+    assert {:error, {:family, [:Slots, :Spare]}} = server.finish(done, state, 0)
+    assert {:ok, [], _} = disp.resolved(state, 0)
+
+    assert {:ok, [], freed} = task.finish(task.init(), {:send, :ok}, state, 0)
+    assert {:error, {:unknown, 0}} = disp.resolved(freed, 0)
+  end
+
   defp hold_of(disp, state, id) do
     case disp.resolved(state, id) do
       {:error, {:held, ^id}} -> {:held, id}
