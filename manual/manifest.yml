@@ -89,7 +89,7 @@ pages:
   - file: library.md
     slug: library
     title: Library
-    summary: The ordinary library, imported as std:. Bool, Le, List, Maybe, comparison, and a binary successor.
+    summary: The ordinary library, imported as std:. Bool, Le, List, Maybe, comparison, a binary successor, and unsigned word arithmetic.
   - file: grammar.md
     slug: grammar
     title: Grammar
@@ -117,7 +117,7 @@ pages:
   - file: fsm.md
     slug: fsm
     title: State machines
-    summary: Each session endpoint is a pure state machine. The transport stays with the host.
+    summary: Each session endpoint is a pure state machine, and a keyed family is one dispatcher. The transport stays with the host.
   - file: mutate.md
     slug: mutate
     title: Mutation

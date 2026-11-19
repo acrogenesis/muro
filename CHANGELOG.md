@@ -14,6 +14,42 @@ This is a search. It is not `mix muro.synth`, and it certifies nothing beyond th
 
 - Version 0.22.5.
 
+## 0.22.3
+
+Checked arithmetic on U8, U32, and U64 agrees with Nat. `std:word.muro` gives the value lemma and both directions of the fit lemma for `addc`, `subc`, and `mulc`. A bound below the width turns a checked sum into `wsome`, and the payload's `toNat` is the Nat sum. I64 is outside these lemmas: `toNat` of −1 is 2^64−1.
+
+`wlink` is the evidence the checker accepts for those statements. It is erased. The emitters are unchanged.
+
+`wlink` accepts `plus`, `minus`, `times`, and `Le` only when they are the standard definitions: `plus` from the prelude, `minus` and `Le` from `std:le.muro`, and `times` from `std:word.muro`. A book that defines one of those names differently is refused.
+
+### Manual
+
+- Machine numbers, Library, Grammar, Limits, and Extending: the unsigned word-to-Nat lemmas, and why I64 is outside them.
+
+### Package
+
+- Version 0.22.3. The version goes from 0.22.0 to 0.22.3 because 0.22.1 and 0.22.2 are taken by other open pull requests.
+
+## 0.22.1
+
+`--backend fsm` emits one dispatcher per keyed family, beside the session machines. `new/0` starts it. `arrive/4` takes the state, the key, the constructor, and the creation index, and returns `{:open, id, state}` or `{:held, id, state}`. `resolved/2` returns the instances that opening releases. `check_trace/1` replays a list of those steps. An unknown id is an error and does not raise.
+
+A signal stays held while an earlier arrived instance of its key is unresolved. An init is not held. Instances of a key need not arrive in creation order. The key is the workflow, compared with `==`, and a dispatcher keyed that way holds slightly more across runs of one workflow. The session machines are unchanged. Elixir, C, Rust, Zig, JavaScript, assembly, OTP, `--node`, and ExUnit still omit the family. A meeting marked `may fail` is still refused by C, Rust, Zig, JavaScript, assembly, `--node`, and ExUnit.
+
+The dispatcher is generated code. On the fixed script, an accepted sequence is checked against the family graph. That check is not an Agda proof. The family counts are unchanged.
+
+`resolved` drops the instance. The state keeps the live instances of each key, and the id of a live instance records its key. A call fetches that key. A repeat of a live instance, the same key and creation index while it is open or held, is an error. A repeat of a forgotten instance is not caught. `resolved` of a forgotten id returns `{:error, {:unknown, id}}`.
+
+Each end of the meeting has `finish/3` and `finish/4`. One call takes that session to its end and resolves the instance, and returns what `resolved` returns. `check_trace/1` also replays that end's sends, receives, and `down`. It reports an instance when every stepped party of that id has reached `done` and the instance was never resolved. One party still in the meeting is not that report. These checks are the emitted code and the family graph. They are not an Agda proof.
+
+### Manual
+
+- State machines, Emit, Temporal, Limits, and Examples: the family dispatcher drops a resolved instance, and `finish` ties the session end to that call.
+
+### Package
+
+- Version 0.22.1.
+
 ## 0.22.0
 
 Emitted Elixir carries a `Nat` as a non-negative integer. It was `0` and `{:suc, n}`, so a run that took a large number built and walked one tuple per unit: `plus 1000000 3` allocated a million tuples, and the state machine refused a nat above 100_000 for a run it called. A closed numeral is that integer literal. `suc` adds one. A `match` on `0` and `suc` is a `case` on `0` and on a positive integer, and the `suc` arm rebinds the predecessor as the integer minus one. A negative integer, a float, or any other term raises `CaseClauseError`, as `{:suc, _}` did not match before. A recursive run that is not a library operation still takes one call per unit of the value it recurses on. Nat stays Peano in the book. The checker, the proofs, and every other backend are unchanged.
